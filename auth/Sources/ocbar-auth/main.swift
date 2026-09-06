@@ -27,6 +27,7 @@ struct Args {
     var timeout: TimeInterval = 300
     var showAfter: TimeInterval = 2
     var alwaysShow = false
+    var noWindow = false
     var noAutofill = false
     var fillHosts: [String] = []
     var importQR: String?
@@ -59,12 +60,15 @@ func usage() -> String {
       --timeout SEC         сколько ждать SSO (300)
       --show-after SEC      показать окно, если за SEC секунд не прошло молча (2)
       --always-show         показать окно сразу
+      --no-window           никогда не показывать окно: если вход требует
+                            человека, выйти с кодом 5, ничего не показав
       --insecure            не проверять TLS-сертификат шлюза
       --json                --probe в JSON
       --verbose             подробный лог в stderr
 
     Окружение: OCBAR_USERNAME, OCBAR_PASSWORD, OCBAR_TOTP_SECRET | OCBAR_TOTP_CODE.
-    Коды выхода: 0 ок, 1 протокол/HTTP, 2 тайм-аут, 3 отменено, 4 аргументы.
+    Коды выхода: 0 ок, 1 протокол/HTTP, 2 тайм-аут, 3 отменено, 4 аргументы,
+    5 нужен человек (только с --no-window).
     """
 }
 
@@ -87,6 +91,7 @@ func parseArgs() -> Args {
         case "--timeout": a.timeout = TimeInterval(next(arg)) ?? 300
         case "--show-after": a.showAfter = TimeInterval(next(arg)) ?? 2
         case "--always-show": a.alwaysShow = true
+        case "--no-window": a.noWindow = true
         case "--no-autofill": a.noAutofill = true
         case "--fill-hosts": a.fillHosts = next(arg).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         case "--probe": a.probe = true
@@ -372,6 +377,7 @@ DispatchQueue.global().async {
         var opts = WebAuth.Options()
         opts.showAfter = args.showAfter
         opts.alwaysShow = args.alwaysShow
+        opts.noWindow = args.noWindow
         opts.timeout = args.timeout
         opts.insecure = args.insecure
         opts.autofill = !args.noAutofill
@@ -396,8 +402,9 @@ DispatchQueue.global().async {
                 case .failure(let e):
                     Log.error("\(e)")
                     switch e {
-                    case .timeout: exit(2)
+                    case .timeout: exit(args.noWindow ? 5 : 2)
                     case .cancelled: exit(3)
+                    case .needsHuman: exit(5)
                     default: exit(1)
                     }
                 case .success(let token):

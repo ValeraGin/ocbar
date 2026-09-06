@@ -35,6 +35,7 @@ USER_STATE="${OCBAR_USER_STATE:-$HOME/Library/Application Support/ocbar}"
 DESIRED="$USER_STATE/desired"            # имя профиля, который должен быть поднят
 SUP_PID="$USER_STATE/supervisor.pid"
 SUP_CODE="$USER_STATE/supervisor.code-mtime"   # с какой версией скрипта он работает
+NEEDS_LOGIN="$USER_STATE/needs-login"    # автоподключение упёрлось во вход, ждём человека
 ROUTES_OFF="$USER_STATE/routes.disabled" # сети из networks.conf, выключенные из меню
 ZONES_OFF="$USER_STATE/zones.disabled"
 LOG_DIR="$HOME/Library/Logs/ocbar"
@@ -208,17 +209,27 @@ load_profile() {
     P_UA=$(profile_get "$p" useragent); P_UA="${P_UA:-AnyConnect Windows 4.10.06079}"
     P_SVC=$(profile_get "$p" keychain_service); P_SVC="${P_SVC:-ru.ocbar.client}"
     P_CSD=$(profile_get "$p" csd_wrapper)
-    # totp: auto — секрет из Keychain; keepassxc — код из базы KeePassXC; off — руками
+    # Откуда брать одноразовый код. Источников несколько, и ни один не
+    # «главный»: keychain — секрет в связке ключей, keepassxc — готовый код из
+    # базы, command — произвольная команда (менеджер паролей, свой скрипт),
+    # off — вводит человек.
     P_TOTP=$(profile_get "$p" totp); P_TOTP="${P_TOTP:-auto}"
+    P_TOTP_CMD=$(profile_get "$p" totp_command)
     P_KP_ENTRY=$(profile_get "$p" keepass_entry)
     P_KP_DB=$(profile_get "$p" keepass_db); P_KP_DB="${P_KP_DB/#\~/$HOME}"
-    P_KP_SVC=$(profile_get "$p" keepass_keychain_service); P_KP_SVC="${P_KP_SVC:-keepassxc-docs}"
+    P_KP_SVC=$(profile_get "$p" keepass_keychain_service)
     P_HEALTH=$(profile_get "$p" healthcheck)
     # Хосты, где разрешено автозаполнение. Пусто — заполняем везде, как раньше,
     # но в лог попадёт хост каждой страницы, по нему список и составляется.
     P_FILL_HOSTS=$(profile_get "$p" idp_hosts)
     case "$(global_get notifications)" in off|0|no) NOTIFY_ENABLED=0 ;; esac
-    [ -n "$P_KP_ENTRY" ] && [ "$P_TOTP" = auto ] && P_TOTP=keepassxc
+    # auto = «сам разберись»: команда, если задана; база, если указана запись;
+    # иначе связка ключей.
+    if [ "$P_TOTP" = auto ]; then
+        if [ -n "$P_TOTP_CMD" ]; then P_TOTP=command
+        elif [ -n "$P_KP_ENTRY" ]; then P_TOTP=keepassxc
+        else P_TOTP=keychain; fi
+    fi
     P_RULES=$(profile_get "$p" rules); P_RULES="${P_RULES/#\~/$HOME}"
     [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
     case "$P_MODE" in
@@ -388,6 +399,20 @@ kp_master() {
     else security find-generic-password -w -s "$P_KP_SVC" 2>/dev/null; fi
 }
 
+# Произвольный источник: команда печатает код в stdout. Так подключается любой
+# менеджер паролей или аппаратный ключ, не зашитый в этот скрипт.
+command_totp() {
+    [ -n "$P_TOTP_CMD" ] || { printf 'не задан totp_command в профиле\n' >&2; return 1; }
+    local out
+    out=$(sh -c "$P_TOTP_CMD" 2>/dev/null | head -1 | tr -d '[:space:]') || {
+        printf 'команда totp_command завершилась с ошибкой\n' >&2; return 1; }
+    case "$out" in
+        [0-9][0-9][0-9][0-9][0-9][0-9]|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) printf '%s' "$out" ;;
+        '') printf 'команда totp_command ничего не вернула\n' >&2; return 1 ;;
+        *) printf 'команда totp_command вернула не код из 6-8 цифр\n' >&2; return 1 ;;
+    esac
+}
+
 # Печатает готовый одноразовый код или ничего; причина — в stderr.
 keepass_totp() {
     local cli db out
@@ -482,11 +507,13 @@ cmd_secret() {
             fi
             case "$P_TOTP" in
                 off) warn "Автоввод TOTP" "выключен (totp = off) — код вводит человек" ;;
-                keepassxc)
-                    local c; c=$(keepass_totp 2>/tmp/ocbar-kp.$$) || true
-                    if [ -n "$c" ]; then ok "Автоввод TOTP" "из KeePassXC: $P_KP_ENTRY (код сейчас $c)"
-                    else bad "Автоввод TOTP" "KeePassXC: $(head -1 /tmp/ocbar-kp.$$ 2>/dev/null)"; fi
-                    rm -f /tmp/ocbar-kp.$$ ;;
+                keepassxc|command)
+                    local c err src; err=$(mktemp "${TMPDIR:-/tmp}/ocbar-totp.XXXXXX")
+                    if [ "$P_TOTP" = keepassxc ]; then c=$(keepass_totp 2>"$err") || true; src="KeePassXC: $P_KP_ENTRY"
+                    else c=$(command_totp 2>"$err") || true; src="команда totp_command"; fi
+                    if [ -n "$c" ]; then ok "Автоввод TOTP" "из $src (код сейчас $c)"
+                    else bad "Автоввод TOTP" "$src — $(head -1 "$err" 2>/dev/null)"; fi
+                    rm -f "$err" ;;
                 *)  if kc_has "$P_SVC" "totp/$P_USER"; then ok "Автоввод TOTP" "из Keychain, один раз за вход"; else skip "Автоввод TOTP" "включён, но секрета нет"; fi ;;
             esac ;;
         *) die "secret: set-password | set-totp | import-qr <файл> | status [профиль]" ;;
@@ -498,6 +525,10 @@ cmd_secret() {
 authenticate() { # печатает "token hash post_url"
     local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
     local -a args=(--url "$P_URL" --useragent "$P_UA")
+    # Молчаливый режим для автоподключения: окно поверх работы человека без
+    # спроса — плохо. Если вход требует участия, выходим с кодом 5, а решение
+    # принимает человек.
+    [ "${OCBAR_SILENT:-}" = 1 ] && args+=(--no-window --timeout "${OCBAR_SILENT_TIMEOUT:-25}")
     [ -n "$P_RULES" ] && [ -f "$P_RULES" ] && args+=(--rules "$P_RULES")
     [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
     [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
@@ -506,8 +537,10 @@ authenticate() { # печатает "token hash post_url"
     case "$P_TOTP" in
         off) ;;
         keepassxc)
-            # Из базы приходит готовый код, а не секрет: секрет остаётся в KeePass.
-            code=$(keepass_totp) || log "TOTP из KeePassXC не получен — код введёт человек" ;;
+            # Из базы приходит готовый код, а не секрет: секрет остаётся в базе.
+            code=$(keepass_totp) || log "код из KeePassXC не получен — введёт человек" ;;
+        command)
+            code=$(command_totp) || log "код от totp_command не получен — введёт человек" ;;
         *)   totp=$(kc_get "$P_SVC" "totp/$P_USER") ;;
     esac
     [ -n "$pw" ] || log "пароля в Keychain нет ($P_SVC/$P_USER) — форму заполнит человек"
@@ -515,7 +548,13 @@ authenticate() { # печатает "token hash post_url"
     json=$(OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp" \
            OCBAR_TOTP_CODE="$code" "$auth" "${args[@]}") || {
         local rc=$?
-        case $rc in 2) die "SSO: тайм-аут" ;; 3) die "SSO: окно закрыто" ;; *) die "SSO: ошибка ($rc)" ;; esac
+        case $rc in
+            2) die "SSO: тайм-аут" ;;
+            3) die "SSO: окно закрыто" ;;
+            5) printf '%socbar: молча войти не удалось — сессия требует человека%s\n' "$c_yel" "$c_off" >&2
+               return 5 ;;
+            *) die "SSO: ошибка ($rc)" ;;
+        esac
     }
     printf '%s' "$json" | /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["session_token"], d["server_cert_hash"], d["post_url"])'
 }
@@ -546,8 +585,12 @@ do_connect() { # профиль уже загружен
         return 0
     fi
     info "Вход через SSO: $P_TITLE ($P_URL)…"
-    local token hash post_url
-    read -r token hash post_url <<< "$(authenticate)"
+    local token hash post_url out rc=0
+    out=$(authenticate) || rc=$?
+    # 5 — «нужен человек»: не ошибка, а решение, которое принимает не скрипт.
+    [ "$rc" = 5 ] && return 5
+    [ "$rc" = 0 ] || return "$rc"
+    read -r token hash post_url <<< "$out"
     [ -n "$token" ] || die "аутентификация не вернула токен"
     # КРИТИЧНО: подключаться надо к тому узлу, что выдал cookie. Балансировщик
     # увёл SSO на конкретный узел (post_url), и session-token/servercert — его.
@@ -566,6 +609,7 @@ do_connect() { # профиль уже загружен
     [ "$(tunnel_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
     mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
+    rm -f "$NEEDS_LOGIN" 2>/dev/null || true
     notify "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
     report_health || true
 }
@@ -596,6 +640,8 @@ report_health() {   # печатает и уведомляет; не роняе�
 }
 
 cmd_connect() {
+    # Явный вызов человеком — это и есть его решение: снимаем ожидание.
+    rm -f "$NEEDS_LOGIN" 2>/dev/null || true
     local p="" a
     for a in "$@"; do case "$a" in --show) OCBAR_SHOW=1 ;; -v|--verbose) OCBAR_VERBOSE=1 ;; *) p="$a" ;; esac; done
     load_profile "$p"
@@ -623,7 +669,7 @@ cmd_status() {
     local foreign=""; if [ "$st" = down ] && pgrep -x openconnect >/dev/null 2>&1; then foreign=1; fi
 
     if [ "$short" = 1 ]; then
-        printf 'paused=%s\n' "$(is_paused && echo 1 || echo 0)"
+        printf 'paused=%s\nneeds_login=%s\n' "$(is_paused && echo 1 || echo 0)" "$([ -f "$NEEDS_LOGIN" ] && echo 1 || echo 0)"
         printf 'state=%s\nprofile=%s\ntundev=%s\nip=%s\nsince=%s\ngateway=%s\ndns=%s\nurl=%s\nmode=%s\nforeign=%s\nsupervisor=%s\niface=%s\n' \
             "$st" "$prof" "$dev" "$ip" "$since" "$gw" "$dns" "$url" "$mode" "$foreign" "$(sup_alive && echo 1 || echo 0)" "$(active_iface)"
         local n z
@@ -662,6 +708,7 @@ cmd_status() {
     local zc; zc=$(manifest_zones | grep -c . || true)
     [ "$zc" -gt 0 ] && ok "Зоны /etc/resolver" "$zc наших: $(manifest_zones | tr '\n' ' ')" || skip "Зоны /etc/resolver" "наших нет"
     sup_alive && ok "Супервизор" "работает (pid $(cat "$SUP_PID"))" || skip "Супервизор" "не запущен"
+    [ -f "$NEEDS_LOGIN" ] && warn "Автоподключение" "остановлено: нужен вход — ocbar connect"
 }
 
 # ---------------------------------------------------------------- routes ----
@@ -1012,10 +1059,26 @@ cmd_supervise() {
                     fi
                     sleep 5; continue
                 fi
+                if [ -f "$NEEDS_LOGIN" ]; then
+                    if [ $((now - last_probe_log)) -ge 600 ]; then
+                        log "жду решения человека: нужен вход (ocbar connect)"
+                        last_probe_log=$now
+                    fi
+                    [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
+                    sleep 5; continue
+                fi
                 logins=$((logins + 1))
-                log "туннель не поднят, профиль $desired — подключаю (backoff $backoff с, вход $logins/$logins_max за час)"
-                if ( load_profile "$desired" && do_connect ) >>"$SUP_LOG" 2>&1; then
+                log "туннель не поднят, профиль $desired — подключаю молча (вход $logins/$logins_max за час)"
+                local crc=0
+                ( export OCBAR_SILENT=1; load_profile "$desired" && do_connect ) >>"$SUP_LOG" 2>&1 || crc=$?
+                if [ "$crc" = 0 ]; then
                     backoff=5
+                elif [ "$crc" = 5 ]; then
+                    # Сессия у провайдера входа истекла: молча не пройти.
+                    # Дальше решает человек — сами окно не открываем.
+                    mkdir -p "$USER_STATE"; : > "$NEEDS_LOGIN"
+                    log "молча войти не удалось — нужен вход человеком, автопопытки остановлены"
+                    notify "ocbar: нужен вход" "Сессия истекла. Откройте терминал: ocbar connect"
                 else
                     log "подключение не удалось, следующая попытка через $backoff с"
                     [ "$backoff" -ge 40 ] && notify "ocbar: не удаётся подключиться" "Попытки продолжаются, следующая через $backoff с"

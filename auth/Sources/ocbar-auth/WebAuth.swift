@@ -11,6 +11,10 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     struct Options {
         var showAfter: TimeInterval = 2      // окно прячем, пока есть шанс пройти молча
         var alwaysShow = false
+        // Молчаливый режим: окно не показывать никогда. Нужен супервизору,
+        // который подключается сам — открывать окно поверх работы человека
+        // без спроса неправильно, лучше сказать «нужен вход» и ждать.
+        var noWindow = false
         var timeout: TimeInterval = 300
         var insecure = false
         var rules: [AutofillRule] = []
@@ -43,11 +47,12 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     private var stoppedReason: String?
 
     enum WebAuthError: Error, CustomStringConvertible {
-        case cancelled, timeout, errorCookie(String), stopped(String), navigation(String)
+        case cancelled, timeout, needsHuman(String), errorCookie(String), stopped(String), navigation(String)
         var description: String {
             switch self {
             case .cancelled: return "окно закрыто пользователем"
             case .timeout: return "тайм-аут ожидания SSO"
+            case .needsHuman(let s): return "нужен человек: \(s)"
             case .errorCookie(let s): return "шлюз вернул cookie ошибки: \(s)"
             case .stopped(let s): return "форма показала ошибку: \(s)"
             case .navigation(let s): return "навигация не удалась: \(s)"
@@ -95,7 +100,9 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         window.center()
         window.isReleasedWhenClosed = false
 
-        if opts.alwaysShow || opts.showAfter <= 0 {
+        if opts.noWindow {
+            // окно не показываем вовсе; поймём по таймауту или по нераспознанной форме
+        } else if opts.alwaysShow || opts.showAfter <= 0 {
             show()
         } else {
             showTimer = Timer.scheduledTimer(withTimeInterval: opts.showAfter, repeats: false) { [weak self] _ in
@@ -126,6 +133,14 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     }
 
     private func show() {
+        if opts.noWindow {
+            // Всё, что в обычном режиме привело бы к показу окна, здесь
+            // означает: без человека не обойтись.
+            finish(.failure(.needsHuman(statusLabel?.stringValue.isEmpty == false
+                                        ? statusLabel.stringValue
+                                        : (webView.url?.host ?? "форма входа"))))
+            return
+        }
         NSApp.setActivationPolicy(.regular)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
