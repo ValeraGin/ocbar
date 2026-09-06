@@ -113,7 +113,7 @@ valid_url()   { printf '%s' "$1" | grep -qE '^(https://)?[A-Za-z0-9.-]{1,253}(:[
 valid_hash()  { printf '%s' "$1" | grep -qE '^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64}|(sha1|sha256|pin-sha256):[A-Za-z0-9+/=]{20,100})$'; }
 valid_ua()    { printf '%s' "$1" | grep -qE '^[A-Za-z0-9 ._()/;:,-]{1,120}$'; }
 valid_name()  { printf '%s' "$1" | grep -qE '^[A-Za-z0-9._-]{1,64}$'; }
-valid_mode()  { [ "$1" = split ] || [ "$1" = full ]; }
+valid_mode()  { [ "$1" = split ] || [ "$1" = full ]; }   # full принимается ради старых вызовов
 
 # ------------------------------------------------------------- состояние ----
 tunnel_pid() { [ -f "$PIDFILE" ] && cat "$PIDFILE" 2>/dev/null | grep -E '^[0-9]+$' || true; }
@@ -295,7 +295,7 @@ cmd_tunnel_start() {
     local url="${1:-}" hash="${2:-}" mode="${3:-}" user="${4:-}" ua="${5:-}" csd="${6:-}"
     valid_url "$url"   || die "некорректный url: $url"
     valid_hash "$hash" || die "некорректный servercert"
-    valid_mode "$mode" || die "режим: split|full"
+    valid_mode "$mode" || die "режим: split (full убран, см. networks.conf)"
     valid_user "$user" || die "некорректное имя пользователя"
     [ -z "$ua" ] || valid_ua "$ua" || die "некорректный user-agent"
     [ -z "$csd" ] || valid_name "$csd" || die "некорректное имя csd-wrapper"

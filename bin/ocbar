@@ -157,7 +157,7 @@ priv() {
 # profiles.conf:  default = имя
 #                 [имя]  url = host/group  name = …  user = …  mode = split|full
 #                        auth = sso|password  useragent = …  keychain_service = …
-#                        csd_wrapper = /путь  rules = /путь  description = …  totp = auto|off
+#                        csd_wrapper = /путь  rules = /путь  totp = auto|keepassxc|off
 profile_get() { # имя ключ
     [ -f "$PROFILES" ] || return 0
     awk -v s="[$1]" -v k="$2" '
@@ -219,7 +219,11 @@ load_profile() {
     [ -n "$P_KP_ENTRY" ] && [ "$P_TOTP" = auto ] && P_TOTP=keepassxc
     P_RULES=$(profile_get "$p" rules); P_RULES="${P_RULES/#\~/$HOME}"
     [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
-    case "$P_MODE" in split|full) ;; *) die "профиль [$p]: mode = split|full, а не '$P_MODE'" ;; esac
+    case "$P_MODE" in
+        split) ;;
+        full)  die "профиль [$p]: режим full убран (он не работал). Полный туннель — двумя строками в networks.conf: 0.0.0.0/1 и 128.0.0.0/1. Учтите, что шлюз может не выпускать наружу" ;;
+        *)     die "профиль [$p]: mode = split, а не '$P_MODE'" ;;
+    esac
 }
 
 # ------------------------------------------------------------- конфиги ----
@@ -259,7 +263,14 @@ read_networks() {
     local n
     while read -r n _; do
         case "${n:-}" in ''|\#*) continue ;; esac
-        valid_cidr "$n" && printf '%s\n' "$n" || warn "некорректная сеть в networks.conf: $n" >&2
+        valid_cidr "$n" || { warn "некорректная сеть в networks.conf: $n" >&2; continue; }
+        # Сеть с маской короче /8 уводит в туннель почти весь трафик. Это
+        # законный способ получить полный туннель, но случайная опечатка тут
+        # оставляет без интернета, поэтому предупреждаем явно.
+        case "${n#*/}" in
+            0|1|2|3|4|5|6|7) warn "сеть $n уводит в туннель почти весь трафик — интернет пойдёт через шлюз" >&2 ;;
+        esac
+        printf '%s\n' "$n"
     done < "$NETWORKS_CONF"
 }
 is_off() { [ -f "$2" ] && grep -qx "$1" "$2"; }

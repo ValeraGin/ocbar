@@ -62,7 +62,7 @@ sudo ocbar install
 
 | Файл | Что |
 |---|---|
-| `profiles.conf` | профили: `url`, `user`, `mode = split\|full`, `auth = sso\|password`, `keychain_service` |
+| `profiles.conf` | профили: `url`, `user`, `auth = sso\|password`, `keychain_service`, `healthcheck` |
 | `networks.conf` | CIDR в туннель, по одному на строку |
 | `zones.conf` | `<зона> <DNS\|vpn> [порт]` — `vpn` означает DNS, который прислал шлюз |
 | `autofill.rules` | правила заполнения формы IdP, читаются при каждом запуске |
@@ -167,7 +167,7 @@ ocbar resume    # вернуть, мгновенно и без входа
 
 - парольные группы (логин + OTP из SMS) `ocbar` не ведёт: SMS-код взять неоткуда.
   Такой профиль помечается `auth = password` и в меню показывается серым;
-- переход `split ↔ full` требует переподключения (режим задаётся при старте);
+- «всё в туннель» настраивается сетями `0.0.0.0/1` и `128.0.0.0/1` в конфиге, но шлюз при этом может не выпускать в интернет — проверено;
 - IPv6 в туннеле не обрабатывается (адрес ставится, маршруты — нет);
 - без Apple Developer ID: только сборка из исходников, поэтому Homebrew formula,
   а не cask — [docs/06-distribution.md](docs/06-distribution.md).

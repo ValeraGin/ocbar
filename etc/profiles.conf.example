@@ -8,7 +8,10 @@
 #   user             логин; по умолчанию — текущий пользователь macOS
 #   auth             sso (по умолчанию) | password — парольные группы ocbar не ведёт,
 #                    они здесь только чтобы меню показывало «через openconnect»
-#   mode             split (по умолчанию) — наши маршруты и зоны; full — всё в туннель
+#   mode             split — в туннель идут только сети из networks.conf.
+#                    Единственный режим: «всё в туннель» делается двумя
+#                    строками в networks.conf (0.0.0.0/1 и 128.0.0.0/1), но
+#                    шлюз при этом может не выпускать в интернет
 #   useragent        User-Agent для шлюза; по умолчанию AnyConnect Windows 4.10.06079
 #   keychain_service сервис Keychain, где лежат пароль (-a user) и TOTP (-a totp/user);
 #                    по умолчанию ru.ocbar.client
@@ -35,11 +38,6 @@ description = Любые устройства, расширенный досту
 user = alice
 mode = split
 healthcheck = wiki.example.com:443
-
-[full]
-url = vpn.example.com/employees
-name = Основной (всё в туннель)
-mode = full
 
 [legacy]
 url = vpn.example.com/otp
