@@ -1,0 +1,403 @@
+import AppKit
+import Foundation
+
+// ocbar-auth — аутентификатор Cisco AnyConnect в режиме single-sign-on-v2.
+//
+// Режимы:
+//   (по умолчанию)  пройти SSO, напечатать JSON {session_token, server_cert_hash, url}
+//   --probe         шаги 1–3 протокола без окна и учётных данных
+//   --dump-script   напечатать JS автозаполнения по правилам
+//   --selftest      TOTP по векторам RFC 6238 и разбор XML
+//
+// Секреты — только через окружение: OCBAR_USERNAME, OCBAR_PASSWORD,
+// OCBAR_TOTP_SECRET (base32) или OCBAR_TOTP_CODE (уже посчитанный).
+
+struct Args {
+    var url: String?
+    var userAgent = "AnyConnect Windows 4.10.06079"
+    var version = "4.10.06079"
+    var deviceID = "mac-intel"
+    var probe = false
+    var dumpScript = false
+    var selfTest = false
+    var json = false
+    var insecure = false
+    var verbose = false
+    var rulesFile: String?
+    var timeout: TimeInterval = 300
+    var showAfter: TimeInterval = 2
+    var alwaysShow = false
+    var noAutofill = false
+    var importQR: String?
+    var printSecret = false
+    var selectEntry: String?
+    var listEntries = false
+    var totpNow = false
+    var help = false
+}
+
+func usage() -> String {
+    """
+    ocbar-auth --url https://host/group [опции]
+
+      --probe               шаги init без окна: что предлагает шлюз
+      --dump-script         напечатать JS автозаполнения (с плейсхолдерами)
+      --selftest            проверить TOTP (RFC 6238) и разбор XML
+      --import-qr FILE      прочитать TOTP-секрет из QR (в том числе экспорт
+                            Google Authenticator); печатает метаданные и код
+                            для сверки, сам секрет — только с --print-secret
+      --print-secret        вывести секрет в stdout (для ocbar secret import)
+      --list                показать все записи в QR и выйти
+      --select ПОДСТРОКА    выбрать запись по issuer/имени (иначе — первая TOTP)
+      --rules FILE          правила автозаполнения (см. etc/autofill.rules)
+      --no-autofill         не заполнять форму
+      --useragent UA        User-Agent (по умолчанию AnyConnect Windows 4.10.06079)
+      --version V           версия клиента в <version> (по умолчанию 4.10.06079)
+      --timeout SEC         сколько ждать SSO (300)
+      --show-after SEC      показать окно, если за SEC секунд не прошло молча (2)
+      --always-show         показать окно сразу
+      --insecure            не проверять TLS-сертификат шлюза
+      --json                --probe в JSON
+      --verbose             подробный лог в stderr
+
+    Окружение: OCBAR_USERNAME, OCBAR_PASSWORD, OCBAR_TOTP_SECRET | OCBAR_TOTP_CODE.
+    Коды выхода: 0 ок, 1 протокол/HTTP, 2 тайм-аут, 3 отменено, 4 аргументы.
+    """
+}
+
+func parseArgs() -> Args {
+    var a = Args()
+    var it = CommandLine.arguments.dropFirst().makeIterator()
+    func next(_ flag: String) -> String {
+        guard let v = it.next() else {
+            FileHandle.standardError.write(Data("ocbar-auth: \(flag) требует значение\n".utf8)); exit(4)
+        }
+        return v
+    }
+    while let arg = it.next() {
+        switch arg {
+        case "--url": a.url = next(arg)
+        case "--useragent": a.userAgent = next(arg)
+        case "--version": a.version = next(arg)
+        case "--device-id": a.deviceID = next(arg)
+        case "--rules": a.rulesFile = next(arg)
+        case "--timeout": a.timeout = TimeInterval(next(arg)) ?? 300
+        case "--show-after": a.showAfter = TimeInterval(next(arg)) ?? 2
+        case "--always-show": a.alwaysShow = true
+        case "--no-autofill": a.noAutofill = true
+        case "--probe": a.probe = true
+        case "--dump-script": a.dumpScript = true
+        case "--selftest": a.selfTest = true
+        case "--import-qr": a.importQR = next(arg)
+        case "--print-secret": a.printSecret = true
+        case "--list": a.listEntries = true
+        case "--totp-now": a.totpNow = true
+        case "--select": a.selectEntry = next(arg)
+        case "--json": a.json = true
+        case "--insecure": a.insecure = true
+        case "--verbose", "-v": a.verbose = true
+        case "-h", "--help": a.help = true
+        default:
+            FileHandle.standardError.write(Data("ocbar-auth: неизвестный аргумент \(arg)\n\(usage())\n".utf8)); exit(4)
+        }
+    }
+    return a
+}
+
+func out(_ s: String) { FileHandle.standardOutput.write(Data((s + "\n").utf8)) }
+
+func jsonString(_ obj: Any) -> String {
+    let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data("{}".utf8)
+    return String(data: data, encoding: .utf8) ?? "{}"
+}
+
+/// Нормализует адрес: "host/group" → "https://host/group".
+func normalize(_ raw: String) -> URL? {
+    var s = raw
+    if !s.contains("://") { s = "https://" + s }
+    return URL(string: s)
+}
+
+// MARK: - шаги 1–3
+
+struct InitResult {
+    let groupURL: URL          // как задано (после нормализации)
+    let postURL: URL           // куда реально ходит POST после редиректов
+    let hops: [String]
+    let raw: Data
+    let request: AuthRequest
+    let methods: [String]
+    let browserMode: String?
+    let certSHA256: String?
+}
+
+func runInit(_ a: Args, http: HTTPClient) throws -> InitResult {
+    guard let raw = a.url, let groupURL = normalize(raw) else {
+        throw ProtocolError.badXML("не задан --url")
+    }
+    let (resolved, hops) = try http.resolve(groupURL)
+    var body = VPNProtocol.initRequest(groupAccessURL: groupURL.absoluteString, version: a.version,
+                                       deviceID: a.deviceID, includeCertFail: false)
+    var (data, postURL) = try http.post(resolved, body: body)
+    if VPNProtocol.isCertRequest(data) {
+        Log.info("шлюз просит клиентский сертификат — повторяю с <client-cert-fail/>")
+        body = VPNProtocol.initRequest(groupAccessURL: groupURL.absoluteString, version: a.version,
+                                       deviceID: a.deviceID, includeCertFail: true)
+        (data, postURL) = try http.post(postURL, body: body)
+    }
+    if a.verbose, let s = String(data: data, encoding: .utf8) {
+        Log.debug("ответ init:\n\(s)")
+    }
+    let req = try VPNProtocol.parseAuthRequest(data)
+    return InitResult(groupURL: groupURL, postURL: postURL, hops: hops, raw: data, request: req,
+                      methods: VPNProtocol.offeredAuthMethods(data),
+                      browserMode: VPNProtocol.browserMode(data),
+                      certSHA256: http.serverCertSHA256)
+}
+
+// MARK: - main
+
+let args = parseArgs()
+Log.verbose = args.verbose
+if args.help { out(usage()); exit(0) }
+
+if args.totpNow {
+    // Код из OCBAR_TOTP_SECRET — для проверки того, что лежит в Keychain.
+    guard let secret = ProcessInfo.processInfo.environment["OCBAR_TOTP_SECRET"], !secret.isEmpty,
+          let code = TOTP.code(secretBase32: secret) else {
+        Log.error("OCBAR_TOTP_SECRET пуст или не base32")
+        exit(1)
+    }
+    out(code)
+    exit(0)
+}
+
+if args.selfTest {
+    var failed = 0
+    out("TOTP, RFC 6238 приложение B (HMAC-SHA1):")
+    for v in TOTP.selfTest() {
+        out("  T=\(v.t)  ожидалось \(v.want)  получено \(v.got)  \(v.ok ? "OK" : "FAIL")")
+        if !v.ok { failed += 1 }
+    }
+    out("Разбор XML init-ответа (образец):")
+    let sample = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <config-auth client="vpn" type="auth-request" aggregate-auth-version="2">
+      <opaque is-for="sg"><tunnel-group>TG-EXAMPLE</tunnel-group><auth-method>single-sign-on-v2</auth-method><config-hash>1</config-hash></opaque>
+      <auth id="main"><title>Login</title><message>Please complete the authentication process in the AnyConnect Login window.</message>
+        <sso-v2-login>https://vpn.example.com/+CSCOE+/saml/sp/login?tgname=TG-EXAMPLE&amp;acsamlcap=v2</sso-v2-login>
+        <sso-v2-login-final>https://vpn.example.com/+CSCOE+/saml_ac_login.html</sso-v2-login-final>
+        <sso-v2-token-cookie-name>acSamlv2Token</sso-v2-token-cookie-name>
+        <sso-v2-error-cookie-name>acSamlv2Error</sso-v2-error-cookie-name>
+        <form><input type="sso" name="sso-token"></input></form></auth>
+    </config-auth>
+    """
+    do {
+        let r = try VPNProtocol.parseAuthRequest(Data(sample.utf8))
+        let ok = r.tokenCookieName == "acSamlv2Token" && r.errorCookieName == "acSamlv2Error"
+            && r.loginURL.hasSuffix("acsamlcap=v2") && r.opaqueXML.contains("<tunnel-group>TG-EXAMPLE</tunnel-group>")
+        out("  cookie=\(r.tokenCookieName) final=\(r.loginFinalURL) opaque=\(r.opaqueXML.count) байт  \(ok ? "OK" : "FAIL")")
+        if !ok { failed += 1 }
+        let reply = VPNProtocol.replyRequest(version: "1", deviceID: "mac-intel", opaqueXML: r.opaqueXML, ssoToken: "T<&>")
+        let replyOK = String(data: reply, encoding: .utf8)!.contains("<sso-token>T&lt;&amp;&gt;</sso-token>")
+        out("  auth-reply экранирует токен и несёт <opaque> дословно  \(replyOK ? "OK" : "FAIL")")
+        if !replyOK { failed += 1 }
+    } catch {
+        out("  FAIL: \(error)"); failed += 1
+    }
+    let complete = """
+    <config-auth client="vpn" type="complete" aggregate-auth-version="2">
+      <session-id>1</session-id><session-token>ABC123</session-token>
+      <auth id="success"><message>ok</message></auth>
+      <config client="vpn" type="private"><vpn-base-config><server-cert-hash>DEADBEEF</server-cert-hash></vpn-base-config></config>
+    </config-auth>
+    """
+    do {
+        let c = try VPNProtocol.parseComplete(Data(complete.utf8))
+        let ok = c.sessionToken == "ABC123" && c.serverCertHash == "DEADBEEF"
+        out("  разбор complete: token=\(c.sessionToken) hash=\(c.serverCertHash)  \(ok ? "OK" : "FAIL")")
+        if !ok { failed += 1 }
+    } catch { out("  FAIL: \(error)"); failed += 1 }
+    out(failed == 0 ? "selftest: всё OK" : "selftest: провалов \(failed)")
+    exit(failed == 0 ? 0 : 1)
+}
+
+if let qr = args.importQR {
+    do {
+        var entries: [QRImport.Entry] = []
+        for payload in try QRImport.decode(file: qr) {
+            entries.append(contentsOf: (try? QRImport.parse(payload)) ?? [])
+        }
+        func label(_ e: QRImport.Entry) -> String {
+            let i = e.issuer.isEmpty ? "" : e.issuer + "/"
+            return i + (e.name.isEmpty ? "(без имени)" : e.name)
+        }
+        if args.listEntries {
+            out("записей в QR: \(entries.count)")
+            for (i, e) in entries.enumerated() {
+                out("  \(i + 1). \(label(e))  [\(e.isTOTP ? "TOTP" : "HOTP"), \(e.algorithm), \(e.digits) цифр]")
+            }
+            exit(0)
+        }
+        let candidates = entries.filter { $0.isTOTP }
+        var chosen: QRImport.Entry?
+        if let want = args.selectEntry?.lowercased(), !want.isEmpty {
+            let matched = candidates.filter { label($0).lowercased().contains(want) }
+            if matched.count > 1 {
+                Log.error("под «\(args.selectEntry!)» подходит несколько записей: \(matched.map(label).joined(separator: ", ")) — уточните")
+                exit(1)
+            }
+            guard let m = matched.first else {
+                Log.error("в QR нет записи, похожей на «\(args.selectEntry!)». Есть: \(candidates.map(label).joined(separator: ", "))")
+                exit(1)
+            }
+            chosen = m
+        } else if candidates.count > 1 {
+            // Молча взять первую из нескольких — верный способ записать чужой
+            // секрет и потом долго не понимать, почему код не подходит.
+            Log.error("в QR \(candidates.count) записи: \(candidates.map(label).joined(separator: ", "))")
+            Log.error("укажите нужную: --select <часть имени> (у ocbar: secret import-qr <файл> --select <часть имени>)")
+            exit(1)
+        } else {
+            chosen = candidates.first ?? entries.first
+        }
+        guard let e = chosen else { throw QRImport.ImportError.empty }
+        Log.info("запись: \(e.issuer.isEmpty ? "(без issuer)" : e.issuer) / \(e.name), \(e.algorithm), \(e.digits) цифр, период \(e.period) с")
+        if !e.isTOTP { Log.info("ВНИМАНИЕ: это HOTP, а не TOTP — ocbar такой не умеет") }
+        if e.algorithm != "SHA1" || e.digits != 6 || e.period != 30 {
+            Log.info("ВНИМАНИЕ: параметры нестандартные, ocbar считает по SHA1/6/30 — код может не совпасть")
+        }
+        if args.printSecret {
+            out(e.secretBase32)              // ← только для пайпа в security
+        } else {
+            let code = TOTP.code(secretBase32: e.secretBase32) ?? "??????"
+            out("код сейчас: \(code)  (сверьте с приложением; секрет не печатается)")
+        }
+        exit(0)
+    } catch {
+        Log.error("\(error)")
+        exit(1)
+    }
+}
+
+if args.dumpScript {
+    let rules: [AutofillRule] = args.rulesFile.map { Autofill.parse(file: $0) } ?? Autofill.defaultRules
+    let creds = Credentials(username: "USERNAME", password: "PASSWORD", totpSecret: nil)
+    out(Autofill.script(rules: rules, creds: creds, totpCode: "TOTP"))
+    exit(0)
+}
+
+let http = HTTPClient(userAgent: args.userAgent, insecure: args.insecure)
+
+if args.probe {
+    do {
+        let r = try runInit(args, http: http)
+        if args.json {
+            out(jsonString([
+                "url": r.groupURL.absoluteString,
+                "post_url": r.postURL.absoluteString,
+                "redirects": r.hops,
+                "auth_methods": r.methods,
+                "browser_mode": r.browserMode ?? "",
+                "sso_v2_login": r.request.loginURL,
+                "sso_v2_login_final": r.request.loginFinalURL,
+                "token_cookie": r.request.tokenCookieName,
+                "error_cookie": r.request.errorCookieName ?? "",
+                "opaque_bytes": r.request.opaqueXML.count,
+                "message": r.request.message,
+                "server_cert_sha256": r.certSHA256 ?? "",
+            ]))
+        } else {
+            out("url:                 \(r.groupURL.absoluteString)")
+            for h in r.hops { out("redirect:            \(h)") }
+            out("post-url:            \(r.postURL.absoluteString)")
+            out("auth-method:         \(r.methods.joined(separator: ", "))")
+            out("browser-mode:        \(r.browserMode ?? "(нет — значит встроенный webview)")")
+            out("sso-v2-login:        \(r.request.loginURL)")
+            out("sso-v2-login-final:  \(r.request.loginFinalURL)")
+            out("token-cookie:        \(r.request.tokenCookieName)")
+            out("error-cookie:        \(r.request.errorCookieName ?? "-")")
+            out("opaque:              \(r.request.opaqueXML.count) байт")
+            out("message:             \(r.request.message)")
+            out("server-cert-sha256:  \(r.certSHA256 ?? "?")")
+        }
+        exit(0)
+    } catch {
+        Log.error("\(error)")
+        exit(1)
+    }
+}
+
+// Полный проход: init → окно → auth-reply → JSON.
+
+guard args.url != nil else {
+    FileHandle.standardError.write(Data((usage() + "\n").utf8)); exit(4)
+}
+
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)   // без иконки в Dock, пока окно не понадобилось
+
+var webAuth: WebAuth?
+
+DispatchQueue.global().async {
+    do {
+        let r = try runInit(args, http: http)
+        Log.info("шлюз: \(r.methods.joined(separator: ", ")), cookie \(r.request.tokenCookieName)")
+        var opts = WebAuth.Options()
+        opts.showAfter = args.showAfter
+        opts.alwaysShow = args.alwaysShow
+        opts.timeout = args.timeout
+        opts.insecure = args.insecure
+        opts.autofill = !args.noAutofill
+        opts.rules = args.rulesFile.map { Autofill.parse(file: $0) } ?? Autofill.defaultRules
+        opts.creds = Credentials.fromEnvironment()
+        let env = ProcessInfo.processInfo.environment
+        if let code = env["OCBAR_TOTP_CODE"], !code.isEmpty {
+            opts.totpCode = code
+        } else if let secret = opts.creds.totpSecret, !secret.isEmpty {
+            opts.totpCode = TOTP.code(secretBase32: secret)
+            if opts.totpCode == nil { Log.info("OCBAR_TOTP_SECRET не разобрался как base32 — TOTP не будет") }
+        }
+        DispatchQueue.main.async {
+            webAuth = WebAuth(request: r.request, options: opts) { result in
+                switch result {
+                case .failure(let e):
+                    Log.error("\(e)")
+                    switch e {
+                    case .timeout: exit(2)
+                    case .cancelled: exit(3)
+                    default: exit(1)
+                    }
+                case .success(let token):
+                    DispatchQueue.global().async {
+                        do {
+                            let body = VPNProtocol.replyRequest(version: args.version, deviceID: args.deviceID,
+                                                                opaqueXML: r.request.opaqueXML, ssoToken: token)
+                            let (data, _) = try http.post(r.postURL, body: body)
+                            if args.verbose, let s = String(data: data, encoding: .utf8) { Log.debug("ответ auth-reply:\n\(s)") }
+                            let c = try VPNProtocol.parseComplete(data)
+                            Log.info("сессия получена, server-cert-hash \(c.serverCertHash)")
+                            out(jsonString([
+                                "session_token": c.sessionToken,
+                                "server_cert_hash": c.serverCertHash,
+                                "url": r.groupURL.absoluteString,
+                                "post_url": r.postURL.absoluteString,
+                                "host": r.postURL.host ?? "",
+                            ]))
+                            exit(0)
+                        } catch {
+                            Log.error("\(error)")
+                            exit(1)
+                        }
+                    }
+                }
+            }
+            webAuth?.start()
+        }
+    } catch {
+        Log.error("\(error)")
+        exit(1)
+    }
+}
+
+app.run()

@@ -1,0 +1,63 @@
+import Foundation
+import CryptoKit
+
+enum TOTP {
+    /// RFC 6238, HMAC-SHA1, 6 цифр, шаг 30 секунд — то, что используют
+    /// Google Authenticator и корпоративные IdP.
+    static func code(secretBase32: String, at date: Date = Date(),
+                     digits: Int = 6, period: TimeInterval = 30) -> String? {
+        guard let key = base32Decode(secretBase32) else { return nil }
+        var counter = UInt64(date.timeIntervalSince1970 / period).bigEndian
+        let msg = Data(bytes: &counter, count: 8)
+        let mac = HMAC<Insecure.SHA1>.authenticationCode(for: msg, using: SymmetricKey(data: key))
+        let h = Array(mac)
+        let offset = Int(h[h.count - 1] & 0x0f)
+        let bin = (UInt32(h[offset] & 0x7f) << 24)
+                | (UInt32(h[offset + 1]) << 16)
+                | (UInt32(h[offset + 2]) << 8)
+                |  UInt32(h[offset + 3])
+        let mod = UInt32(pow(10.0, Double(digits)))
+        return String(format: "%0\(digits)u", bin % mod)
+    }
+
+    static func base32Decode(_ s: String) -> Data? {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        var bits = 0, value = 0
+        var out = Data()
+        for ch in s.uppercased() where ch != "=" && !ch.isWhitespace && ch != "-" {
+            guard let idx = alphabet.firstIndex(of: ch) else { return nil }
+            value = (value << 5) | alphabet.distance(from: alphabet.startIndex, to: idx)
+            bits += 5
+            if bits >= 8 {
+                out.append(UInt8((value >> (bits - 8)) & 0xff))
+                bits -= 8
+            }
+        }
+        return out.isEmpty ? nil : out
+    }
+}
+
+extension TOTP {
+    static func sha256hex(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Контрольные векторы RFC 6238, приложение B (HMAC-SHA1, секрет
+    /// "12345678901234567890"). Там коды 8-значные; проверяем и 8, и 6
+    /// (6-значный — младшие цифры того же числа).
+    static func selfTest() -> [(t: Int, want: String, got: String, ok: Bool)] {
+        let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"   // base32("12345678901234567890")
+        let vectors: [(Int, String)] = [
+            (59, "94287082"), (1111111109, "07081804"), (1111111111, "14050471"),
+            (1234567890, "89005924"), (2000000000, "69279037"), (20000000000, "65353130"),
+        ]
+        var out: [(t: Int, want: String, got: String, ok: Bool)] = []
+        for (t, want) in vectors {
+            let got8 = code(secretBase32: secret, at: Date(timeIntervalSince1970: TimeInterval(t)), digits: 8) ?? "?"
+            let got6 = code(secretBase32: secret, at: Date(timeIntervalSince1970: TimeInterval(t)), digits: 6) ?? "?"
+            out.append((t, want, got8, got8 == want))
+            out.append((t, String(want.suffix(6)), got6, got6 == String(want.suffix(6))))
+        }
+        return out
+    }
+}

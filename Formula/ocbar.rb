@@ -1,0 +1,48 @@
+class Ocbar < Formula
+  desc "OpenConnect client for macOS: SSO via WKWebView, split DNS, split tunneling, menu bar"
+  homepage "https://github.com/ValeraGin/ocbar"
+  # Стабильная версия появится с первым тегом:
+  #   url "https://github.com/ValeraGin/ocbar/archive/refs/tags/v0.1.0.tar.gz"
+  #   sha256 "<brew fetch --build-from-source ocbar покажет>"
+  # До него формула head-only: brew install --HEAD ValeraGin/ocbar/ocbar
+  head "https://github.com/ValeraGin/ocbar.git", branch: "main"
+  license "MIT"
+
+  depends_on "openconnect"
+  depends_on :macos => :ventura
+
+  def install
+    # Swift идёт с Command Line Tools, полный Xcode не нужен.
+    # --disable-sandbox: SwiftPM внутри песочницы brew не может создать свою.
+    system "swift", "build", "-c", "release", "--disable-sandbox",
+           "--package-path", "auth", "--scratch-path", buildpath/"auth/.build"
+    libexec.install "auth/.build/release/ocbar-auth"
+    libexec.install "libexec/ocbar-helper"
+    bin.install "bin/ocbar"
+    (pkgshare/"swiftbar").install "swiftbar/ocbar.5s.sh"
+    (pkgshare/"examples").install Dir["etc/*.example"]
+    doc.install Dir["docs/0*.md"], "README.md"
+  end
+
+  def caveats
+    <<~EOS
+      Один раз, с паролем — хелпер root:wheel, sudoers.d, LaunchAgent супервизора:
+        sudo ocbar install
+
+      Конфиги (образцы в #{pkgshare}/examples):
+        ~/.config/ocbar/profiles.conf, zones.conf, networks.conf, autofill.rules
+
+      Плагин SwiftBar — символической ссылкой в каталог плагинов:
+        ln -s #{pkgshare}/swiftbar/ocbar.5s.sh ~/Library/Application\\ Support/SwiftBar/Plugins/
+
+      После brew upgrade openconnect копия бинаря перестаёт совпадать с манифестом
+      доверия — ocbar doctor подскажет: sudo ocbar install --trust
+    EOS
+  end
+
+  test do
+    assert_match "ocbar 0.", shell_output("#{bin}/ocbar version")
+    assert_match "selftest: всё OK", shell_output("#{libexec}/ocbar-auth --selftest")
+    assert_match "ocbar-helper", shell_output("#{libexec}/ocbar-helper version")
+  end
+end

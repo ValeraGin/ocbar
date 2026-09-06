@@ -1,0 +1,37 @@
+# ocbar: профили подключения. Копировать в ~/.config/ocbar/profiles.conf.
+#
+# default = имя профиля, который берёт `ocbar connect` без аргумента.
+# В секции [имя]:
+#   url              host/group — как в openconnect (https:// можно не писать)
+#   name             человеческое имя для меню
+#   description      подпись в меню
+#   user             логин; по умолчанию — текущий пользователь macOS
+#   auth             sso (по умолчанию) | password — парольные группы ocbar не ведёт,
+#                    они здесь только чтобы меню показывало «через openconnect»
+#   mode             split (по умолчанию) — наши маршруты и зоны; full — всё в туннель
+#   useragent        User-Agent для шлюза; по умолчанию AnyConnect Windows 4.10.06079
+#   keychain_service сервис Keychain, где лежат пароль (-a user) и TOTP (-a totp/user);
+#                    по умолчанию ru.ocbar.client
+#   csd_wrapper      путь к hostscan-заглушке; sudo ocbar install скопирует её в root-каталог
+#   rules            файл правил автозаполнения; по умолчанию ~/.config/ocbar/autofill.rules
+#   totp             auto (по умолчанию: подставлять код, если секрет есть в Keychain) | off —
+#                    выключить, если IdP присылает код по SMS: чужой код в поле хуже пустого
+
+default = main
+
+[main]
+url = vpn.example.com/employees
+name = Основной
+description = Любые устройства, расширенный доступ
+user = alice
+mode = split
+
+[full]
+url = vpn.example.com/employees
+name = Основной (всё в туннель)
+mode = full
+
+[legacy]
+url = vpn.example.com/otp
+name = Парольная группа
+auth = password

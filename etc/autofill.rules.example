@@ -1,0 +1,51 @@
+# ocbar: правила автозаполнения формы IdP. По строке на правило, сверху вниз.
+#
+#   stop   <селектор>                — если элемент ВИДИМ, прекратить заполнение
+#                                       (форма показала ошибку — не вводить пароль повторно)
+#   fill   username|password|totp <селектор>
+#   click  <селектор>                — нажать, ТОЛЬКО если в этом проходе что-то заполнили
+#   click! <селектор>                — нажать безусловно (навигация вроде «другой способ входа»)
+#
+# Не распознали форму (ничего не заполнили) — ничего не нажимаем и показываем
+# окно человеку: формы меняются (TOTP → SMS), а «Войти» с чужим кодом — это
+# ошибка входа и заблокированная учётка.
+#
+# Видимость проверяется через offsetParent: на странице IdP обычно висят
+# скрытые поля прошлых шагов, без проверки пароль уедет не в тот input.
+# Файл читается заново при каждом запуске ocbar-auth — чинить форму можно
+# без пересборки. Проверить, что получается: ocbar-auth --dump-script --rules <файл>
+
+stop  div[id=passwordError]
+stop  div.alert-error
+stop  span.kc-feedback-text
+
+fill  username input[type=email]
+fill  username input[name=username]
+fill  username input[id=username]
+fill  username input[name=login]
+fill  username input[id=login]
+fill  username input[autocomplete=username]
+
+fill  password input[id=password]
+fill  password input[name=password]
+fill  password input[type=password]
+fill  password input[autocomplete=current-password]
+
+# Microsoft: выбрать «код из приложения», если предлагают другой способ
+click input[data-report-event=Signin_Submit]
+click  div[data-value=PhoneAppOTP]
+click  a[id=signInAnotherWay]
+
+fill  totp input[id=idTxtBx_SAOTCC_OTC]
+fill  totp input[name=otp]
+fill  totp input[name=totp]
+fill  totp input[id=otp]
+fill  totp input[autocomplete=one-time-code]
+fill  totp input[type=tel][maxlength='6']
+
+click input[id=kc-login]
+click button[id=kc-login]
+click input[type=submit]
+click button[type=submit]
+click input[id=idSIButton9]
+click input[id=idSubmit_SAOTCC_Continue]

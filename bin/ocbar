@@ -1,0 +1,1000 @@
+#!/bin/bash
+#
+# ocbar — клиент Cisco AnyConnect (OpenConnect) для macOS: SSO через WKWebView,
+# split DNS через /etc/resolver, split tunneling, супервизор, меню-бар.
+#
+# Этот файл работает от пользователя и НИЧЕГО привилегированного не делает сам:
+# всё, что требует root, уходит в libexec/ocbar-helper (см. DECISIONS.md, D2).
+# --dry-run печатает команды хелпера вместо выполнения.
+
+set -euo pipefail
+
+# Свой PATH: не полагаемся на пользовательский (из Finder/launchd он куцый).
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+export LC_CTYPE="${LC_CTYPE:-UTF-8}"
+
+VERSION="0.1.0"
+# SELF_ENTRY — как нас позвали (например, /opt/homebrew/bin/ocbar: этот путь
+# переживает brew upgrade, его кладём в plist). SELF — реальный файл после
+# симлинков (Cellar), рядом с ним лежат libexec/ocbar-helper и ocbar-auth.
+SELF_ENTRY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+SELF="$SELF_ENTRY"
+while [ -L "$SELF" ]; do
+    _t=$(readlink "$SELF"); case "$_t" in /*) SELF="$_t" ;; *) SELF="$(dirname "$SELF")/$_t" ;; esac
+done
+SELF="$(cd "$(dirname "$SELF")" && pwd)/$(basename "$SELF")"
+SELF_DIR="$(dirname "$SELF")"
+
+CONFIG_DIR="${OCBAR_CONFIG_DIR:-$HOME/.config/ocbar}"
+PROFILES="$CONFIG_DIR/profiles.conf"
+ZONES_CONF="${OCBAR_CONFIG:-$CONFIG_DIR/zones.conf}"
+NETWORKS_CONF="${OCBAR_NETWORKS:-$CONFIG_DIR/networks.conf}"
+RULES_FILE="$CONFIG_DIR/autofill.rules"
+
+USER_STATE="${OCBAR_USER_STATE:-$HOME/Library/Application Support/ocbar}"
+DESIRED="$USER_STATE/desired"            # имя профиля, который должен быть поднят
+SUP_PID="$USER_STATE/supervisor.pid"
+SUP_CODE="$USER_STATE/supervisor.code-mtime"   # с какой версией скрипта он работает
+ROUTES_OFF="$USER_STATE/routes.disabled" # сети из networks.conf, выключенные из меню
+ZONES_OFF="$USER_STATE/zones.disabled"
+LOG_DIR="$HOME/Library/Logs/ocbar"
+SUP_LOG="$LOG_DIR/supervisor.log"
+
+PREFIX="/usr/local"
+HELPER_INSTALLED="$PREFIX/libexec/ocbar-helper"
+LIBDIR="$PREFIX/libexec/ocbar"
+STATE_DIR="${OCBAR_STATE_DIR:-$PREFIX/var/ocbar}"   # пишет только хелпер (root)
+TUNNEL_ENV="$STATE_DIR/tunnel.env"
+PIDFILE="$STATE_DIR/openconnect.pid"
+MANIFEST="$STATE_DIR/zones.state"
+PAUSED_FLAG="$STATE_DIR/paused"
+ROUTES_STATE="$STATE_DIR/routes.state"
+OC_LOG="$STATE_DIR/openconnect.log"
+RESOLVER_DIR="/etc/resolver"
+AGENT_LABEL="ru.ocbar.supervisor"
+AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
+
+DRY_RUN=0
+
+# ---------------------------------------------------------------- вывод ----
+c_red=$'\033[31m'; c_grn=$'\033[32m'; c_yel=$'\033[33m'; c_dim=$'\033[2m'; c_off=$'\033[0m'
+[ -t 1 ] || { c_red=""; c_grn=""; c_yel=""; c_dim=""; c_off=""; }
+# printf '%-Ns' считает БАЙТЫ — кириллица съезжает. Паддинг руками.
+pad() { local out="$1" w="${2:-26}"; while [ "${#out}" -lt "$w" ]; do out="$out "; done; printf '%s' "$out"; }
+_line() {
+    local color="$1" tag="$2"; shift 2
+    if [ $# -gt 1 ]; then printf '  %s[%s]%s %s %s\n' "$color" "$tag" "$c_off" "$(pad "$1")" "$2"
+    else printf '  %s[%s]%s %s\n' "$color" "$tag" "$c_off" "${1:-}"; fi
+}
+ok()   { _line "$c_grn" " OK " "$@"; }
+warn() { _line "$c_yel" " !! " "$@"; }
+bad()  { _line "$c_red" "FAIL" "$@"; }
+skip() { _line "$c_dim" " -- " "$@"; }
+info() { printf '%s\n' "$*"; }
+die()  { printf '%socbar: %s%s\n' "$c_red" "$*" "$c_off" >&2; exit 1; }
+log()  { mkdir -p "$LOG_DIR"; printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$SUP_LOG"; }
+
+# ------------------------------------------------------------ бинарники ----
+helper_path() {
+    if [ -x "$HELPER_INSTALLED" ]; then printf '%s' "$HELPER_INSTALLED"
+    elif [ -x "$SELF_DIR/../libexec/ocbar-helper" ]; then printf '%s' "$(cd "$SELF_DIR/../libexec" && pwd)/ocbar-helper"
+    else return 1; fi
+}
+helper_nopasswd() { sudo -n -l "$HELPER_INSTALLED" >/dev/null 2>&1; }
+
+# Источник для установки — только файл из дерева рядом с CLI. helper_path()
+# для этого не годится: он предпочитает уже установленный, и install начинал
+# копировать файл сам в себя.
+helper_source() {
+    local c="$SELF_DIR/../libexec/ocbar-helper"
+    [ -f "$c" ] || return 1
+    printf '%s' "$(cd "$(dirname "$c")" && pwd)/$(basename "$c")"
+}
+
+auth_path() {
+    local c
+    for c in "${OCBAR_AUTH:-}" "$SELF_DIR/../libexec/ocbar-auth" "$SELF_DIR/../auth/.build/release/ocbar-auth" \
+             /opt/homebrew/opt/ocbar/libexec/ocbar-auth /usr/local/opt/ocbar/libexec/ocbar-auth; do
+        [ -n "$c" ] && [ -x "$c" ] && { printf '%s' "$c"; return 0; }
+    done
+    return 1
+}
+
+openconnect_bin() {
+    local c
+    for c in /opt/homebrew/bin/openconnect /usr/local/bin/openconnect; do [ -x "$c" ] && { printf '%s' "$c"; return 0; }; done
+    return 1
+}
+
+# Привилегированная операция → хелпер. stdin пробрасывается как есть.
+priv() {
+    local h; h=$(helper_path) || die "не найден ocbar-helper (ни $HELPER_INSTALLED, ни в libexec/ рядом)"
+    if [ "$DRY_RUN" = 1 ]; then
+        printf '  %s$ sudo ocbar-helper %s%s\n' "$c_dim" "$*" "$c_off"
+        OCBAR_STATE_DIR="$STATE_DIR" "$h" --dry-run "$@"
+        return
+    fi
+    if [ "$h" = "$HELPER_INSTALLED" ] && helper_nopasswd; then
+        sudo -n "$h" "$@"
+    else
+        [ -t 0 ] || [ -t 2 ] || die "хелпер не установлен под NOPASSWD, а терминала для пароля нет — sudo ocbar install"
+        printf '%socbar: хелпер без NOPASSWD — sudo спросит пароль (sudo ocbar install чинит это навсегда)%s\n' "$c_yel" "$c_off" >&2
+        sudo "$h" "$@"
+    fi
+}
+
+# ------------------------------------------------------------- профили ----
+# profiles.conf:  default = имя
+#                 [имя]  url = host/group  name = …  user = …  mode = split|full
+#                        auth = sso|password  useragent = …  keychain_service = …
+#                        csd_wrapper = /путь  rules = /путь  description = …  totp = auto|off
+profile_get() { # имя ключ
+    [ -f "$PROFILES" ] || return 0
+    awk -v s="[$1]" -v k="$2" '
+        $0 == s { inside = 1; next }
+        /^\[/   { inside = 0 }
+        inside && $0 ~ "^[ \t]*" k "[ \t]*=" { sub("^[^=]*=[ \t]*", ""); sub("[ \t]+$", ""); print; exit }
+    ' "$PROFILES"
+}
+profile_default() {
+    [ -f "$PROFILES" ] || return 0
+    awk '/^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
+}
+profile_list() { [ -f "$PROFILES" ] && sed -n 's/^\[\(.*\)\]$/\1/p' "$PROFILES" || true; }
+
+# "имя|name|auth" по всем профилям за один проход: раньше это было два
+# вызова awk на каждый профиль, то есть шестнадцать процессов на восемь строк.
+profiles_summary() {
+    [ -f "$PROFILES" ] || return 0
+    awk '
+        /^\[/ { if (cur != "") print cur "|" nm "|" au; cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; next }
+        /^[ \t]*name[ \t]*=/ { if (nm == "") { v = $0; sub("^[^=]*=[ \t]*", "", v); sub("[ \t]+$", "", v); nm = v } }
+        /^[ \t]*auth[ \t]*=/ { if (au == "") { v = $0; sub("^[^=]*=[ \t]*", "", v); sub("[ \t]+$", "", v); au = v } }
+        END { if (cur != "") print cur "|" nm "|" au }
+    ' "$PROFILES"
+}
+profile_exists() { profile_list | grep -x "$1" >/dev/null; }
+
+# Профиль → переменные P_*
+load_profile() {
+    local p="${1:-}"
+    [ -n "$p" ] || p=$(profile_default)
+    [ -n "$p" ] || die "нет профиля: укажи имя или default в $PROFILES (образец: etc/profiles.conf.example)"
+    profile_exists "$p" || die "профиля [$p] нет в $PROFILES (есть: $(profile_list | tr '\n' ' '))"
+    P_NAME="$p"
+    P_URL=$(profile_get "$p" url);   [ -n "$P_URL" ] || die "у профиля [$p] нет url"
+    P_TITLE=$(profile_get "$p" name); P_TITLE="${P_TITLE:-$p}"
+    P_USER=$(profile_get "$p" user);  P_USER="${P_USER:-$(id -un)}"
+    P_MODE=$(profile_get "$p" mode);  P_MODE="${P_MODE:-split}"
+    P_AUTH=$(profile_get "$p" auth);  P_AUTH="${P_AUTH:-sso}"
+    P_UA=$(profile_get "$p" useragent); P_UA="${P_UA:-AnyConnect Windows 4.10.06079}"
+    P_SVC=$(profile_get "$p" keychain_service); P_SVC="${P_SVC:-ru.ocbar.client}"
+    P_CSD=$(profile_get "$p" csd_wrapper)
+    # totp: auto — секрет из Keychain; keepassxc — код из базы KeePassXC; off — руками
+    P_TOTP=$(profile_get "$p" totp); P_TOTP="${P_TOTP:-auto}"
+    P_KP_ENTRY=$(profile_get "$p" keepass_entry)
+    P_KP_DB=$(profile_get "$p" keepass_db); P_KP_DB="${P_KP_DB/#\~/$HOME}"
+    P_KP_SVC=$(profile_get "$p" keepass_keychain_service); P_KP_SVC="${P_KP_SVC:-keepassxc-docs}"
+    [ -n "$P_KP_ENTRY" ] && [ "$P_TOTP" = auto ] && P_TOTP=keepassxc
+    P_RULES=$(profile_get "$p" rules); P_RULES="${P_RULES/#\~/$HOME}"
+    [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
+    case "$P_MODE" in split|full) ;; *) die "профиль [$p]: mode = split|full, а не '$P_MODE'" ;; esac
+}
+
+# ------------------------------------------------------------- конфиги ----
+# Без подпроцессов: status зовётся плагином меню каждые 5 с, и каждый
+# grep здесь — отдельный процесс на каждую зону и сеть.
+valid_zone() {
+    case "$1" in ''|.*|*/*|*' '*|*'..'*) return 1 ;; esac
+    local re='^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$'
+    [[ $1 =~ $re ]]
+}
+valid_ip() {
+    local re='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+    [[ $1 =~ $re ]] || return 1
+    local IFS=. o; for o in $1; do [ "$o" -le 255 ] || return 1; done
+}
+valid_cidr() {
+    case "$1" in */*) ;; *) return 1 ;; esac
+    valid_ip "${1%/*}" || return 1
+    local len="${1#*/}" re='^[0-9]{1,2}$'
+    [[ $len =~ $re ]] && [ "$len" -le 32 ]
+}
+
+# zones.conf: "<зона> <DNS|vpn> [порт]"
+read_zones() {
+    [ -f "$ZONES_CONF" ] || return 0
+    local zone dns port
+    while read -r zone dns port _; do
+        case "${zone:-}" in ''|\#*) continue ;; esac
+        [ -n "${dns:-}" ] || { warn "строка без DNS пропущена: $zone" >&2; continue; }
+        valid_zone "$zone" || { warn "недопустимое имя зоны, пропущено: $zone" >&2; continue; }
+        [ "$dns" = vpn ] || valid_ip "$dns" || { warn "недопустимый адрес, пропущено: $zone $dns" >&2; continue; }
+        printf '%s %s %s\n' "$zone" "$dns" "${port:-53}"
+    done < "$ZONES_CONF"
+}
+read_networks() {
+    [ -f "$NETWORKS_CONF" ] || return 0
+    local n
+    while read -r n _; do
+        case "${n:-}" in ''|\#*) continue ;; esac
+        valid_cidr "$n" && printf '%s\n' "$n" || warn "некорректная сеть в networks.conf: $n" >&2
+    done < "$NETWORKS_CONF"
+}
+is_off() { [ -f "$2" ] && grep -qx "$1" "$2"; }
+active_zones()    { read_zones    | while read -r z d p; do is_off "$z" "$ZONES_OFF"  || printf '%s %s %s\n' "$z" "$d" "$p"; done; }
+active_networks() { read_networks | while read -r n;     do is_off "$n" "$ROUTES_OFF" || printf '%s\n' "$n"; done; }
+
+# ----------------------------------------------------------- состояние ----
+env_get() { [ -f "$TUNNEL_ENV" ] && sed -n "s/^$1=//p" "$TUNNEL_ENV" | head -1 || true; }
+tunnel_pid() { [ -f "$PIDFILE" ] && grep -E '^[0-9]+$' "$PIDFILE" 2>/dev/null || true; }
+tunnel_alive() { local p; p=$(tunnel_pid); [ -n "$p" ] && ps -p "$p" >/dev/null 2>&1; }
+is_paused() { [ -f "$PAUSED_FLAG" ]; }
+# paused — это подсостояние connected: процесс жив, сессия цела, но трафик
+# идёт мимо туннеля. Отдельное имя нужно, чтобы супервизор не «чинил» это.
+tunnel_state() {
+    if tunnel_alive && [ "$(env_get STATE)" = connected ]; then
+        is_paused && echo paused || echo connected
+    elif tunnel_alive; then echo starting
+    else echo down; fi
+}
+
+# utun туннеля: из tunnel.env, иначе (чужая сессия) — по маршруту первой сети.
+tunnel_iface() {
+    local d; d=$(env_get TUNDEV)
+    if [ -n "$d" ] && [ "$(env_get STATE)" = connected ]; then printf '%s' "$d"; return 0; fi
+    local n; n=$(read_networks | head -1)
+    [ -n "$n" ] && route_via "$n"
+}
+# netstat -rn — самый дорогой вызов в status, а нужен он по разу на сеть.
+# Снимаем таблицу один раз за запуск: плагин меню зовёт status каждые 5 с.
+_ROUTES_CACHE=""
+routes_table() {
+    [ -n "$_ROUTES_CACHE" ] || _ROUTES_CACHE=$(netstat -rn -f inet 2>/dev/null)
+    printf '%s' "$_ROUTES_CACHE"
+}
+route_via() { # cidr → интерфейс
+    local key; key=$(cidr_key "${1%%/*}" "${1#*/}")
+    routes_table | awk -v k="$key" '$1==k {print $NF; exit}'
+}
+cidr_key() {
+    local base="$1" len="$2" IFS=. a b c d; read -r a b c d <<< "$base"
+    case "$len" in
+        32) printf '%s' "$base" ;; 24) printf '%s.%s.%s' "$a" "$b" "$c" ;; 16) printf '%s.%s' "$a" "$b" ;; 8) printf '%s' "$a" ;;
+        *) if [ "$d" != 0 ]; then printf '%s/%s' "$base" "$len"; elif [ "$c" != 0 ]; then printf '%s.%s.%s/%s' "$a" "$b" "$c" "$len"
+           elif [ "$b" != 0 ]; then printf '%s.%s/%s' "$a" "$b" "$len"; else printf '%s/%s' "$a" "$len"; fi ;;
+    esac
+}
+active_iface() { route -n get default 2>/dev/null | awk '/interface:/{print $2}'; }
+active_service() {
+    local dev="$1" line svc=""; [ -n "$dev" ] || return 1
+    networksetup -listnetworkserviceorder 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+            \(*\)\ *) svc="${line#*) }" ;;
+            *"Device: $dev)"*) [ -n "$svc" ] && { printf '%s' "$svc"; break; } ;;
+        esac
+    done
+}
+manifest_zones() { [ -f "$MANIFEST" ] && cat "$MANIFEST" || true; }
+sup_alive() { [ -f "$SUP_PID" ] && ps -p "$(cat "$SUP_PID" 2>/dev/null)" >/dev/null 2>&1; }
+port53_busy() { nc -z -G 1 127.0.0.1 53 >/dev/null 2>&1; }
+services_with_localhost_dns() {
+    local svc
+    networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | while IFS= read -r svc; do
+        case "$svc" in ''|\**) continue ;; esac
+        networksetup -getdnsservers "$svc" 2>/dev/null | grep -x '127.0.0.1' >/dev/null && printf '%s\n' "$svc"
+    done
+}
+human_since() { # unix ts → "2ч 13м"
+    local s=$(( $(date +%s) - ${1:-0} )); [ "$s" -ge 0 ] || s=0
+    if [ $s -ge 3600 ]; then printf '%dч %dм' $((s/3600)) $(((s%3600)/60)); elif [ $s -ge 60 ]; then printf '%dм' $((s/60)); else printf '%dс' $s; fi
+}
+
+# --------------------------------------------------------------- секреты ----
+kc_get() { security find-generic-password -s "$1" -a "$2" -w 2>/dev/null || true; }
+kc_has() { security find-generic-password -s "$1" -a "$2" >/dev/null 2>&1; }
+
+# --- KeePassXC: код берём готовым, TOTP-секрет из базы не достаём вовсе ---
+keepassxc_cli() {
+    local c
+    for c in "${KP_CLI:-}" /Applications/KeePassXC.app/Contents/MacOS/keepassxc-cli \
+             /opt/homebrew/bin/keepassxc-cli /usr/local/bin/keepassxc-cli; do
+        [ -n "$c" ] && [ -x "$c" ] && { printf '%s' "$c"; return 0; }
+    done
+    return 1
+}
+
+keepass_db_path() {
+    if [ -n "$P_KP_DB" ]; then printf '%s' "$P_KP_DB"; return 0; fi
+    [ -n "${KP_DB:-}" ] && { printf '%s' "$KP_DB"; return 0; }
+    return 1
+}
+
+# Мастер-пароль базы — из Keychain, в argv не попадает.
+# Ловушка `security -w`: значение с не-ASCII байтами отдаётся HEX-строкой без
+# каких-либо признаков. Отличить можно только по `-g`: он ставит префикс 0x.
+kp_master() {
+    local hex
+    hex=$(security find-generic-password -g -s "$P_KP_SVC" 2>&1 >/dev/null \
+          | sed -n 's/^password: 0x\([0-9A-Fa-f]*\).*/\1/p')
+    if [ -n "$hex" ]; then printf '%s' "$hex" | xxd -r -p
+    else security find-generic-password -w -s "$P_KP_SVC" 2>/dev/null; fi
+}
+
+# Печатает готовый одноразовый код или ничего; причина — в stderr.
+keepass_totp() {
+    local cli db out
+    cli=$(keepassxc_cli) || { printf 'нет keepassxc-cli (KeePassXC не установлен?)\n' >&2; return 1; }
+    db=$(keepass_db_path) || { printf 'не задан keepass_db в профиле (и нет KP_DB)\n' >&2; return 1; }
+    [ -f "$db" ] || { printf 'базы нет: %s\n' "$db" >&2; return 1; }
+    [ -n "$P_KP_ENTRY" ] || { printf 'не задан keepass_entry в профиле\n' >&2; return 1; }
+    if ! security find-generic-password -s "$P_KP_SVC" >/dev/null 2>&1; then
+        printf 'в Keychain нет мастер-пароля базы (сервис %s)\n' "$P_KP_SVC" >&2; return 1
+    fi
+    # keepassxc-cli читает файл базы напрямую: разблокировать GUI не нужно.
+    out=$(kp_master | "$cli" show -q -t "$db" "$P_KP_ENTRY" 2>&1) || {
+        printf 'keepassxc-cli не отдал код (%s)\n' "$(printf '%s' "$out" | head -1)" >&2; return 1
+    }
+    case "$out" in
+        [0-9][0-9][0-9][0-9][0-9][0-9]|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) printf '%s' "$out" ;;
+        *) printf 'в записи «%s» нет TOTP\n' "$P_KP_ENTRY" >&2; return 1 ;;
+    esac
+}
+
+cmd_secret() {
+    local what="${1:-}" img="" p=""
+    # У import-qr вторым идёт файл, профиль третьим; у остальных — сразу профиль.
+    local sel=""
+    if [ "$what" = import-qr ]; then
+        img="${2:-}"; shift 2 2>/dev/null || true
+        # дальше: [профиль] и/или --select <часть имени>
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --select) sel="${2:-}"; shift 2 ;;
+                --list) sel="--list"; shift ;;
+                *) p="$1"; shift ;;
+            esac
+        done
+    else
+        p="${2:-}"
+    fi
+    load_profile "$p"
+    case "$what" in
+        set-password)
+            info "Пароль для $P_USER (сервис Keychain: $P_SVC). Ввод спросит security, в argv он не попадёт."
+            security add-generic-password -U -s "$P_SVC" -a "$P_USER" -l "ocbar: пароль VPN ($P_USER)" -w
+            ok "сохранено" ;;
+        set-totp)
+            info "TOTP-секрет (base32) для $P_USER (сервис Keychain: $P_SVC)."
+            security add-generic-password -U -s "$P_SVC" -a "totp/$P_USER" -l "ocbar: TOTP ($P_USER)" -w
+            ok "сохранено" ;;
+        import-qr)
+            [ -n "$img" ] || die "использование: ocbar secret import-qr <файл-с-QR> [профиль]"
+            [ -f "$img" ] || die "нет файла $img"
+            local auth; auth=$(auth_path) || die "не найден ocbar-auth"
+            if [ "$sel" = "--list" ]; then "$auth" --import-qr "$img" --list; return 0; fi
+            local -a sa=(); [ -n "$sel" ] && sa=(--select "$sel")
+            info "Читаю QR из $img (секрет не печатается)"
+            # Первый проход: метаданные и код для сверки — их человек видит.
+            "$auth" --import-qr "$img" "${sa[@]+"${sa[@]}"}" || die "QR не импортирован"
+            # Второй: секрет идёт из подпроцесса в security через stdin в
+            # interactive-режиме. Через `-w` без значения security при пайпе
+            # просит подтверждение и ломается; через argv секрет был бы виден
+            # в `ps` любому процессу пользователя.
+            local secret; secret=$("$auth" --import-qr "$img" "${sa[@]+"${sa[@]}"}" --print-secret 2>/dev/null)
+            [ -n "$secret" ] || die "декодер не вернул секрет"
+            if printf 'add-generic-password -U -s %s -a %s -l %s -w %s\n' \
+                   "$P_SVC" "totp/$P_USER" "ocbar-TOTP-$P_USER" "$secret" | security -i >/dev/null 2>&1; then
+                ok "секрет сохранён в Keychain ($P_SVC / totp/$P_USER)"
+            else
+                secret=""; die "не удалось сохранить в Keychain"
+            fi
+            secret=""
+            # Сверка: код, посчитанный из того, что реально легло в Keychain.
+            local kc_code; kc_code=$(OCBAR_TOTP_SECRET="$(kc_get "$P_SVC" "totp/$P_USER")" "$auth" --totp-now 2>/dev/null)
+            [ -n "$kc_code" ] && ok "код из Keychain" "$kc_code — должен совпасть с показанным выше и с приложением"
+            info ""
+            info "Сверьте код с приложением. Совпал — включайте автоввод:"
+            info "  в $PROFILES у профиля [$P_NAME] замените 'totp = off' на 'totp = auto'"
+            info "Файл с QR лучше удалить: rm -P \"$img\""
+            ;;
+        status|'')
+            if kc_has "$P_SVC" "$P_USER"; then ok "пароль" "есть ($P_SVC / $P_USER)"; else warn "пароль" "нет — ocbar secret set-password $P_NAME"; fi
+            # При источнике KeePassXC секрета в Keychain быть и не должно —
+            # советовать его завести значит звать копировать секрет второй раз.
+            if kc_has "$P_SVC" "totp/$P_USER"; then
+                if [ "$P_TOTP" = keepassxc ]; then
+                    warn "TOTP-секрет" "лежит в Keychain, хотя источник — KeePassXC: лишняя копия"
+                else
+                    ok "TOTP-секрет" "есть ($P_SVC / totp/$P_USER)"
+                fi
+            elif [ "$P_TOTP" = keepassxc ]; then
+                skip "TOTP-секрет" "в Keychain не хранится — источник KeePassXC"
+            else
+                skip "TOTP-секрет" "нет — ocbar secret set-totp $P_NAME (если IdP просит код)"
+            fi
+            case "$P_TOTP" in
+                off) warn "Автоввод TOTP" "выключен (totp = off) — код вводит человек" ;;
+                keepassxc)
+                    local c; c=$(keepass_totp 2>/tmp/ocbar-kp.$$) || true
+                    if [ -n "$c" ]; then ok "Автоввод TOTP" "из KeePassXC: $P_KP_ENTRY (код сейчас $c)"
+                    else bad "Автоввод TOTP" "KeePassXC: $(head -1 /tmp/ocbar-kp.$$ 2>/dev/null)"; fi
+                    rm -f /tmp/ocbar-kp.$$ ;;
+                *)  if kc_has "$P_SVC" "totp/$P_USER"; then ok "Автоввод TOTP" "из Keychain, один раз за вход"; else skip "Автоввод TOTP" "включён, но секрета нет"; fi ;;
+            esac ;;
+        *) die "secret: set-password | set-totp | import-qr <файл> | status [профиль]" ;;
+    esac
+}
+
+# --------------------------------------------------------------- connect ----
+# Аутентификация → JSON от ocbar-auth. Секреты — только через окружение.
+authenticate() { # печатает "token hash post_url"
+    local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
+    local -a args=(--url "$P_URL" --useragent "$P_UA")
+    [ -n "$P_RULES" ] && [ -f "$P_RULES" ] && args+=(--rules "$P_RULES")
+    [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
+    [ "${OCBAR_VERBOSE:-}" = 1 ] && args+=(--verbose)
+    local pw totp="" code=""; pw=$(kc_get "$P_SVC" "$P_USER")
+    case "$P_TOTP" in
+        off) ;;
+        keepassxc)
+            # Из базы приходит готовый код, а не секрет: секрет остаётся в KeePass.
+            code=$(keepass_totp) || log "TOTP из KeePassXC не получен — код введёт человек" ;;
+        *)   totp=$(kc_get "$P_SVC" "totp/$P_USER") ;;
+    esac
+    [ -n "$pw" ] || log "пароля в Keychain нет ($P_SVC/$P_USER) — форму заполнит человек"
+    local json
+    json=$(OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp" \
+           OCBAR_TOTP_CODE="$code" "$auth" "${args[@]}") || {
+        local rc=$?
+        case $rc in 2) die "SSO: тайм-аут" ;; 3) die "SSO: окно закрыто" ;; *) die "SSO: ошибка ($rc)" ;; esac
+    }
+    printf '%s' "$json" | /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["session_token"], d["server_cert_hash"], d["post_url"])'
+}
+
+build_spec() { # cookie → stdin для tunnel-start
+    printf 'cookie=%s\n' "$1"
+    active_networks | sed 's/^/net /'
+    active_zones    | sed 's/^/zone /'
+}
+
+do_connect() { # профиль уже загружен
+    if [ "$P_AUTH" = password ]; then
+        die "профиль [$P_NAME] — парольная группа (auth = password): шлюз ждёт логин/пароль и OTP из SMS, ocbar этого не автоматизирует. Подключайся голым openconnect (см. README)."
+    fi
+    case "$(tunnel_state)" in
+        connected) info "уже подключён (pid $(tunnel_pid), $(env_get TUNDEV))"; return 0 ;;
+        starting)  die "openconnect уже запускается (pid $(tunnel_pid)) — подожди или ocbar disconnect" ;;
+    esac
+    # Хвосты от прошлой сессии — убрать до подключения.
+    if [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; then
+        info "остались следы прошлой сессии — убираю"
+        priv cleanup
+    fi
+    if [ "$DRY_RUN" = 1 ]; then
+        info "[dry-run] аутентификация пропущена; подключение выглядело бы так:"
+        build_spec "COOKIE" | sed 's/^cookie=.*/cookie=***/' | sed 's/^/    /'
+        build_spec "COOKIE" | priv tunnel-start "$P_URL" "0000000000000000000000000000000000000000" "$P_MODE" "$P_USER" "$P_UA" "${P_CSD:+$(basename "$P_CSD")}"
+        return 0
+    fi
+    info "Вход через SSO: $P_TITLE ($P_URL)…"
+    local token hash post_url
+    read -r token hash post_url <<< "$(authenticate)"
+    [ -n "$token" ] || die "аутентификация не вернула токен"
+    # КРИТИЧНО: подключаться надо к тому узлу, что выдал cookie. Балансировщик
+    # увёл SSO на конкретный узел (post_url), и session-token/servercert — его.
+    # Исходный vpn.example.com балансировщик отправит на другой узел, и тот
+    # ответит 401 «cookie не моя». Поэтому туннель — на post_url.
+    local connect_url="${post_url:-$P_URL}"
+    [ "$connect_url" = "$P_URL" ] || info "балансировщик увёл на $connect_url — туннель туда же"
+    info "сессия получена, поднимаю туннель ($P_MODE)…"
+    build_spec "$token" | priv tunnel-start "$connect_url" "$hash" "$P_MODE" "$P_USER" "$P_UA" "${P_CSD:+$(basename "$P_CSD")}"
+    local i=0
+    while [ $i -lt 40 ]; do
+        [ "$(tunnel_state)" = connected ] && break
+        tunnel_alive || { [ $i -gt 3 ] && die "openconnect умер при старте — хвост $OC_LOG:"$'\n'"$(tail -5 "$OC_LOG" 2>/dev/null)"; }
+        sleep 1; i=$((i+1))
+    done
+    [ "$(tunnel_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
+    log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
+    mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
+}
+
+cmd_connect() {
+    local p="" a
+    for a in "$@"; do case "$a" in --show) OCBAR_SHOW=1 ;; -v|--verbose) OCBAR_VERBOSE=1 ;; *) p="$a" ;; esac; done
+    load_profile "$p"
+    do_connect
+    [ "$DRY_RUN" = 1 ] || cmd_status
+}
+
+cmd_disconnect() {
+    rm -f "$DESIRED" 2>/dev/null || true
+    if ! tunnel_alive && [ "$(env_get STATE)" != connected ] && [ ! -s "$ROUTES_STATE" ] && [ "$(manifest_zones | grep -c .)" = 0 ]; then
+        info "не подключён"; return 0
+    fi
+    priv tunnel-stop
+    log "отключён"
+    info "отключён"
+}
+
+# ---------------------------------------------------------------- status ----
+cmd_status() {
+    local short=0; [ "${1:-}" = "--short" ] && short=1
+    local st; st=$(tunnel_state)
+    local prof; prof=$(cat "$DESIRED" 2>/dev/null || true)
+    local dev ip since gw dns url mode
+    dev=$(env_get TUNDEV); ip=$(env_get IP4); since=$(env_get CONNECTED); gw=$(env_get GATEWAY); dns=$(env_get DNS); url=$(env_get URL); mode=$(env_get MODE)
+    local foreign=""; if [ "$st" = down ] && pgrep -x openconnect >/dev/null 2>&1; then foreign=1; fi
+
+    if [ "$short" = 1 ]; then
+        printf 'paused=%s\n' "$(is_paused && echo 1 || echo 0)"
+        printf 'state=%s\nprofile=%s\ntundev=%s\nip=%s\nsince=%s\ngateway=%s\ndns=%s\nurl=%s\nmode=%s\nforeign=%s\nsupervisor=%s\niface=%s\n' \
+            "$st" "$prof" "$dev" "$ip" "$since" "$gw" "$dns" "$url" "$mode" "$foreign" "$(sup_alive && echo 1 || echo 0)" "$(active_iface)"
+        local n z
+        while read -r n; do [ -n "$n" ] || continue; printf 'route=%s %s %s\n' "$n" "$(route_via "$n")" "$(is_off "$n" "$ROUTES_OFF" && echo off || echo on)"; done <<< "$(read_networks)"
+        while read -r z d p; do [ -n "$z" ] || continue; printf 'zone=%s %s %s %s\n' "$z" "$d" "$(manifest_zones | grep -x "$z" >/dev/null && echo applied || echo -)" "$(is_off "$z" "$ZONES_OFF" && echo off || echo on)"; done <<< "$(read_zones)"
+        profiles_summary | while IFS= read -r line; do [ -n "$line" ] && printf 'profile_list=%s\n' "$line"; done
+        printf 'default=%s\n' "$(profile_default)"
+        return 0
+    fi
+
+    case "$st" in
+        connected) ok "Туннель" "$dev · $ip · $(human_since "$since") · $mode" ;;
+        paused)    warn "Туннель" "на паузе: поднят ($dev, $(human_since "$since")), но маршруты и зоны сняты — ocbar resume" ;;
+        starting)  warn "Туннель" "openconnect запускается (pid $(tunnel_pid))" ;;
+        down)      if [ -n "$foreign" ]; then warn "Туннель" "не наш: работает чужой openconnect (pid $(pgrep -x openconnect | head -1))"; else skip "Туннель" "не поднят"; fi ;;
+    esac
+    [ -n "$prof" ] && ok "Профиль" "$prof$( [ -n "$url" ] && printf ' (%s)' "$url")" || skip "Профиль" "не выбран"
+    [ -n "$gw" ] && ok "Шлюз" "$gw · DNS от шлюза: ${dns:-нет}"
+    ok "Сеть" "$(active_service "$(active_iface)" 2>/dev/null || echo ?) ($(active_iface))"
+    local n via line=""
+    while read -r n; do
+        [ -n "$n" ] || continue
+        via=$(route_via "$n")
+        if is_off "$n" "$ROUTES_OFF"; then line="$line ${c_dim}${n}(выкл)${c_off}"
+        elif [ -n "$via" ] && [ "$via" = "$dev" ]; then line="$line ${c_grn}${n}${c_off}"
+        elif [ -n "$via" ]; then line="$line ${c_yel}${n}→${via}${c_off}"
+        else line="$line ${c_dim}${n}(нет)${c_off}"; fi
+    done <<< "$(read_networks)"
+    [ -n "$line" ] && ok "Маршруты" "$line" || skip "Маршруты" "networks.conf пуст"
+    local zc; zc=$(manifest_zones | grep -c . || true)
+    [ "$zc" -gt 0 ] && ok "Зоны /etc/resolver" "$zc наших: $(manifest_zones | tr '\n' ' ')" || skip "Зоны /etc/resolver" "наших нет"
+    sup_alive && ok "Супервизор" "работает (pid $(cat "$SUP_PID"))" || skip "Супервизор" "не запущен"
+}
+
+# ---------------------------------------------------------------- routes ----
+cmd_routes() {
+    local sub="${1:-status}" n
+    case "$sub" in
+        status) cmd_status ;;
+        add|on)
+            valid_cidr "${2:-}" || die "routes add <CIDR>"
+            mkdir -p "$USER_STATE"; [ -f "$ROUTES_OFF" ] && { grep -vx "$2" "$ROUTES_OFF" > "$ROUTES_OFF.tmp" || true; mv "$ROUTES_OFF.tmp" "$ROUTES_OFF"; }
+            [ "$(tunnel_state)" = connected ] && priv route-add "$2" || info "$2 включена; применится при подключении" ;;
+        del|off)
+            valid_cidr "${2:-}" || die "routes del <CIDR>"
+            mkdir -p "$USER_STATE"; read_networks | grep -x "$2" >/dev/null && { is_off "$2" "$ROUTES_OFF" || printf '%s\n' "$2" >> "$ROUTES_OFF"; }
+            [ "$(tunnel_state)" = connected ] && priv route-del "$2" || info "$2 выключена" ;;
+        toggle)
+            valid_cidr "${2:-}" || die "routes toggle <CIDR>"
+            if is_off "$2" "$ROUTES_OFF"; then cmd_routes add "$2"; else cmd_routes del "$2"; fi ;;
+        apply)
+            [ "$(tunnel_state)" = connected ] || die "туннель не поднят"
+            while read -r n; do [ -n "$n" ] && priv route-add "$n"; done <<< "$(active_networks)" ;;
+        clear)
+            while read -r n; do [ -n "$n" ] && priv route-del "$n"; done <<< "$(read_networks)" ;;
+        *) die "routes: status | add <CIDR> | del <CIDR> | toggle <CIDR> | apply | clear" ;;
+    esac
+}
+
+# ------------------------------------------------------------------- dns ----
+cmd_dns_status() {
+    info "Зоны в $RESOLVER_DIR"
+    local found=0 f z
+    for f in "$RESOLVER_DIR"/*; do
+        [ -e "$f" ] || continue; z=$(basename "$f"); found=1
+        if manifest_zones | grep -x "$z" >/dev/null; then printf '  %s %s %s(наша)%s\n' "$(pad "$z" 32)" "$(tr '\n' ' ' < "$f")" "$c_dim" "$c_off"
+        else printf '  %s %s %s(чужая, не трогаем)%s\n' "$(pad "$z" 32)" "$(tr '\n' ' ' < "$f")" "$c_dim" "$c_off"; fi
+    done
+    [ "$found" = 1 ] || skip "пусто"
+    info ""; info "Как это видит система (scutil --dns)"
+    scutil --dns 2>/dev/null | awk '/^resolver #/{d="";n=""} /domain *:/{d=$3} /nameserver\[0\]/{n=$3} d!="" && n!="" {printf "  %-32s %s\n", d, n; d="";n=""}' | sort -u
+}
+cmd_dns_apply() {
+    local zones; zones=$(active_zones); [ -n "$zones" ] || die "в $ZONES_CONF нет ни одной активной зоны"
+    local vpndns; vpndns=$(env_get DNS); vpndns="${vpndns%% *}"
+    zones=$(printf '%s\n' "$zones" | awk -v d="$vpndns" '$2=="vpn" { if (d=="") { print "zone " $1 " ждёт DNS от шлюза — туннель не поднят" > "/dev/stderr"; next } $2=d } {print}')
+    [ -n "$zones" ] || die "все зоны ждут DNS от шлюза (vpn), а туннель не поднят"
+    info "Применяю зоны из $ZONES_CONF"
+    printf '%s\n' "$zones" | priv dns-apply
+}
+cmd_dns_init() {
+    local src="${1:-}" dns="${2:-}"
+    [ -n "$src" ] && [ -n "$dns" ] || die "использование: ocbar dns init <файл-со-списком-доменов> <DNS|vpn>"
+    [ -f "$src" ] || die "нет файла $src"
+    [ "$dns" = vpn ] || valid_ip "$dns" || die "не похоже на адрес: $dns"
+    mkdir -p "$CONFIG_DIR"; [ -f "$ZONES_CONF" ] && die "конфиг уже есть: $ZONES_CONF (правьте руками)"
+    { echo "# ocbar: зона → DNS [порт]. Более длинная зона перебивает короткую."
+      echo "# 'vpn' вместо адреса = DNS, который прислал шлюз."; echo
+      local d; while read -r d _; do case "${d:-}" in ''|\#*) continue ;; esac; d=$(printf '%s' "$d" | tr -d '[:space:]'); valid_zone "$d" && printf '%s %s\n' "$(pad "$d" 32)" "$dns"; done < "$src"
+    } > "$ZONES_CONF"
+    ok "создан $ZONES_CONF"; cat "$ZONES_CONF"
+}
+cmd_dns() {
+    case "${1:-status}" in
+        status) cmd_dns_status ;;
+        apply)  cmd_dns_apply ;;
+        clear)  priv dns-clear ;;
+        init)   cmd_dns_init "${2:-}" "${3:-}" ;;
+        on|add)  valid_zone "${2:-}" || die "dns on <зона>"; mkdir -p "$USER_STATE"; [ -f "$ZONES_OFF" ] && { grep -vx "$2" "$ZONES_OFF" > "$ZONES_OFF.tmp" || true; mv "$ZONES_OFF.tmp" "$ZONES_OFF"; }
+                 [ "$(tunnel_state)" = connected ] && cmd_dns_apply || info "$2 включена; применится при подключении" ;;
+        off|del) valid_zone "${2:-}" || die "dns off <зона>"; mkdir -p "$USER_STATE"; is_off "$2" "$ZONES_OFF" || printf '%s\n' "$2" >> "$ZONES_OFF"
+                 [ "$(tunnel_state)" = connected ] && cmd_dns_apply || info "$2 выключена" ;;
+        toggle)  valid_zone "${2:-}" || die "dns toggle <зона>"; if is_off "$2" "$ZONES_OFF"; then cmd_dns on "$2"; else cmd_dns off "$2"; fi ;;
+        *) die "dns: status | apply | clear | init <файл> <DNS|vpn> | on|off|toggle <зона>" ;;
+    esac
+}
+
+# -------------------------------------------------------------- profiles ----
+cmd_profiles() {
+    [ -f "$PROFILES" ] || die "нет $PROFILES — скопируй etc/profiles.conf.example и заполни"
+    local d line p nm au; d=$(profile_default)
+    while IFS='|' read -r p nm au; do
+        [ -n "$p" ] || continue
+        case "$au" in password) au="(пароль+OTP, не SSO)" ;; esac
+        printf '  %s %s %s %s  %s\n' "$([ "$p" = "$d" ] && echo '*' || echo ' ')" \
+            "$(pad "$p" 18)" "$(pad "$nm" 20)" "$(profile_get "$p" url)" "$au"
+    done <<< "$(profiles_summary)"
+}
+
+# ---------------------------------------------------------------- doctor ----
+cmd_doctor() {
+    local issues=0 oc h
+    info "ocbar doctor"; info "========================================"
+    ok "Платформа" "$(sw_vers -productVersion 2>/dev/null || uname -r) $(uname -m)"
+    if oc=$(openconnect_bin); then ok "openconnect (brew)" "$oc ($("$oc" --version 2>&1 | head -1 | awk '{print $3}'))"; else bad "openconnect" "не найден — brew install openconnect"; issues=$((issues+1)); fi
+    if [ -x "$LIBDIR/openconnect" ]; then ok "openconnect (root-копия)" "$LIBDIR/openconnect"; else warn "openconnect (root-копия)" "нет — sudo ocbar install"; fi
+    if [ -f "$PREFIX/etc/ocbar/trust.sha256" ]; then
+        if shasum -a 256 -c --status "$PREFIX/etc/ocbar/trust.sha256" 2>/dev/null; then ok "Манифест доверия" "$(grep -c . "$PREFIX/etc/ocbar/trust.sha256") файлов, хеши совпадают"
+        else bad "Манифест доверия" "хеши НЕ совпадают — после brew upgrade: sudo ocbar install --trust"; issues=$((issues+1)); fi
+    else warn "Манифест доверия" "нет — sudo ocbar install"; fi
+    if h=$(auth_path); then ok "ocbar-auth" "$h"; else bad "ocbar-auth" "не найден"; issues=$((issues+1)); fi
+    if [ -x "$HELPER_INSTALLED" ]; then
+        local own; own=$(stat -f '%Su:%Sg %Lp' "$HELPER_INSTALLED")
+        if [ "$own" = "root:wheel 755" ]; then ok "ocbar-helper" "$HELPER_INSTALLED ($own)"; else bad "ocbar-helper" "$HELPER_INSTALLED — $own, должно быть root:wheel 755"; issues=$((issues+1)); fi
+        if helper_nopasswd; then ok "sudoers" "NOPASSWD на хелпер есть"; else warn "sudoers" "нет NOPASSWD — из меню/супервизора не сработает: sudo ocbar install"; fi
+        if helper_supports_pause; then ok "Версия хелпера" "$("$HELPER_INSTALLED" version 2>/dev/null | awk '{print $2}') — умеет pause/resume"
+        else warn "Версия хелпера" "$("$HELPER_INSTALLED" version 2>/dev/null | awk '{print $2}') старее CLI: sudo ocbar install"; fi
+    elif h=$(helper_path); then warn "ocbar-helper" "не установлен, есть только $h (sudo спросит пароль)"
+    else bad "ocbar-helper" "не найден"; issues=$((issues+1)); fi
+    if [ -f "$PROFILES" ]; then ok "Профили" "$(profile_list | wc -l | tr -d ' ') в $PROFILES, default=$(profile_default)"; else warn "Профили" "нет $PROFILES — см. etc/profiles.conf.example"; fi
+    [ -f "$ZONES_CONF" ] && ok "zones.conf" "$(read_zones 2>/dev/null | wc -l | tr -d ' ') зон" || warn "zones.conf" "нет — ocbar dns init"
+    [ -f "$NETWORKS_CONF" ] && ok "networks.conf" "$(read_networks 2>/dev/null | tr '\n' ' ')" || warn "networks.conf" "нет — см. etc/networks.conf.example"
+    if [ -f "$AGENT_PLIST" ]; then
+        if launchctl print "gui/$(id -u)/$AGENT_LABEL" >/dev/null 2>&1; then ok "LaunchAgent" "$AGENT_LABEL загружен"; else warn "LaunchAgent" "plist есть, но не загружен: launchctl bootstrap gui/$(id -u) $AGENT_PLIST"; fi
+    else skip "LaunchAgent" "не установлен (sudo ocbar install)"; fi
+    if sup_alive; then
+        local sp smt run; sp=$(cat "$SUP_PID")
+        smt=$(stat -f %m "$SELF" 2>/dev/null || echo 0); run=$(cat "$SUP_CODE" 2>/dev/null || echo 0)
+        if [ "$run" = "$smt" ]; then
+            ok "Супервизор" "pid $sp, код актуален"
+        elif [ "$run" = 0 ]; then
+            warn "Супервизор" "pid $sp — версия кода неизвестна (запущен старой сборкой): ocbar supervisor restart"
+        else
+            warn "Супервизор" "pid $sp работает по коду от $(date -r "$run" '+%H:%M:%S'), файл правился в $(date -r "$smt" '+%H:%M:%S') — подхватит сам в течение 5 с"
+        fi
+    else
+        skip "Супервизор" "не запущен"
+    fi
+    ok "Активный интерфейс" "$(active_service "$(active_iface)" 2>/dev/null || echo ?) ($(active_iface))"
+    case "$(tunnel_state)" in
+        connected) ok "Туннель" "$(env_get TUNDEV) $(env_get IP4)" ;;
+        starting) warn "Туннель" "запускается" ;;
+        down) if pgrep -x openconnect >/dev/null; then skip "Туннель" "чужой openconnect работает (не наш pidfile)"; else skip "Туннель" "не поднят"; fi ;;
+    esac
+    info "----------------------------------------"; info "Мусор от прошлых сессий"
+    local n; n=$(services_with_localhost_dns | grep -c . || true)
+    if [ "${n:-0}" -gt 0 ] && ! port53_busy; then bad "интерфейсов с DNS 127.0.0.1 при мёртвом резолвере: $n"; issues=$((issues+1))
+    elif [ "${n:-0}" -gt 0 ]; then skip "интерфейсов с DNS 127.0.0.1: $n (на :53 кто-то отвечает — похоже, штатно)"
+    else ok "DNS интерфейсов" "чисто"; fi
+    if [ "$(manifest_zones | grep -c .)" -gt 0 ] && ! tunnel_alive; then bad "наши зоны /etc/resolver есть, а туннель не поднят"; issues=$((issues+1)); fi
+    if [ -s "$ROUTES_STATE" ] && ! tunnel_alive; then bad "маршруты без живого туннеля: $(wc -l < "$ROUTES_STATE" | tr -d ' ')"; issues=$((issues+1)); else ok "Маршруты" "чисто"; fi
+    if [ "$(env_get STATE)" = connected ] && ! tunnel_alive; then bad "tunnel.env говорит connected, а openconnect мёртв"; issues=$((issues+1)); fi
+    info "----------------------------------------"
+    [ "$issues" = 0 ] && info "Проблем не найдено." || info "Проблем: $issues. Починить — ocbar cleanup"
+    return 0
+}
+
+# ----------------------------------------------------------------- пауза ----
+# Хелпер лежит в root-каталоге и обновляется только через `sudo ocbar install`,
+# поэтому он легко оказывается старее CLI. Проверяем явно, а не ловим невнятный
+# usage от неизвестной подкоманды.
+helper_supports_pause() {
+    local h v; h=$(helper_path) || return 1
+    v=$("$h" version 2>/dev/null | awk '{print $2}')
+    case "$v" in ''|0.1.*) return 1 ;; *) return 0 ;; esac
+}
+require_fresh_helper() {
+    helper_supports_pause && return 0
+    die "установленный хелпер старее CLI и не умеет паузу — обновите: sudo $SELF_ENTRY install"
+}
+
+cmd_pause() {
+    require_fresh_helper
+    case "$(tunnel_state)" in
+        paused)    info "уже на паузе"; return 0 ;;
+        connected) ;;
+        *) die "туннель не поднят — паузить нечего" ;;
+    esac
+    priv suspend
+    [ "$DRY_RUN" = 1 ] || { log "пауза"; cmd_status; }
+}
+
+cmd_resume() {
+    require_fresh_helper
+    case "$(tunnel_state)" in
+        paused) ;;
+        connected) info "паузы нет, всё уже на месте"; return 0 ;;
+        *) die "туннель не поднят — возобновлять нечего" ;;
+    esac
+    priv resume
+    [ "$DRY_RUN" = 1 ] || { log "возобновлено"; cmd_status; }
+}
+
+cmd_toggle_pause() {
+    if is_paused; then cmd_resume; else cmd_pause; fi
+}
+
+cmd_cleanup() { priv cleanup; }
+
+# ------------------------------------------------------------ supervise ----
+# Цикл: держать туннель профиля из $DESIRED. Опрос раз в 5 с (DECISIONS D9).
+wake_ts() { sysctl -n kern.waketime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p'; }
+primary_iface() { scutil <<< 'show State:/Network/Global/IPv4' 2>/dev/null | awk '/PrimaryInterface/{print $3}'; }
+tunnel_probe() { # 0 = туннель отвечает
+    local dns; dns=$(env_get DNS); dns="${dns%% *}"
+    [ -n "$dns" ] || return 0     # нечего спрашивать — считаем живым, пока pid жив
+    dig +time=2 +tries=1 @"$dns" . NS >/dev/null 2>&1
+}
+
+cmd_supervise() {
+    local iterations=0 a
+    for a in "$@"; do case "$a" in --iterations=*) iterations="${a#*=}" ;; esac; done
+    mkdir -p "$USER_STATE" "$LOG_DIR"
+    if sup_alive && [ "$(cat "$SUP_PID")" != $$ ]; then die "супервизор уже работает (pid $(cat "$SUP_PID"))"; fi
+    printf '%s\n' $$ > "$SUP_PID"
+    trap 'rm -f "$SUP_PID"; log "супервизор остановлен"; exit 0' INT TERM EXIT
+    log "супервизор запущен (pid $$, dry-run=$DRY_RUN)"
+
+    # bash держит функции в памяти: после правки скрипта живой супервизор
+    # продолжает работать по СТАРОМУ коду. Один раз это уже стоило цикла
+    # неверных TOTP и 401 (DECISIONS D15). Поэтому следим за своим файлом
+    # и перезапускаемся через exec — pid сохраняется, pidfile остаётся верным.
+    local self_mtime; self_mtime=$(stat -f %m "$SELF" 2>/dev/null || echo 0)
+    # Перезапуск идёт через exec: pid и время старта процесса не меняются,
+    # поэтому по ним нельзя понять, свежий ли внутри код. Записываем версию явно.
+    printf '%s\n' "$self_mtime" > "$SUP_CODE"
+
+    local last_wake last_iface backoff=5 next_try=0 fails=0 n=0 desired st now wake iface
+    last_wake=$(wake_ts); last_iface=$(primary_iface)
+    while :; do
+        n=$((n+1)); now=$(date +%s)
+        if [ "$(stat -f %m "$SELF" 2>/dev/null || echo 0)" != "$self_mtime" ]; then
+            log "скрипт изменился — перезапускаю себя (exec)"
+            trap - INT TERM EXIT
+            exec "$SELF" supervise "$@"
+        fi
+        desired=$(cat "$DESIRED" 2>/dev/null || true)
+        st=$(tunnel_state)
+        wake=$(wake_ts); iface=$(primary_iface)
+        if [ "$wake" != "$last_wake" ]; then
+            log "событие: пробуждение ($(date -r "$wake" '+%H:%M:%S' 2>/dev/null))"; last_wake="$wake"; fails=0; next_try=0
+            [ "$DRY_RUN" = 1 ] || sleep 3   # сети нужно время после сна
+        fi
+        if [ "$iface" != "$last_iface" ]; then
+            log "событие: смена интерфейса $last_iface → ${iface:-нет}"; last_iface="$iface"; fails=0
+        fi
+
+        if [ -n "$desired" ]; then
+            if [ "$st" = paused ]; then
+                # На паузе DNS шлюза недостижим по определению — проверять
+                # туннель его опросом нельзя, живость процесса и есть критерий.
+                fails=0; backoff=5
+            elif [ "$st" = connected ]; then
+                if tunnel_probe; then
+                    fails=0; backoff=5
+                    # маршруты могли слететь при пересоздании utun
+                    local dev miss; dev=$(env_get TUNDEV); miss=""
+                    while read -r net; do [ -n "$net" ] && [ "$(route_via "$net")" != "$dev" ] && miss="$miss $net"; done <<< "$(active_networks)"
+                    if [ -n "$miss" ]; then log "маршруты пропали:$miss — восстанавливаю"; for net in $miss; do priv route-add "$net" || true; done; fi
+                else
+                    fails=$((fails+1)); log "проверка туннеля не прошла ($fails/3)"
+                    if [ $fails -ge 3 ]; then log "туннель мёртв — переподключаю"; priv tunnel-stop || true; fails=0; next_try=0; fi
+                fi
+            elif [ "$st" = starting ]; then
+                :
+            elif [ "$now" -ge "$next_try" ]; then
+                log "туннель не поднят, профиль $desired — подключаю (backoff $backoff с)"
+                if ( load_profile "$desired" && do_connect ) >>"$SUP_LOG" 2>&1; then
+                    backoff=5
+                else
+                    log "подключение не удалось, следующая попытка через $backoff с"
+                    next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
+                fi
+            fi
+        else
+            if [ "$st" != down ] && [ "$(env_get MODE)" != "" ]; then
+                log "профиль снят, а туннель жив — отключаю"; priv tunnel-stop || true
+            fi
+        fi
+
+        [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
+        sleep 5
+    done
+}
+
+# --------------------------------------------------------------- install ----
+# Единственная команда с sudo. Каждое действие печатается; --dry-run — только печать.
+cmd_install() {
+    local trust_only=0 a; for a in "$@"; do case "$a" in --trust) trust_only=1 ;; esac; done
+    local me="${SUDO_USER:-$(id -un)}" home uid
+    home=$(dscl . -read "/Users/$me" NFSHomeDirectory 2>/dev/null | awk '{print $2}'); home="${home:-$HOME}"
+    uid=$(id -u "$me")
+    if [ "$(id -u)" != 0 ] && [ "$DRY_RUN" = 0 ]; then die "нужен root: sudo $SELF_ENTRY install"; fi
+    local src_helper; src_helper=$(helper_source) \
+        || die "нет libexec/ocbar-helper рядом с $SELF — установка возможна только из дерева проекта"
+    [ "$src_helper" = "$HELPER_INSTALLED" ] && die "источник и приёмник совпали ($src_helper) — запускайте install из каталога проекта"
+    local oc; oc=$(openconnect_bin) || die "brew install openconnect"
+    local vpnc="$(dirname "$(dirname "$oc")")/etc/vpnc/vpnc-script"
+    local -a steps=()
+    if [ "$trust_only" = 0 ]; then
+        steps+=("install -d -o root -g wheel -m 755 $LIBDIR $LIBDIR/csd $PREFIX/etc/ocbar $STATE_DIR")
+        steps+=("install -o root -g wheel -m 755 $src_helper $HELPER_INSTALLED")
+        [ -f "$vpnc" ] && steps+=("install -o root -g wheel -m 755 $vpnc $LIBDIR/vpnc-script-full")
+        local p csd
+        while read -r p; do
+            [ -n "$p" ] || continue
+            csd=$(OCBAR_CONFIG_DIR="$home/.config/ocbar" profile_get "$p" csd_wrapper); csd="${csd/#\~/$home}"
+            [ -n "$csd" ] && [ -f "$csd" ] && steps+=("install -o root -g wheel -m 755 $csd $LIBDIR/csd/$(basename "$csd")")
+        done <<< "$(PROFILES="$home/.config/ocbar/profiles.conf" profile_list)"
+    fi
+    steps+=("install -o root -g wheel -m 755 $oc $LIBDIR/openconnect")
+    steps+=("$HELPER_INSTALLED trust")
+    if [ "$trust_only" = 0 ]; then
+        steps+=("printf '%%admin ALL=(root) NOPASSWD: $HELPER_INSTALLED\\n' > /etc/sudoers.d/ocbar && chmod 440 /etc/sudoers.d/ocbar && visudo -cf /etc/sudoers.d/ocbar")
+        steps+=("install -d -o $me -m 755 $home/Library/LaunchAgents $home/Library/Logs/ocbar")
+        steps+=("write-plist $home/Library/LaunchAgents/$AGENT_LABEL.plist")
+        # Загруженный агент не трогаем: супервизор подхватывает новый код сам
+        # (следит за mtime), а bootout убил бы живой туннель вместе с задачей.
+        if sudo -u "$me" launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then
+            steps+=("echo '  агент уже загружен — не перезапускаю (супервизор подхватит код сам); принудительно: ocbar supervisor restart'")
+        else
+            steps+=("sudo -u $me launchctl bootstrap gui/$uid $home/Library/LaunchAgents/$AGENT_LABEL.plist")
+        fi
+    fi
+    local s rc
+    for s in "${steps[@]}"; do
+        printf '  %s$ %s%s\n' "$c_dim" "$s" "$c_off"
+        [ "$DRY_RUN" = 1 ] && continue
+        rc=0
+        case "$s" in
+            "write-plist "*) write_plist "${s#write-plist }" "$me" || rc=$? ;;
+            "$HELPER_INSTALLED trust") "$HELPER_INSTALLED" trust || rc=$? ;;
+            *) bash -c "$s" || rc=$? ;;
+        esac
+        # Установка идёт по шагам, и оборваться молча на середине — худший
+        # исход: часть файлов новая, часть старая, и это не видно.
+        [ "$rc" = 0 ] || die "шаг не выполнен (код $rc): $s"$'\n'"состояние установки неполное — исправьте причину и повторите"
+    done
+    [ "$DRY_RUN" = 1 ] && { info "[dry-run] ничего не сделано. Плист выглядел бы так:"; plist_body "$me" | sed 's/^/    /'; return 0; }
+    ok "установлено. Проверка: ocbar doctor"
+}
+plist_body() { # user
+    cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$AGENT_LABEL</string>
+  <key>ProgramArguments</key><array><string>$SELF_ENTRY</string><string>supervise</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>StandardOutPath</key><string>/Users/$1/Library/Logs/ocbar/supervisor.out</string>
+  <key>StandardErrorPath</key><string>/Users/$1/Library/Logs/ocbar/supervisor.err</string>
+</dict></plist>
+PLIST
+}
+write_plist() { plist_body "$2" > "$1"; chown "$2" "$1"; chmod 644 "$1"; plutil -lint "$1" >/dev/null; }
+
+# ------------------------------------------------------------ supervisor ----
+cmd_supervisor() {
+    local sub="${1:-status}" uid; uid=$(id -u)
+    case "$sub" in
+        status)
+            if launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then ok "LaunchAgent" "загружен"; else warn "LaunchAgent" "не загружен"; fi
+            sup_alive && ok "Процесс" "pid $(cat "$SUP_PID")" || skip "Процесс" "не работает"
+            [ -f "$SUP_LOG" ] && { info ""; info "Последние записи:"; tail -5 "$SUP_LOG" | sed 's/^/  /'; } ;;
+        start)
+            [ -f "$AGENT_PLIST" ] || die "нет $AGENT_PLIST — sudo ocbar install"
+            launchctl bootstrap "gui/$uid" "$AGENT_PLIST" && ok "агент загружен" ;;
+        stop)
+            launchctl bootout "gui/$uid/$AGENT_LABEL" 2>/dev/null
+            info "агент выгружен (туннель это переживёт: openconnect в своей сессии)" ;;
+        restart)
+            if launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then
+                launchctl kickstart -k "gui/$uid/$AGENT_LABEL" && ok "агент перезапущен"
+            else
+                cmd_supervisor start
+            fi ;;
+        *) die "supervisor: status | start | stop | restart" ;;
+    esac
+}
+
+cmd_uninstall() {
+    local me="${SUDO_USER:-$(id -un)}" uid; uid=$(id -u "$me")
+    local -a steps=("launchctl bootout gui/$uid/$AGENT_LABEL" "rm -f /Users/$me/Library/LaunchAgents/$AGENT_LABEL.plist"
+                    "rm -f /etc/sudoers.d/ocbar" "rm -rf $LIBDIR $HELPER_INSTALLED $PREFIX/etc/ocbar")
+    local s; for s in "${steps[@]}"; do printf '  %s$ %s%s\n' "$c_dim" "$s" "$c_off"; [ "$DRY_RUN" = 1 ] || bash -c "$s" || true; done
+    [ "$DRY_RUN" = 1 ] || info "состояние в $STATE_DIR оставлено; ocbar cleanup перед удалением"
+}
+
+# ------------------------------------------------------------------ main ----
+usage() {
+    cat <<'USAGE'
+ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супервизор.
+
+  ocbar connect [профиль] [--show]   подключиться (окно SSO покажется при необходимости)
+  ocbar disconnect                    отключиться
+  ocbar pause                         «как будто выключен»: снять маршруты и зоны,
+                                      туннель и вход оставить живыми
+  ocbar resume                        вернуть маршруты и зоны (мгновенно, без входа)
+  ocbar toggle                        pause ↔ resume
+  ocbar status [--short]              состояние; --short — машинный вид для меню
+  ocbar profiles                      список профилей
+  ocbar routes add|del|toggle <CIDR>  маршруты в туннель на лету; apply | clear
+  ocbar dns status|apply|clear        зоны /etc/resolver; on|off|toggle <зона>
+  ocbar dns init <файл> <DNS|vpn>     создать zones.conf из списка доменов
+  ocbar secret set-password|set-totp|status [профиль]   Keychain
+  ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
+                                      TOTP из QR (в т.ч. экспорт Google
+                                      Authenticator); секрет не печатается
+  ocbar doctor                        диагностика, ничего не меняет
+  ocbar cleanup                       мусор от прошлой сессии
+  ocbar supervise                     цикл реконнекта (его запускает LaunchAgent)
+  ocbar supervisor status|restart     состояние и перезапуск агента супервизора
+  sudo ocbar install [--trust]        хелпер, sudoers, LaunchAgent (один раз)
+  sudo ocbar uninstall
+
+  --dry-run   печатать привилегированные команды вместо выполнения
+
+Конфиги: ~/.config/ocbar/{profiles.conf,zones.conf,networks.conf,autofill.rules}
+USAGE
+}
+
+args=()
+for a in "$@"; do case "$a" in --dry-run) DRY_RUN=1 ;; -h|--help) usage; exit 0 ;; *) args+=("$a") ;; esac; done
+set -- "${args[@]+"${args[@]}"}"
+
+case "${1:-}" in
+    connect)    shift; cmd_connect "$@" ;;
+    disconnect) cmd_disconnect ;;
+    status)     cmd_status "${2:-}" ;;
+    profiles)   cmd_profiles ;;
+    routes)     shift; cmd_routes "$@" ;;
+    dns)        shift; cmd_dns "$@" ;;
+    secret)     shift; cmd_secret "$@" ;;
+    pause)      cmd_pause ;;
+    resume)     cmd_resume ;;
+    toggle)     cmd_toggle_pause ;;
+    supervisor) shift; cmd_supervisor "$@" ;;
+    doctor)     cmd_doctor ;;
+    cleanup)    cmd_cleanup ;;
+    supervise)  shift; cmd_supervise "$@" ;;
+    install)    shift; cmd_install "$@" ;;
+    uninstall)  cmd_uninstall ;;
+    version)    printf 'ocbar %s\n' "$VERSION" ;;
+    ''|help)    usage ;;
+    *) usage; exit 1 ;;
+esac

@@ -1,0 +1,558 @@
+#!/bin/bash
+#
+# ocbar-helper — единственный привилегированный компонент ocbar.
+#
+# Ставится в /usr/local/libexec/ocbar-helper (root:wheel 0755) и разрешён
+# в /etc/sudoers.d/ocbar без пароля. Поэтому:
+#   - фиксированный набор подкоманд, никаких «выполнить произвольную команду»;
+#   - каждый аргумент валидируется до использования;
+#   - исполняется только root-овая копия openconnect с проверкой sha256
+#     самого бинаря и всех его dylib (см. DECISIONS.md, D3);
+#   - никаких путей от пользователя в exec: csd-wrapper — только по имени
+#     файла внутри /usr/local/libexec/ocbar/csd/.
+#
+# Подкоманды:
+#   tunnel-start <url> <servercert> <split|full> <user> [ua] [csd-name]
+#                        stdin: cookie=<token>, net <cidr>…, zone <зона> <dns|vpn> [порт]…
+#   tunnel-stop          SIGINT openconnect, уборка маршрутов и зон
+#   suspend              снять маршруты и зоны, туннель оставить поднятым
+#   resume               вернуть маршруты и зоны из *.wanted
+#   vpnc                 вызывается openconnect как vpnc-script (env: reason, TUNDEV…)
+#   route-add <cidr>     маршрут через живой туннель (+ в routes.wanted)
+#   route-del <cidr>
+#   dns-apply            stdin: "<зона> <dns> [порт]" — применить зоны, снять свои лишние
+#   dns-clear            снять только свои зоны
+#   cleanup              мусор от прошлых сессий
+#   flush-dns
+#   trust                пересобрать манифест доверия к копии openconnect
+#   version
+#
+# --dry-run первым аргументом: печатать команды, менять только файлы
+# состояния (в OCBAR_STATE_DIR, если задан и процесс не root).
+
+set -euo pipefail
+PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+export LC_CTYPE="${LC_CTYPE:-UTF-8}"
+umask 022
+
+VERSION="0.3.0"
+PREFIX="/usr/local"
+LIBDIR="$PREFIX/libexec/ocbar"
+TRUST="$PREFIX/etc/ocbar/trust.sha256"
+RESOLVER_DIR="/etc/resolver"
+STATE_DIR="$PREFIX/var/ocbar"
+DRY_RUN=0
+
+if [ "${1:-}" = "--dry-run" ]; then
+    DRY_RUN=1; shift
+    if [ -n "${OCBAR_STATE_DIR:-}" ]; then
+        STATE_DIR="$OCBAR_STATE_DIR"
+    elif [ ! -w "$STATE_DIR" ]; then
+        # Холостой прогон от обычного пользователя: реальный каталог состояния
+        # принадлежит root. Работаем на копии — так видно, каким состояние
+        # стало бы, и ничего настоящего не портим.
+        _dry=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-dry.XXXXXX")
+        cp -a "$STATE_DIR"/. "$_dry"/ 2>/dev/null || true
+        STATE_DIR="$_dry"
+        printf 'ocbar-helper: dry-run без root — состояние скопировано в %s\n' "$_dry" >&2
+    fi
+fi
+
+MANIFEST="$STATE_DIR/zones.state"       # наши файлы в /etc/resolver
+TUNNEL_ENV="$STATE_DIR/tunnel.env"      # что сказал шлюз, какой utun
+PIDFILE="$STATE_DIR/openconnect.pid"
+ROUTES_WANTED="$STATE_DIR/routes.wanted"   # что должно быть в туннеле (переживает reconnect)
+ROUTES_STATE="$STATE_DIR/routes.state"     # что реально добавили: "<cidr> <utun>"
+ZONES_WANTED="$STATE_DIR/zones.wanted"     # "<зона> <dns|vpn> <порт>"
+GW_ROUTE="$STATE_DIR/gateway.route"        # host-route до шлюза, чтобы снять при disconnect
+PAUSED="$STATE_DIR/paused"                 # «как будто выключен»: туннель жив, маршрутов и зон нет
+LOG="$STATE_DIR/openconnect.log"
+
+# ------------------------------------------------------------------ вывод ----
+say()  { printf 'ocbar-helper: %s\n' "$*" >&2; }
+die()  { say "$*"; exit 1; }
+
+# Выполнить команду, меняющую систему (или напечатать при --dry-run).
+run() {
+    if [ "$DRY_RUN" = 1 ]; then printf '  $ %s\n' "$*"; return 0; fi
+    "$@"
+}
+# Записать файл вне STATE_DIR (например, в /etc/resolver).
+write_sys_file() { # path, content
+    if [ "$DRY_RUN" = 1 ]; then printf '  $ printf %s > %s\n' "'$(printf '%s' "$2" | tr '\n' '|')'" "$1"; return 0; fi
+    printf '%s\n' "$2" > "$1"
+}
+
+ensure_state_dir() {
+    if [ ! -d "$STATE_DIR" ]; then
+        if [ "$DRY_RUN" = 1 ] && [ "$(id -u)" != 0 ]; then mkdir -p "$STATE_DIR"; else run mkdir -p "$STATE_DIR"; fi
+    fi
+}
+
+# --------------------------------------------------------------- валидация ----
+valid_ip() {
+    printf '%s' "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || return 1
+    local IFS=. o
+    for o in $1; do [ "$o" -le 255 ] || return 1; done
+}
+valid_cidr() {
+    case "$1" in */*) ;; *) return 1 ;; esac
+    valid_ip "${1%/*}" || return 1
+    printf '%s' "${1#*/}" | grep -qE '^[0-9]{1,2}$' && [ "${1#*/}" -le 32 ]
+}
+valid_zone() {
+    case "$1" in ''|.*|*/*|*' '*|*'..'*) return 1 ;; esac
+    printf '%s' "$1" | grep -qE '^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$'
+}
+valid_port()  { printf '%s' "$1" | grep -qE '^[0-9]{1,5}$' && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
+valid_utun()  { printf '%s' "$1" | grep -qE '^utun[0-9]{1,3}$'; }
+valid_user()  { printf '%s' "$1" | grep -qE '^[A-Za-z0-9._@-]{1,64}$'; }
+valid_url()   { printf '%s' "$1" | grep -qE '^(https://)?[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(/[A-Za-z0-9._-]{0,64})?$'; }
+valid_hash()  { printf '%s' "$1" | grep -qE '^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64}|(sha1|sha256|pin-sha256):[A-Za-z0-9+/=]{20,100})$'; }
+valid_ua()    { printf '%s' "$1" | grep -qE '^[A-Za-z0-9 ._()/;:,-]{1,120}$'; }
+valid_name()  { printf '%s' "$1" | grep -qE '^[A-Za-z0-9._-]{1,64}$'; }
+valid_mode()  { [ "$1" = split ] || [ "$1" = full ]; }
+
+# ------------------------------------------------------------- состояние ----
+tunnel_pid() { [ -f "$PIDFILE" ] && cat "$PIDFILE" 2>/dev/null | grep -E '^[0-9]+$' || true; }
+# ps, а не kill -0: под обычным пользователем (--dry-run) kill -0 на
+# root-процесс возвращает EPERM, и живой туннель выглядит мёртвым.
+tunnel_alive() { local p; p=$(tunnel_pid); [ -n "$p" ] && ps -p "$p" >/dev/null 2>&1; }
+tunnel_dev() { [ -f "$TUNNEL_ENV" ] && sed -n 's/^TUNDEV=//p' "$TUNNEL_ENV" | head -1 || true; }
+tunnel_state() { [ -f "$TUNNEL_ENV" ] && sed -n 's/^STATE=//p' "$TUNNEL_ENV" | head -1 || true; }
+
+default_gateway() { route -n get default 2>/dev/null | awk '/gateway:/{print $2; exit}'; }
+
+# -------------------------------------------------------------- доверие ----
+# Список dylib, которые подгрузит бинарь (рекурсивно), кроме системных.
+collect_libs() { # bin
+    local seen="$1" queue="$1" item libs l
+    while [ -n "$queue" ]; do
+        item="${queue%%$'\n'*}"; queue="${queue#"$item"}"; queue="${queue#$'\n'}"
+        libs=$(otool -L "$item" 2>/dev/null | awk 'NR>1{print $1}' | grep -vE '^(/usr/lib|/System)/' | grep -v '^@' || true)
+        for l in $libs; do
+            case "$seen" in *"$l"*) continue ;; esac
+            [ -f "$l" ] || continue
+            seen="$seen"$'\n'"$l"; queue="$queue${queue:+$'\n'}$l"
+        done
+    done
+    printf '%s\n' "$seen"
+}
+
+cmd_trust() {
+    local bin="$LIBDIR/openconnect"
+    [ -x "$bin" ] || die "нет $bin — сначала sudo ocbar install"
+    ensure_state_dir
+    local list; list=$(collect_libs "$bin")
+    if [ "$DRY_RUN" = 1 ]; then
+        printf '  $ shasum -a 256 %s > %s\n' "$(printf '%s' "$list" | tr '\n' ' ')" "$TRUST"
+        printf '%s\n' "$list" | sed 's/^/  · /'
+        return 0
+    fi
+    mkdir -p "$(dirname "$TRUST")"
+    printf '%s\n' "$list" | xargs shasum -a 256 > "$TRUST.tmp"
+    mv "$TRUST.tmp" "$TRUST"
+    chmod 644 "$TRUST"
+    say "манифест доверия: $(grep -c . "$TRUST") файлов → $TRUST"
+}
+
+verify_trust() { # печатает путь к проверенному openconnect или падает
+    local bin="$LIBDIR/openconnect"
+    if [ ! -x "$bin" ]; then
+        # Не установлен. Сюда можно попасть только через интерактивный sudo
+        # (правила NOPASSWD ещё нет) — режим проверки на машине разработчика.
+        say "ВНИМАНИЕ: $bin не установлен, беру Homebrew-бинарь без проверки доверия (только для отладки)"
+        local c
+        for c in /opt/homebrew/bin/openconnect /usr/local/bin/openconnect; do
+            [ -x "$c" ] && { printf '%s' "$c"; return 0; }
+        done
+        die "openconnect не найден"
+    fi
+    [ -f "$TRUST" ] || die "нет манифеста $TRUST — sudo ocbar install --trust"
+    if [ "$DRY_RUN" = 1 ]; then printf '  $ shasum -a 256 -c --status %s\n' "$TRUST" >&2; printf '%s' "$bin"; return 0; fi
+    if ! shasum -a 256 -c --status "$TRUST"; then
+        say "sha256 openconnect или его dylib не совпали с манифестом."
+        say "Если недавно был brew upgrade openconnect — sudo ocbar install --trust; иначе разбираться."
+        exit 1
+    fi
+    printf '%s' "$bin"
+}
+
+# --------------------------------------------------------------- маршруты ----
+route_present() { # cidr → печатает utun, через который идёт
+    local base="${1%%/*}" len="${1#*/}" key
+    # netstat показывает 10/8 как "10", 172.16/12 как "172.16/12", хосты как есть
+    key=$(cidr_key "$base" "$len")
+    netstat -rn -f inet 2>/dev/null | awk -v k="$key" '$1==k {print $NF; exit}'
+}
+cidr_key() { # base len → как это печатает netstat
+    local base="$1" len="$2" IFS=. a b c d
+    read -r a b c d <<< "$base"
+    if [ "$len" = 32 ]; then printf '%s' "$base"
+    elif [ "$len" = 24 ]; then printf '%s.%s.%s' "$a" "$b" "$c"
+    elif [ "$len" = 16 ]; then printf '%s.%s' "$a" "$b"
+    elif [ "$len" = 8 ]; then printf '%s' "$a"
+    else
+        # нестандартная длина: netstat печатает минимальную запись + /len
+        if [ "$d" != 0 ]; then printf '%s/%s' "$base" "$len"
+        elif [ "$c" != 0 ]; then printf '%s.%s.%s/%s' "$a" "$b" "$c" "$len"
+        elif [ "$b" != 0 ]; then printf '%s.%s/%s' "$a" "$b" "$len"
+        else printf '%s/%s' "$a" "$len"; fi
+    fi
+}
+
+add_route() { # cidr utun
+    if [ "$(route_present "$1")" = "$2" ]; then say "маршрут уже есть: $1 → $2"; return 0; fi
+    run route -n add -net "$1" -interface "$2" >/dev/null
+    grep -qx "$1 $2" "$ROUTES_STATE" 2>/dev/null || printf '%s %s\n' "$1" "$2" >> "$ROUTES_STATE"
+    say "маршрут: $1 → $2"
+}
+del_route() { # cidr
+    run route -n delete -net "$1" >/dev/null 2>&1 || true
+    if [ -f "$ROUTES_STATE" ]; then
+        grep -v "^$1 " "$ROUTES_STATE" > "$ROUTES_STATE.tmp" || true
+        mv "$ROUTES_STATE.tmp" "$ROUTES_STATE"
+    fi
+    say "маршрут снят: $1"
+}
+apply_wanted_routes() { # utun
+    [ -f "$ROUTES_WANTED" ] || return 0
+    local n
+    while read -r n; do
+        [ -n "$n" ] || continue
+        valid_cidr "$n" || { say "пропускаю некорректный маршрут: $n"; continue; }
+        add_route "$n" "$1"
+    done < "$ROUTES_WANTED"
+}
+clear_state_routes() {
+    [ -f "$ROUTES_STATE" ] || return 0
+    local n dev
+    while read -r n dev; do [ -n "$n" ] && del_route "$n"; done < "$ROUTES_STATE"
+    rm -f "$ROUTES_STATE"
+}
+
+# ------------------------------------------------------------------- DNS ----
+resolver_body() { printf 'nameserver %s\n' "$1"; [ "$2" = 53 ] || printf 'port %s\n' "$2"; }
+manifest_zones() { [ -f "$MANIFEST" ] && cat "$MANIFEST" || true; }
+
+flush_dns() {
+    run dscacheutil -flushcache
+    run killall -HUP mDNSResponder
+}
+
+# stdin: "<зона> <dns> [порт]". Чужие файлы в /etc/resolver не трогаем.
+apply_zones() {
+    local zone dns port body current new_manifest="" n=0
+    ensure_state_dir
+    [ -d "$RESOLVER_DIR" ] || run mkdir -p "$RESOLVER_DIR"
+    while read -r zone dns port _; do
+        case "${zone:-}" in ''|\#*) continue ;; esac
+        port="${port:-53}"
+        valid_zone "$zone" || { say "недопустимая зона, пропущена: $zone"; continue; }
+        valid_ip "$dns"    || { say "недопустимый DNS, пропущено: $zone $dns"; continue; }
+        valid_port "$port" || { say "недопустимый порт, пропущено: $zone $dns $port"; continue; }
+        body=$(resolver_body "$dns" "$port")
+        current=$([ -f "$RESOLVER_DIR/$zone" ] && cat "$RESOLVER_DIR/$zone" || true)
+        if [ -n "$current" ] && [ "$current" != "$body" ] && ! manifest_zones | grep -x "$zone" >/dev/null; then
+            say "$zone существует и создан не нами — пропускаю"
+            continue
+        fi
+        if [ "$current" != "$body" ]; then
+            write_sys_file "$RESOLVER_DIR/$zone" "$body"
+            say "зона: $zone → $dns:$port"
+        fi
+        new_manifest="$new_manifest$zone"$'\n'; n=$((n+1))
+    done
+    local old
+    for old in $(manifest_zones); do
+        if ! printf '%s' "$new_manifest" | grep -x "$old" >/dev/null; then
+            run rm -f "$RESOLVER_DIR/$old"; say "зона снята: $old"
+        fi
+    done
+    if [ "$DRY_RUN" = 1 ] && [ "$(id -u)" != 0 ] && [ ! -w "$STATE_DIR" ]; then
+        printf '  $ манифест ← %d зон\n' "$n"
+    else
+        printf '%s' "$new_manifest" > "$MANIFEST"
+    fi
+    flush_dns
+}
+
+clear_zones() {
+    local z
+    for z in $(manifest_zones); do
+        [ -f "$RESOLVER_DIR/$z" ] && { run rm -f "$RESOLVER_DIR/$z"; say "зона снята: $z"; }
+    done
+    rm -f "$MANIFEST" 2>/dev/null || true
+    flush_dns
+}
+
+# ------------------------------------------------------------- tunnel ----
+cmd_tunnel_start() {
+    local url="${1:-}" hash="${2:-}" mode="${3:-}" user="${4:-}" ua="${5:-}" csd="${6:-}"
+    valid_url "$url"   || die "некорректный url: $url"
+    valid_hash "$hash" || die "некорректный servercert"
+    valid_mode "$mode" || die "режим: split|full"
+    valid_user "$user" || die "некорректное имя пользователя"
+    [ -z "$ua" ] || valid_ua "$ua" || die "некорректный user-agent"
+    [ -z "$csd" ] || valid_name "$csd" || die "некорректное имя csd-wrapper"
+    if [ -n "$csd" ] && [ ! -x "$LIBDIR/csd/$csd" ]; then die "нет $LIBDIR/csd/$csd (sudo ocbar install кладёт его туда)"; fi
+
+    if tunnel_alive; then die "openconnect уже запущен (pid $(tunnel_pid)) — сначала tunnel-stop"; fi
+    ensure_state_dir
+
+    # stdin: cookie и списки. Cookie не должна попасть ни в argv, ни в лог.
+    local cookie="" line key rest nets="" zones=""
+    while IFS= read -r line; do
+        case "$line" in
+            cookie=*) cookie="${line#cookie=}" ;;
+            "net "*)  rest="${line#net }"; valid_cidr "$rest" && nets="$nets$rest"$'\n' || say "пропускаю сеть: $rest" ;;
+            "zone "*) rest="${line#zone }"; zones="$zones$rest"$'\n' ;;
+            ''|\#*) ;;
+            *) say "неизвестная строка в spec: ${line%% *}" ;;
+        esac
+    done
+    [ -n "$cookie" ] || die "в stdin нет cookie=…"
+    rm -f "$PAUSED"        # новое подключение начинается не на паузе
+    printf '%s' "$nets"  > "$ROUTES_WANTED"
+    printf '%s' "$zones" > "$ZONES_WANTED"
+    rm -f "$ROUTES_STATE" "$GW_ROUTE"
+
+    local oc; oc=$(verify_trust)
+    local script
+    if [ "$mode" = split ]; then
+        script="$(self_path) vpnc"
+    else
+        script="$LIBDIR/vpnc-script-full"
+        [ -x "$script" ] || die "нет $script для full-режима — sudo ocbar install"
+    fi
+
+    {
+        printf 'STATE=starting\nMODE=%s\nURL=%s\nSTARTED=%s\n' "$mode" "$url" "$(date +%s)"
+    } > "$TUNNEL_ENV"
+    chmod 644 "$TUNNEL_ENV"
+
+    local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$user"
+                  --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel)
+    [ -z "$ua" ]  || cmd+=(--useragent "$ua")
+    [ -z "$csd" ] || cmd+=(--csd-user "$user" --csd-wrapper "$LIBDIR/csd/$csd")
+    case "$url" in https://*) cmd+=("$url") ;; *) cmd+=("https://$url") ;; esac
+
+    if [ "$DRY_RUN" = 1 ]; then
+        printf '  $ printf "%%s" "$COOKIE" | %s\n' "${cmd[*]}"
+        printf '  routes.wanted: %s\n' "$(printf '%s' "$nets" | tr '\n' ' ')"
+        printf '  zones.wanted:  %s\n' "$(printf '%s' "$zones" | tr '\n' ';')"
+        return 0
+    fi
+    say "запускаю openconnect ($mode) → $url"
+    # setsid обязателен. Без него openconnect остаётся в задаче launchd, из
+    # которой его позвал супервизор, и `launchctl bootout` (в том числе внутри
+    # `ocbar install`) убивает туннель вместе с агентом — проверено 2026-09-06.
+    # В своей сессии он это переживает. Код возврата и stdin с cookie при
+    # exec сохраняются, поэтому диагностика запуска не теряется.
+    printf '%s' "$cookie" \
+        | /usr/bin/perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' -- "${cmd[@]}" >> "$LOG" 2>&1 || {
+        local rc=$?
+        say "openconnect завершился с кодом $rc, см. $LOG"
+        tail -5 "$LOG" >&2 || true
+        printf 'STATE=failed\nRC=%s\n' "$rc" >> "$TUNNEL_ENV"
+        return "$rc"
+    }
+    say "openconnect ушёл в фон, pid $(tunnel_pid)"
+}
+
+cmd_tunnel_stop() {
+    local p; p=$(tunnel_pid)
+    if [ -n "$p" ] && ps -p "$p" >/dev/null 2>&1; then
+        say "останавливаю openconnect (pid $p)"
+        run kill -INT "$p"
+        local i=0
+        while [ "$DRY_RUN" = 0 ] && ps -p "$p" >/dev/null 2>&1 && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
+        if [ "$DRY_RUN" = 0 ] && ps -p "$p" >/dev/null 2>&1; then
+            say "не вышел за 10 с — SIGKILL"; kill -KILL "$p" 2>/dev/null || true
+            vpnc_disconnect   # vpnc-script не отработал — убираем сами
+        fi
+    else
+        say "openconnect не запущен"
+        # Мог умереть сам — убрать хвосты.
+        vpnc_disconnect
+    fi
+    rm -f "$PIDFILE" "$ROUTES_WANTED" "$ZONES_WANTED" "$PAUSED" 2>/dev/null || true
+    [ -f "$TUNNEL_ENV" ] && printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)" > "$TUNNEL_ENV" || true
+}
+
+self_path() { printf '%s' "$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"; }
+
+# ------------------------------------------------------- vpnc-script ----
+# openconnect зовёт нас с окружением: reason, TUNDEV, INTERNAL_IP4_ADDRESS,
+# INTERNAL_IP4_MTU, INTERNAL_IP4_DNS, CISCO_DEF_DOMAIN, CISCO_SPLIT_INC_*,
+# VPNGATEWAY. Делаем ТОЛЬКО интерфейс, свои маршруты и свои зоны. Никакого
+# OverridePrimary и networksetup -setdnsservers.
+vpnc_connect() {
+    local dev="${TUNDEV:-}" ip="${INTERNAL_IP4_ADDRESS:-}" mtu="${INTERNAL_IP4_MTU:-1400}"
+    valid_utun "$dev" || die "vpnc: странный TUNDEV='$dev'"
+    valid_ip "$ip"    || die "vpnc: странный INTERNAL_IP4_ADDRESS='$ip'"
+    ensure_state_dir
+
+    run ifconfig "$dev" inet "$ip" "$ip" netmask 255.255.255.255 mtu "$mtu" up
+    if [ -n "${INTERNAL_IP6_ADDRESS:-}" ]; then
+        run ifconfig "$dev" inet6 "$INTERNAL_IP6_ADDRESS" prefixlen "${INTERNAL_IP6_NETMASK:-128}" up || true
+    fi
+
+    # Host-route до шлюза через текущий default gateway, как в штатном скрипте:
+    # иначе после добавления широких сетей туннель может поехать сам в себя.
+    local gw; gw=$(default_gateway)
+    if [ -n "${VPNGATEWAY:-}" ] && valid_ip "$VPNGATEWAY" && [ -n "$gw" ]; then
+        case "$VPNGATEWAY" in 127.*) ;; *)
+            run route -n add -host "$VPNGATEWAY" "$gw" >/dev/null 2>&1 || true
+            printf '%s %s\n' "$VPNGATEWAY" "$gw" > "$GW_ROUTE" ;;
+        esac
+    fi
+
+    # Сети, которые прислал шлюз (только для сведения — решаем мы, не он).
+    local i=0 inc=""
+    while [ $i -lt "${CISCO_SPLIT_INC:-0}" ]; do
+        eval "inc=\"\$inc \${CISCO_SPLIT_INC_${i}_ADDR}/\${CISCO_SPLIT_INC_${i}_MASKLEN}\""
+        i=$((i+1))
+    done
+
+    {
+        printf 'STATE=connected\nREASON=%s\nTUNDEV=%s\nIP4=%s\nMTU=%s\nGATEWAY=%s\nDNS=%s\nDEF_DOMAIN=%s\nGW_SPLIT_INC=%s\nCONNECTED=%s\n' \
+            "${reason:-}" "$dev" "$ip" "$mtu" "${VPNGATEWAY:-}" "${INTERNAL_IP4_DNS:-}" \
+            "${CISCO_DEF_DOMAIN:-}" "${inc# }" "$(date +%s)"
+        [ -f "$TUNNEL_ENV" ] && grep -E '^(MODE|URL|STARTED)=' "$TUNNEL_ENV" || true
+    } > "$TUNNEL_ENV.tmp"
+    mv "$TUNNEL_ENV.tmp" "$TUNNEL_ENV"; chmod 644 "$TUNNEL_ENV"
+
+    # Реконнект во время паузы не должен её отменять: человек сказал
+    # «как будто выключен», обрыв связи этого не меняет.
+    if [ -f "$PAUSED" ]; then
+        say "туннель поднят, но стоит пауза — маршруты и зоны не применяю"
+        return 0
+    fi
+
+    apply_wanted_routes "$dev"
+
+    # Зоны: "vpn" вместо адреса = первый DNS, который прислал шлюз.
+    if [ -s "$ZONES_WANTED" ]; then
+        local vpndns="${INTERNAL_IP4_DNS%% *}"
+        [ -n "$vpndns" ] || say "шлюз не прислал DNS — зоны с 'vpn' пропущены"
+        awk -v d="$vpndns" '$2=="vpn" { if (d=="") next; $2=d } {print}' "$ZONES_WANTED" | apply_zones
+    fi
+}
+
+vpnc_disconnect() {
+    clear_state_routes
+    if [ -f "$GW_ROUTE" ]; then
+        local g via; read -r g via < "$GW_ROUTE"
+        [ -n "$g" ] && run route -n delete -host "$g" "$via" >/dev/null 2>&1 || true
+        rm -f "$GW_ROUTE"
+    fi
+    if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; fi
+    # Интерфейс гасим только если он точно наш: пришёл от openconnect (env)
+    # или записан у нас как connected. Чужой utun с тем же номером не трогаем.
+    local dev="${TUNDEV:-}"
+    if [ -z "$dev" ] && [ "$(tunnel_state)" = connected ]; then dev=$(tunnel_dev); fi
+    if valid_utun "$dev"; then run ifconfig "$dev" down 2>/dev/null || true; fi
+    if [ -f "$TUNNEL_ENV" ]; then
+        { printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)"; grep -E '^(MODE|URL|STARTED|TUNDEV)=' "$TUNNEL_ENV" || true; } > "$TUNNEL_ENV.tmp"
+        mv "$TUNNEL_ENV.tmp" "$TUNNEL_ENV"
+    fi
+}
+
+cmd_vpnc() {
+    case "${reason:-}" in
+        pre-init) ;;
+        connect|reconnect) vpnc_connect ;;
+        disconnect) vpnc_disconnect ;;
+        attempt-reconnect) ;;
+        *) say "vpnc: неизвестный reason='${reason:-}'" ;;
+    esac
+}
+
+# ------------------------------------------------------------ пауза ----
+# «Как будто VPN выключен»: маршруты и зоны сняты, а туннель и SSO-сессия
+# живы. Возврат мгновенный и без входа — этим пауза отличается от
+# disconnect/connect, где заново идёт SAML и второй фактор.
+cmd_suspend() {
+    tunnel_alive || die "туннель не поднят — паузить нечего"
+    if [ -f "$PAUSED" ]; then say "уже на паузе"; return 0; fi
+    clear_state_routes
+    [ "$(manifest_zones | grep -c .)" -gt 0 ] && clear_zones || flush_dns
+    if [ "$DRY_RUN" = 1 ]; then printf '  $ touch %s\n' "$PAUSED"; else : > "$PAUSED"; fi
+    say "пауза: маршруты и зоны сняты, туннель (pid $(tunnel_pid)) оставлен поднятым"
+}
+
+cmd_resume() {
+    tunnel_alive || die "туннель не поднят — возвращать некуда"
+    local dev; dev=$(tunnel_dev)
+    valid_utun "$dev" || die "не знаю интерфейс туннеля (нет TUNDEV в $TUNNEL_ENV)"
+    apply_wanted_routes "$dev"
+    if [ -s "$ZONES_WANTED" ]; then
+        local vpndns; vpndns=$(sed -n 's/^DNS=//p' "$TUNNEL_ENV" | head -1); vpndns="${vpndns%% *}"
+        awk -v d="$vpndns" '$2=="vpn" { if (d=="") next; $2=d } {print}' "$ZONES_WANTED" | apply_zones
+    fi
+    if [ "$DRY_RUN" = 1 ]; then printf '  $ rm -f %s\n' "$PAUSED"; else rm -f "$PAUSED"; fi
+    say "возобновлено: маршруты и зоны на месте"
+}
+
+# --------------------------------------------------------------- cleanup ----
+# lsof без root не видит чужие сокеты, поэтому просто стучимся в порт.
+port53_busy() { nc -z -G 1 127.0.0.1 53 >/dev/null 2>&1; }
+services_with_localhost_dns() {
+    local svc
+    networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | while IFS= read -r svc; do
+        case "$svc" in ''|\**) continue ;; esac
+        networksetup -getdnsservers "$svc" 2>/dev/null | grep -x '127.0.0.1' >/dev/null && printf '%s\n' "$svc"
+    done
+}
+
+cmd_cleanup() {
+    local did=0 svc
+    if ! port53_busy; then
+        while IFS= read -r svc; do
+            [ -n "$svc" ] || continue
+            run networksetup -setdnsservers "$svc" Empty; say "DNS сброшен на DHCP: $svc"; did=1
+        done <<< "$(services_with_localhost_dns)"
+    fi
+    if ! tunnel_alive; then
+        if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; did=1; fi
+        if [ -s "$ROUTES_STATE" ]; then clear_state_routes; did=1; fi
+        if [ -f "$GW_ROUTE" ]; then vpnc_disconnect; did=1; fi
+        # осиротевший openconnect не из нашего pidfile
+        if pgrep -x openconnect >/dev/null 2>&1 && [ -z "$(tunnel_pid)" ]; then
+            say "найден openconnect без нашего pidfile — не трогаю (возможно, чужая сессия)"
+        fi
+        rm -f "$PIDFILE" 2>/dev/null || true
+    fi
+    [ "$did" = 1 ] && flush_dns || say "убирать нечего"
+}
+
+# ------------------------------------------------------------------ main ----
+cmd="${1:-}"; shift || true
+case "$cmd" in
+    tunnel-start) cmd_tunnel_start "$@" ;;
+    tunnel-stop)  cmd_tunnel_stop ;;
+    suspend)      cmd_suspend ;;
+    resume)       cmd_resume ;;
+    vpnc)         cmd_vpnc ;;
+    route-add)
+        valid_cidr "${1:-}" || die "некорректный CIDR: ${1:-}"
+        dev=$(tunnel_dev); valid_utun "$dev" || die "туннель не поднят (нет TUNDEV в $TUNNEL_ENV)"
+        [ "$(tunnel_state)" = connected ] || die "туннель не в состоянии connected"
+        ensure_state_dir
+        add_route "$1" "$dev"
+        grep -qx "$1" "$ROUTES_WANTED" 2>/dev/null || printf '%s\n' "$1" >> "$ROUTES_WANTED" ;;
+    route-del)
+        valid_cidr "${1:-}" || die "некорректный CIDR: ${1:-}"
+        del_route "$1"
+        if [ -f "$ROUTES_WANTED" ]; then grep -vx "$1" "$ROUTES_WANTED" > "$ROUTES_WANTED.tmp" || true; mv "$ROUTES_WANTED.tmp" "$ROUTES_WANTED"; fi ;;
+    dns-apply)    apply_zones ;;
+    dns-clear)    clear_zones ;;
+    cleanup)      cmd_cleanup ;;
+    flush-dns)    flush_dns ;;
+    trust)        cmd_trust ;;
+    version)      printf 'ocbar-helper %s\n' "$VERSION" ;;
+    *)
+        sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+        exit 2 ;;
+esac
