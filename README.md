@@ -36,20 +36,27 @@ ocbar supervise (LaunchAgent)             от пользователя, раз 
 Коротко (подробно и с объяснениями — [INSTALL.md](INSTALL.md)):
 
 ```bash
+brew tap ValeraGin/ocbar
+brew install --HEAD ocbar             # собирает из исходников у вас
+sudo ocbar install                    # один раз: хелпер, sudoers, агент
+
+mkdir -p ~/.config/ocbar              # без профиля не работает ни одна команда
+cp "$(brew --prefix ocbar)"/share/ocbar/examples/*.example ~/.config/ocbar/
+cd ~/.config/ocbar && for f in *.example; do mv "$f" "${f%.example}"; done
+$EDITOR ~/.config/ocbar/profiles.conf
+
+ocbar secret set-password
+ocbar connect --show
+```
+
+Из репозитория, без Homebrew:
+
+```bash
 brew install openconnect
 git clone https://github.com/ValeraGin/ocbar.git ~/Projects/ocbar && cd ~/Projects/ocbar
 (cd auth && swift build -c release)   # Swift идёт с Command Line Tools
-sudo ./bin/ocbar install              # один раз: хелпер, sudoers, агент
-./bin/ocbar secret set-password
-./bin/ocbar connect --show
-```
-
-Через Homebrew, когда репозиторий опубликован:
-
-```bash
-brew tap ValeraGin/ocbar
-brew install --HEAD ocbar             # собирает из исходников у вас
-sudo ocbar install
+mkdir -p ~/.config/ocbar && cp etc/profiles.conf.example ~/.config/ocbar/profiles.conf
+sudo ./bin/ocbar install
 ```
 
 `brew upgrade ocbar` — это и есть автообновление. Почему формула, а не
@@ -143,9 +150,12 @@ auth/.build/release/ocbar-auth --dump-script     # JS автозаполнени
   (манифест), чужой файл пропускает и в манифест не берёт;
 - **чужой openconnect не трогается** — без нашего pidfile `cleanup` его не убьёт,
   а `disconnect` не погасит чужой `utun`;
-- **root никогда не исполняет user-writable файл**: копия `openconnect` в
-  `/usr/local/libexec/ocbar/` сверяется по sha256 вместе с dylib, csd-wrapper
-  берётся только по имени из root-каталога, vpnc-script — сам хелпер;
+- **root исполняет копию из своего каталога**: `openconnect` копируется в
+  `/usr/local/libexec/ocbar/` и сверяется по sha256 вместе с библиотеками,
+  csd-wrapper берётся только по имени из root-каталога, vpnc-script — сам
+  хелпер. Оговорка: библиотеки остаются в каталоге Homebrew, доступном
+  пользователю на запись, поэтому проверка ловит случайное расхождение после
+  обновления, но не целенаправленную подмену — см. [DECISIONS.md](DECISIONS.md), D30;
 - **cookie сессии и пароли** идут через stdin и окружение, в `ps` их нет.
 
 ## Пауза вместо отключения

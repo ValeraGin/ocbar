@@ -106,12 +106,13 @@ echo "---"
 # --- профили ---
 echo "Профили"
 for p in "${profiles[@]}"; do
-    IFS='|' read -r name title auth <<< "$p"
+    IFS='|' read -r name title auth descr <<< "$p"
     mark=""; [ "$name" = "$profile" ] && [ "$state" = connected ] && mark="checked=true"
     if [ "$auth" = password ]; then
         echo "-- ${title:-$name} · пароль+OTP, через openconnect | color=gray"
     else
         echo "-- ${title:-$name} | $(act) param1=connect param2=$name $mark"
+        [ -n "$descr" ] && echo "-- ${descr} | alternate=true color=gray"
     fi
 done
 [ "${#profiles[@]}" = 0 ] && echo "-- нет profiles.conf | color=gray"

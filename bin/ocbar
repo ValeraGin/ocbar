@@ -183,10 +183,12 @@ profile_list() { [ -f "$PROFILES" ] && sed -n 's/^\[\(.*\)\]$/\1/p' "$PROFILES" 
 profiles_summary() {
     [ -f "$PROFILES" ] || return 0
     awk '
-        /^\[/ { if (cur != "") print cur "|" nm "|" au; cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; next }
-        /^[ \t]*name[ \t]*=/ { if (nm == "") { v = $0; sub("^[^=]*=[ \t]*", "", v); sub("[ \t]+$", "", v); nm = v } }
-        /^[ \t]*auth[ \t]*=/ { if (au == "") { v = $0; sub("^[^=]*=[ \t]*", "", v); sub("[ \t]+$", "", v); au = v } }
-        END { if (cur != "") print cur "|" nm "|" au }
+        function val(line,   v) { v = line; sub("^[^=]*=[ \t]*", "", v); sub("[ \t\r]+$", "", v); return v }
+        /^\[/ { if (cur != "") print cur "|" nm "|" au "|" ds; cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; ds = ""; next }
+        /^[ \t]*name[ \t]*=/        { if (nm == "") nm = val($0) }
+        /^[ \t]*auth[ \t]*=/        { if (au == "") au = val($0) }
+        /^[ \t]*description[ \t]*=/ { if (ds == "") ds = val($0) }
+        END { if (cur != "") print cur "|" nm "|" au "|" ds }
     ' "$PROFILES"
 }
 profile_exists() { profile_list | grep -Fxq "$1"; }
@@ -757,12 +759,13 @@ cmd_dns() {
 # -------------------------------------------------------------- profiles ----
 cmd_profiles() {
     [ -f "$PROFILES" ] || die "нет $PROFILES — скопируй etc/profiles.conf.example и заполни"
-    local d line p nm au; d=$(profile_default)
-    while IFS='|' read -r p nm au; do
+    local d p nm au ds; d=$(profile_default)
+    while IFS='|' read -r p nm au ds; do
         [ -n "$p" ] || continue
         case "$au" in password) au="(пароль+OTP, не SSO)" ;; esac
         printf '  %s %s %s %s  %s\n' "$([ "$p" = "$d" ] && echo '*' || echo ' ')" \
             "$(pad "$p" 18)" "$(pad "$nm" 20)" "$(profile_get "$p" url)" "$au"
+        [ -n "$ds" ] && printf '      %s%s%s\n' "$c_dim" "$ds" "$c_off"
     done <<< "$(profiles_summary)"
 }
 

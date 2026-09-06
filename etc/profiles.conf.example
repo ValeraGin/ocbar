@@ -4,7 +4,12 @@
 # В секции [имя]:
 #   url              host/group — как в openconnect (https:// можно не писать)
 #   name             человеческое имя для меню
-#   description      подпись в меню
+#   description      подпись под профилем в списке и в меню
+#   keychain_service сервис Keychain для пароля и кода (по умолч. ru.ocbar.client)
+#   keepass_entry    путь записи в KeePassXC, чей одноразовый код брать;
+#                    задан — включает totp = keepassxc
+#   keepass_db       путь к файлу базы (по умолчанию — переменная KP_DB)
+#   keepass_keychain_service  где лежит мастер-пароль базы (по умолч. keepassxc-docs)
 #   user             логин; по умолчанию — текущий пользователь macOS
 #   auth             sso (по умолчанию) | password — парольные группы ocbar не ведёт,
 #                    они здесь только чтобы меню показывало «через openconnect»

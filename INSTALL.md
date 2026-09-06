@@ -80,7 +80,7 @@ sudo ocbar install                # или так, если ставили че�
 | `ocbar-helper` → `/usr/local/libexec/` | единственный привилегированный компонент |
 | копия `openconnect` и штатного `vpnc-script` туда же | root не должен исполнять файлы, доступные пользователю на запись |
 | `ocbar-helper trust` | манифест sha256 бинаря и его библиотек |
-| `/etc/sudoers.d/ocbar` | `NOPASSWD` **только** на хелпер, проверяется `visudo -cf` |
+| `/etc/sudoers.d/ocbar` | `NOPASSWD` на хелпер для группы `admin`, проверяется `visudo -cf` |
 | LaunchAgent `ru.ocbar.supervisor` | супервизор: реконнект, сон, смена сети |
 
 Посмотреть, ничего не меняя:
@@ -106,7 +106,25 @@ sudo ocbar install --trust
 
 ## 4. Свои данные
 
-Конфиги живут в `~/.config/ocbar/`, образцы — в [etc/](etc/).
+Сначала заведите каталог и возьмите образцы — без файла профилей не работает
+ни одна команда:
+
+```bash
+mkdir -p ~/.config/ocbar
+cp etc/profiles.conf.example ~/.config/ocbar/profiles.conf
+cp etc/networks.conf.example ~/.config/ocbar/networks.conf
+cp etc/zones.conf.example    ~/.config/ocbar/zones.conf
+$EDITOR ~/.config/ocbar/profiles.conf
+```
+
+Для установки через Homebrew образцы лежат в
+`$(brew --prefix ocbar)/share/ocbar/examples`.
+
+Файл `autofill.rules` не обязателен: без него используется встроенный набор
+правил для типовых форм входа. Заводите его, только если форма вашего
+провайдера входа не распознаётся.
+
+Дальше по файлам.
 
 ### Профили — `profiles.conf`
 
@@ -141,10 +159,16 @@ mode = split                  # split — свои маршруты и зоны;
 ### Зоны DNS — `zones.conf`
 
 ```
-example.com          10.0.0.1      # зона → резолвер
-int.example.com      192.168.10.12 # длиннее — перебивает более короткую
-corp.example.com     vpn           # vpn = тот резолвер, что прислал шлюз
+# зона → резолвер; более длинная зона перебивает более короткую
+example.com          10.0.0.1
+int.example.com      192.168.10.12
+# vpn вместо адреса = тот резолвер, что прислал шлюз
+corp.example.com     vpn
 ```
+
+**Комментарий пишется отдельной строкой.** Третье поле в строке зоны — это
+номер порта, поэтому `example.com 10.0.0.1 # что-то` будет отброшено как
+строка с недопустимым портом, причём молча.
 
 Создать из готового списка доменов:
 
@@ -268,11 +292,17 @@ sudo ./bin/ocbar install
 
 ```bash
 ./bin/ocbar disconnect
-sudo ./bin/ocbar uninstall     # агент, sudoers, хелпер, root-каталоги
+sudo ./bin/ocbar uninstall     # агент, sudoers, хелпер, /usr/local/libexec/ocbar
+sudo rm -rf /usr/local/var/ocbar                      # состояние: uninstall его оставляет
 rm -rf ~/.config/ocbar ~/Library/Logs/ocbar
+rm -rf "$HOME/Library/Application Support/ocbar"      # выбранный профиль, тумблеры меню
 rm -rf ~/Library/WebKit/ocbar-auth ~/Library/HTTPStorages/ocbar-auth.binarycookies
 security delete-generic-password -s ru.ocbar.client   # если заводили секреты
 ```
+
+`uninstall` намеренно оставляет каталог состояния: там манифест зон, по
+которому убираются файлы в системном каталоге резолверов. Удаляйте его
+последним и только после `disconnect`.
 
 Последние две строки стоит выполнить и без удаления программы, если нужно
 оборвать сохранённую сессию SSO: **[проверено]** cookie провайдера входа

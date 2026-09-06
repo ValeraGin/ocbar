@@ -14,8 +14,8 @@
 процесс на bash держит функции в памяти, и правка файла его не меняет.
 
 ```bash
-ocbar supervisor status      # сравните время запуска с датой правки
-ocbar supervisor restart
+ocbar doctor                 # строка «Супервизор» скажет, свежий ли код
+ocbar supervisor restart     # принудительно
 ```
 
 С 2026-09-06 супервизор следит за своим файлом и перезапускается сам, а
@@ -56,7 +56,7 @@ ocbar secret import-qr <файл> --select <часть имени>
 `~/.config/ocbar/autofill.rules` и проверьте, что получилось:
 
 ```bash
-ocbar-auth --dump-script --rules ~/.config/ocbar/autofill.rules
+"$(brew --prefix ocbar)/libexec/ocbar-auth" --dump-script --rules ~/.config/ocbar/autofill.rules
 ```
 
 Правила читаются при каждом запуске, пересобирать ничего не нужно.
@@ -94,7 +94,7 @@ launchctl bootout gui/$(id -u)/ru.ocbar.supervisor
 Проверить версию хелпера:
 
 ```bash
-/usr/local/libexec/ocbar-helper version    # нужна 0.3.0 или новее
+/usr/local/libexec/ocbar-helper version    # сравните с версией в libexec/ репозитория
 sudo ocbar install                          # обновить
 ```
 
@@ -201,6 +201,30 @@ rm -rf "$(brew --repository)/Library/Homebrew/vendor/bundle/ruby/"*/extensions
 
 ---
 
+## Настройки, о которых редко вспоминают
+
+Всё перечисленное — переменные окружения; они нужны в основном для проверки
+и для нестандартных случаев.
+
+| Переменная | Что делает |
+|---|---|
+| `OCBAR_VERBOSE=1` | подробный лог входа в поток ошибок |
+| `OCBAR_SHOW=1` | показать окно входа сразу |
+| `OCBAR_CONFIG_DIR` | другой каталог конфигурации целиком |
+| `OCBAR_CONFIG`, `OCBAR_NETWORKS` | отдельные файлы зон и сетей |
+| `OCBAR_STATE_DIR`, `OCBAR_USER_STATE` | каталоги состояния (для прогонов на тестовых данных) |
+| `OCBAR_AUTH`, `OCBAR_BIN` | пути к аутентификатору и к самой программе (для плагина меню) |
+| `OCBAR_NOTIFY=0` | выключить уведомления, не трогая конфигурацию |
+| `OCBAR_LOG_MAX` | порог ротации логов в байтах |
+| `OCBAR_RECONNECT_GRACE` | сколько ждать самостоятельного восстановления связи |
+| `OCBAR_RECONNECT_TIMEOUT` | сколько openconnect пытается восстановиться сам |
+| `OCBAR_LOGINS_PER_HOUR` | предохранитель: сколько полных входов в час разрешено |
+| `KP_DB`, `KP_CLI` | путь к базе паролей и к её утилите |
+
+Ещё есть режим конечного числа циклов супервизора — `ocbar supervise
+--iterations=N`. Он удобен, чтобы посмотреть на решения супервизора, не
+оставляя его работать.
+
 ## Диагностика: куда смотреть
 
 | Что | Где |
@@ -210,4 +234,4 @@ rm -rf "$(brew --repository)/Library/Homebrew/vendor/bundle/ruby/"*/extensions
 | что сказал шлюз при подключении | `/usr/local/var/ocbar/tunnel.env` |
 | наши зоны и маршруты | `/usr/local/var/ocbar/{zones,routes}.state` |
 | подробности входа | `OCBAR_VERBOSE=1 ocbar connect --show` |
-| что шлюз предлагает, без учётных данных | `ocbar-auth --probe --url <host>/<group>` |
+| что шлюз предлагает, без учётных данных | `"$(brew --prefix ocbar)/libexec/ocbar-auth" --probe --url <host>/<group>` |
