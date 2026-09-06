@@ -14,8 +14,14 @@
 #                    по умолчанию ru.ocbar.client
 #   csd_wrapper      путь к hostscan-заглушке; sudo ocbar install скопирует её в root-каталог
 #   rules            файл правил автозаполнения; по умолчанию ~/.config/ocbar/autofill.rules
+#   healthcheck      что проверить после подключения: URL, «хост:порт» или имя
+#                    (тогда проверяется, что оно резолвится). Поднятый интерфейс
+#                    и работающий доступ — разные вещи
 #   totp             auto (по умолчанию: подставлять код, если секрет есть в Keychain) | off —
 #                    выключить, если IdP присылает код по SMS: чужой код в поле хуже пустого
+
+# Глобальные ключи (до первой секции):
+#   notifications = on | off   уведомления системы о смене состояния (по умолчанию on)
 
 default = main
 
@@ -25,6 +31,7 @@ name = Основной
 description = Любые устройства, расширенный доступ
 user = alice
 mode = split
+healthcheck = wiki.example.com:443
 
 [full]
 url = vpn.example.com/employees

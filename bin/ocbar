@@ -55,6 +55,7 @@ AGENT_LABEL="ru.ocbar.supervisor"
 AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 
 DRY_RUN=0
+NOTIFY_ENABLED=1     # ключ notifications = off в profiles.conf выключает
 
 # ---------------------------------------------------------------- вывод ----
 c_red=$'\033[31m'; c_grn=$'\033[32m'; c_yel=$'\033[33m'; c_dim=$'\033[2m'; c_off=$'\033[0m'
@@ -73,6 +74,35 @@ skip() { _line "$c_dim" " -- " "$@"; }
 info() { printf '%s\n' "$*"; }
 die()  { printf '%socbar: %s%s\n' "$c_red" "$*" "$c_off" >&2; exit 1; }
 log()  { mkdir -p "$LOG_DIR"; printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$SUP_LOG"; }
+
+# Лог пишется дозаписью на каждый вызов log(), поэтому переименовать файл
+# безопасно: следующая запись создаст новый. Для лога openconnect это не так
+# (дескриптор держит процесс), там ротация делается при запуске туннеля.
+rotate_log() { # файл [предел байт] [сколько хранить]
+    local f="$1" max="${2:-1048576}" keep="${3:-2}" size i
+    [ -f "$f" ] || return 0
+    size=$(stat -f %z "$f" 2>/dev/null || echo 0)
+    [ "$size" -ge "$max" ] || return 0
+    i=$keep
+    while [ "$i" -gt 1 ]; do
+        [ -f "$f.$((i-1))" ] && mv -f "$f.$((i-1))" "$f.$i"
+        i=$((i-1))
+    done
+    mv -f "$f" "$f.1"
+    log "лог превысил $((max/1024)) КБ — предыдущий сохранён как $(basename "$f").1"
+}
+
+# Уведомление системы. Текст передаётся аргументом, а не подстановкой в текст
+# скрипта: иначе кавычки в сообщении ломают osascript.
+notify() { # заголовок, текст
+    [ "${OCBAR_NOTIFY:-1}" = 1 ] || return 0
+    [ "$NOTIFY_ENABLED" = 0 ] && return 0
+    osascript - "$1" "$2" >/dev/null 2>&1 <<'AS' || true
+on run argv
+    display notification (item 2 of argv) with title (item 1 of argv)
+end run
+AS
+}
 
 # ------------------------------------------------------------ бинарники ----
 helper_path() {
@@ -136,6 +166,12 @@ profile_get() { # имя ключ
         inside && $0 ~ "^[ \t]*" k "[ \t]*=" { sub("^[^=]*=[ \t]*", ""); sub("[ \t]+$", ""); print; exit }
     ' "$PROFILES"
 }
+# Глобальные ключи из шапки profiles.conf (до первой секции).
+global_get() {
+    [ -f "$PROFILES" ] || return 0
+    awk -v k="$1" '/^\[/{exit} $0 ~ "^[ \t]*" k "[ \t]*=" {sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
+}
+
 profile_default() {
     [ -f "$PROFILES" ] || return 0
     awk '/^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
@@ -175,6 +211,8 @@ load_profile() {
     P_KP_ENTRY=$(profile_get "$p" keepass_entry)
     P_KP_DB=$(profile_get "$p" keepass_db); P_KP_DB="${P_KP_DB/#\~/$HOME}"
     P_KP_SVC=$(profile_get "$p" keepass_keychain_service); P_KP_SVC="${P_KP_SVC:-keepassxc-docs}"
+    P_HEALTH=$(profile_get "$p" healthcheck)
+    case "$(global_get notifications)" in off|0|no) NOTIFY_ENABLED=0 ;; esac
     [ -n "$P_KP_ENTRY" ] && [ "$P_TOTP" = auto ] && P_TOTP=keepassxc
     P_RULES=$(profile_get "$p" rules); P_RULES="${P_RULES/#\~/$HOME}"
     [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
@@ -498,6 +536,33 @@ do_connect() { # профиль уже загружен
     [ "$(tunnel_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
     mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
+    notify "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
+    report_health || true
+}
+
+# Проверка после подключения: поднятый интерфейс и работающий доступ — разные
+# вещи. Формат в профиле: URL, «хост:порт» или просто имя (тогда проверяется,
+# что оно резолвится через наши зоны).
+healthcheck() {
+    [ -n "${P_HEALTH:-}" ] || return 0
+    case "$P_HEALTH" in
+        http://*|https://*) curl -s -o /dev/null --max-time 8 "$P_HEALTH" ;;
+        *:[0-9]*)           nc -z -w 5 "${P_HEALTH%:*}" "${P_HEALTH##*:}" >/dev/null 2>&1 ;;
+        *)                  [ -n "$(dscacheutil -q host -a name "$P_HEALTH" 2>/dev/null | awk '/^ip_address/{print $2; exit}')" ] ;;
+    esac
+}
+
+report_health() {   # печатает и уведомляет; не роняет подключение
+    [ -n "${P_HEALTH:-}" ] || return 0
+    if healthcheck; then
+        ok "Проверка доступа" "$P_HEALTH отвечает"
+        log "проверка после подключения: $P_HEALTH отвечает"
+    else
+        warn "Проверка доступа" "$P_HEALTH НЕ отвечает — туннель поднят, но доступа нет"
+        log "проверка после подключения: $P_HEALTH не отвечает"
+        notify "ocbar: доступа нет" "Туннель поднят, но $P_HEALTH не отвечает"
+        return 1
+    fi
 }
 
 cmd_connect() {
@@ -728,7 +793,7 @@ cmd_pause() {
         *) die "туннель не поднят — паузить нечего" ;;
     esac
     priv suspend
-    [ "$DRY_RUN" = 1 ] || { log "пауза"; cmd_status; }
+    [ "$DRY_RUN" = 1 ] || { log "пауза"; notify "ocbar: пауза" "Маршруты и зоны сняты, туннель и вход сохранены"; cmd_status; }
 }
 
 cmd_resume() {
@@ -739,7 +804,7 @@ cmd_resume() {
         *) die "туннель не поднят — возобновлять нечего" ;;
     esac
     priv resume
-    [ "$DRY_RUN" = 1 ] || { log "возобновлено"; cmd_status; }
+    [ "$DRY_RUN" = 1 ] || { log "возобновлено"; notify "ocbar: возобновлено" "Маршруты и зоны вернулись"; report_health || true; cmd_status; }
 }
 
 cmd_toggle_pause() {
@@ -766,6 +831,7 @@ cmd_supervise() {
     printf '%s\n' $$ > "$SUP_PID"
     trap 'rm -f "$SUP_PID"; log "супервизор остановлен"; exit 0' INT TERM EXIT
     log "супервизор запущен (pid $$, dry-run=$DRY_RUN)"
+    rotate_log "$SUP_LOG" "${OCBAR_LOG_MAX:-1048576}" 2
 
     # bash держит функции в памяти: после правки скрипта живой супервизор
     # продолжает работать по СТАРОМУ коду. Один раз это уже стоило цикла
@@ -776,7 +842,12 @@ cmd_supervise() {
     # поэтому по ним нельзя понять, свежий ли внутри код. Записываем версию явно.
     printf '%s\n' "$self_mtime" > "$SUP_CODE"
 
+    # Сколько ждать, пока openconnect восстановит связь сам. Убивать его
+    # раньше — значит менять целую сессию (новый SAML и одноразовый код) там,
+    # где хватило бы нескольких секунд терпения.
+    local reconnect_grace="${OCBAR_RECONNECT_GRACE:-100}"
     local last_wake last_iface backoff=5 next_try=0 fails=0 n=0 desired st now wake iface
+    local probe_bad_since=0 last_probe_log=0
     last_wake=$(wake_ts); last_iface=$(primary_iface)
     while :; do
         n=$((n+1)); now=$(date +%s)
@@ -793,7 +864,16 @@ cmd_supervise() {
             [ "$DRY_RUN" = 1 ] || sleep 3   # сети нужно время после сна
         fi
         if [ "$iface" != "$last_iface" ]; then
-            log "событие: смена интерфейса $last_iface → ${iface:-нет}"; last_iface="$iface"; fails=0
+            log "событие: смена интерфейса $last_iface → ${iface:-нет}"
+            last_iface="$iface"; fails=0; probe_bad_since=0
+            # Восстановиться по старому локальному адресу openconnect не сможет
+            # («Can't assign requested address» в логе), поэтому ждать смысла
+            # нет: сразу закрываем сессию и заходим заново.
+            if [ "$st" = connected ] && [ -n "$desired" ]; then
+                log "смена интерфейса — восстановление по старому адресу невозможно, переподключаюсь"
+                priv tunnel-stop || true
+                st=down; next_try=0
+            fi
         fi
 
         if [ -n "$desired" ]; then
@@ -808,9 +888,27 @@ cmd_supervise() {
                     local dev miss; dev=$(env_get TUNDEV); miss=""
                     while read -r net; do [ -n "$net" ] && [ "$(route_via "$net")" != "$dev" ] && miss="$miss $net"; done <<< "$(active_networks)"
                     if [ -n "$miss" ]; then log "маршруты пропали:$miss — восстанавливаю"; for net in $miss; do priv route-add "$net" || true; done; fi
+                    if [ "$probe_bad_since" != 0 ]; then
+                        log "связь восстановилась сама за $((now - probe_bad_since)) с — вход не потребовался"
+                        notify "ocbar: связь восстановлена" "openconnect поднял сессию сам, без повторного входа"
+                    fi
+                    probe_bad_since=0
                 else
-                    fails=$((fails+1)); log "проверка туннеля не прошла ($fails/3)"
-                    if [ $fails -ge 3 ]; then log "туннель мёртв — переподключаю"; priv tunnel-stop || true; fails=0; next_try=0; fi
+                    # Процесс жив — значит openconnect либо ещё держит связь,
+                    # либо сам её восстанавливает. Не мешаем: новый вход стоит
+                    # одноразового кода и новой сессии на шлюзе.
+                    [ "$probe_bad_since" = 0 ] && { probe_bad_since=$now; last_probe_log=0; }
+                    local waited=$((now - probe_bad_since))
+                    if [ $((now - last_probe_log)) -ge 20 ]; then
+                        log "связи нет $waited с — жду, openconnect восстанавливает сессию сам (до $reconnect_grace с)"
+                        last_probe_log=$now
+                    fi
+                    if [ "$waited" -ge "$reconnect_grace" ]; then
+                        log "за $waited с сессия не восстановилась — закрываю и захожу заново"
+                        notify "ocbar: связь потеряна" "Сессия не восстановилась за $waited с, подключаюсь заново"
+                        priv tunnel-stop || true
+                        probe_bad_since=0; fails=0; next_try=0
+                    fi
                 fi
             elif [ "$st" = starting ]; then
                 :
@@ -820,6 +918,7 @@ cmd_supervise() {
                     backoff=5
                 else
                     log "подключение не удалось, следующая попытка через $backoff с"
+                    [ "$backoff" -ge 40 ] && notify "ocbar: не удаётся подключиться" "Попытки продолжаются, следующая через $backoff с"
                     next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
                 fi
             fi
@@ -829,6 +928,7 @@ cmd_supervise() {
             fi
         fi
 
+        [ $((n % 60)) = 0 ] && rotate_log "$SUP_LOG" "${OCBAR_LOG_MAX:-1048576}" 2
         [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
         sleep 5
     done

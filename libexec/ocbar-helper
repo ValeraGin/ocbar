@@ -35,7 +35,7 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.3.0"
+VERSION="0.4.0"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
 TRUST="$PREFIX/etc/ocbar/trust.sha256"
@@ -331,8 +331,15 @@ cmd_tunnel_start() {
     } > "$TUNNEL_ENV"
     chmod 644 "$TUNNEL_ENV"
 
+    # --reconnect-timeout: сколько openconnect сам пытается восстановить связь
+    # по ТОЙ ЖЕ сессии, не требуя нового входа. Умолчание 300 с здесь вредно:
+    # при смене интерфейса восстановление невозможно в принципе («Can't assign
+    # requested address»), и пять минут ожидания — впустую. Полторы минуты
+    # покрывают обычные провалы связи, а безнадёжный случай супервизор
+    # распознаёт по событию смены интерфейса и не ждёт вовсе.
     local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$user"
-                  --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel)
+                  --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel
+                  --reconnect-timeout="${OCBAR_RECONNECT_TIMEOUT:-90}")
     [ -z "$ua" ]  || cmd+=(--useragent "$ua")
     [ -z "$csd" ] || cmd+=(--csd-user "$user" --csd-wrapper "$LIBDIR/csd/$csd")
     case "$url" in https://*) cmd+=("$url") ;; *) cmd+=("https://$url") ;; esac
@@ -343,6 +350,13 @@ cmd_tunnel_start() {
         printf '  zones.wanted:  %s\n' "$(printf '%s' "$zones" | tr '\n' ';')"
         return 0
     fi
+    # Ротация здесь, а не по таймеру: пока openconnect жив, он держит
+    # дескриптор, и переименование файла его не переключит.
+    if [ -f "$LOG" ] && [ "$(stat -f %z "$LOG" 2>/dev/null || echo 0)" -ge "${OCBAR_LOG_MAX:-1048576}" ]; then
+        run mv -f "$LOG" "$LOG.1"
+        say "лог openconnect превысил предел — прежний сохранён как $(basename "$LOG").1"
+    fi
+
     say "запускаю openconnect ($mode) → $url"
     # setsid обязателен. Без него openconnect остаётся в задаче launchd, из
     # которой его позвал супервизор, и `launchctl bootout` (в том числе внутри
