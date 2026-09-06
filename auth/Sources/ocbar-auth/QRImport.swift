@@ -104,9 +104,9 @@ enum QRImport {
                 case (1, .bytes(let d)): secret = d
                 case (2, .bytes(let d)): name = String(data: d, encoding: .utf8) ?? ""
                 case (3, .bytes(let d)): issuer = String(data: d, encoding: .utf8) ?? ""
-                case (4, .varint(let v)): algo = Int(v)
-                case (5, .varint(let v)): digits = Int(v)
-                case (6, .varint(let v)): type = Int(v)
+                case (4, .varint(let v)): algo = Int(clamping: v)
+                case (5, .varint(let v)): digits = Int(clamping: v)
+                case (6, .varint(let v)): type = Int(clamping: v)
                 default: break
                 }
             }
@@ -155,6 +155,10 @@ private struct ProtoReader {
                 out.append(Field(number: number, value: .varint(v))); i = n
             case 2:
                 guard let (len, n) = varint(at: i) else { return out }
+                // Длина приходит из QR, то есть из чужой картинки. Int(len)
+                // на огромном значении не возвращает ошибку, а аварийно
+                // завершает процесс — проверено на подготовленном коде.
+                guard len <= UInt64(data.count) else { return out }
                 let start = n, end = data.index(start, offsetBy: Int(len), limitedBy: data.endIndex) ?? data.endIndex
                 out.append(Field(number: number, value: .bytes(Data(data[start..<end])))); i = end
             case 5: i = data.index(i, offsetBy: 4, limitedBy: data.endIndex) ?? data.endIndex

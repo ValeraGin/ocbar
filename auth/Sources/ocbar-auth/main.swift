@@ -28,6 +28,7 @@ struct Args {
     var showAfter: TimeInterval = 2
     var alwaysShow = false
     var noAutofill = false
+    var fillHosts: [String] = []
     var importQR: String?
     var printSecret = false
     var selectEntry: String?
@@ -51,6 +52,8 @@ func usage() -> String {
       --select ПОДСТРОКА    выбрать запись по issuer/имени (иначе — первая TOTP)
       --rules FILE          правила автозаполнения (см. etc/autofill.rules)
       --no-autofill         не заполнять форму
+      --fill-hosts a,b      заполнять только на этих хостах (иначе — на любом)
+      --device-id ID        значение <device-id> (по умолчанию mac-intel)
       --useragent UA        User-Agent (по умолчанию AnyConnect Windows 4.10.06079)
       --version V           версия клиента в <version> (по умолчанию 4.10.06079)
       --timeout SEC         сколько ждать SSO (300)
@@ -85,6 +88,7 @@ func parseArgs() -> Args {
         case "--show-after": a.showAfter = TimeInterval(next(arg)) ?? 2
         case "--always-show": a.alwaysShow = true
         case "--no-autofill": a.noAutofill = true
+        case "--fill-hosts": a.fillHosts = next(arg).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         case "--probe": a.probe = true
         case "--dump-script": a.dumpScript = true
         case "--selftest": a.selfTest = true
@@ -105,6 +109,28 @@ func parseArgs() -> Args {
 }
 
 func out(_ s: String) { FileHandle.standardOutput.write(Data((s + "\n").utf8)) }
+
+/// Прячет значения токенов в отладочной печати. Тело auth-reply содержит
+/// рабочий session-token, а супервизор пишет весь вывод в журнал, который
+/// живёт до ротации.
+func mask(_ s: String) -> String {
+    var out = s
+    for tag in ["session-token", "sso-token", "session-id"] {
+        // Ищем заново на каждой итерации: строка меняется, старые индексы
+        // после замены недействительны.
+        while let open = out.range(of: "<\(tag)>"),
+              let close = out.range(of: "</\(tag)>", range: open.upperBound..<out.endIndex),
+              open.upperBound < close.lowerBound {
+            let n = out.distance(from: open.upperBound, to: close.lowerBound)
+            guard n > 0 else { break }
+            out.replaceSubrange(open.upperBound..<close.lowerBound, with: "\(n) символов скрыто")
+            // Дальше искать нечего: следующий поиск найдёт уже замаскированное
+            // и n станет нулём, поэтому выходим сразу.
+            break
+        }
+    }
+    return out
+}
 
 func jsonString(_ obj: Any) -> String {
     let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data("{}".utf8)
@@ -353,11 +379,17 @@ DispatchQueue.global().async {
         opts.creds = Credentials.fromEnvironment()
         let env = ProcessInfo.processInfo.environment
         if let code = env["OCBAR_TOTP_CODE"], !code.isEmpty {
-            opts.totpCode = code
+            opts.totpCode = code            // готовый код из внешней базы
         } else if let secret = opts.creds.totpSecret, !secret.isEmpty {
-            opts.totpCode = TOTP.code(secretBase32: secret)
-            if opts.totpCode == nil { Log.info("OCBAR_TOTP_SECRET не разобрался как base32 — TOTP не будет") }
+            if TOTP.code(secretBase32: secret) == nil {
+                Log.info("OCBAR_TOTP_SECRET не разобрался как base32 — код вводит человек")
+            } else {
+                opts.totpSecret = secret    // считаем в момент заполнения
+            }
         }
+        opts.cookieDomain = r.postURL.host
+        opts.fillHosts = args.fillHosts
+        if !opts.fillHosts.isEmpty { Log.debug("автозаполнение разрешено на: \(opts.fillHosts.joined(separator: ", "))") }
         DispatchQueue.main.async {
             webAuth = WebAuth(request: r.request, options: opts) { result in
                 switch result {
@@ -374,7 +406,7 @@ DispatchQueue.global().async {
                             let body = VPNProtocol.replyRequest(version: args.version, deviceID: args.deviceID,
                                                                 opaqueXML: r.request.opaqueXML, ssoToken: token)
                             let (data, _) = try http.post(r.postURL, body: body)
-                            if args.verbose, let s = String(data: data, encoding: .utf8) { Log.debug("ответ auth-reply:\n\(s)") }
+                            if args.verbose, let s = String(data: data, encoding: .utf8) { Log.debug("ответ auth-reply:\n\(mask(s))") }
                             let c = try VPNProtocol.parseComplete(data)
                             Log.info("сессия получена, server-cert-hash \(c.serverCertHash)")
                             out(jsonString([

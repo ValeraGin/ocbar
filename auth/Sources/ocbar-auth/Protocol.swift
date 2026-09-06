@@ -79,19 +79,19 @@ enum VPNProtocol {
 
     /// Требуется ли повторить init с <client-cert-fail/>.
     static func isCertRequest(_ data: Data) -> Bool {
-        guard let doc = try? XMLDocument(data: data) else { return false }
+        guard let doc = try? parse(data) else { return false }
         return !((try? doc.nodes(forXPath: "//client-cert-request")) ?? []).isEmpty
     }
 
     static func parseAuthRequest(_ data: Data) throws -> AuthRequest {
         let doc: XMLDocument
-        do { doc = try XMLDocument(data: data) }
+        do { doc = try parse(data) }
         catch { throw ProtocolError.badXML(error.localizedDescription) }
 
         if let err = text(doc, "//auth/error"), !err.isEmpty {
             throw ProtocolError.serverError(err)
         }
-        guard let login = text(doc, "//auth/sso-v2-login") else {
+        guard let login = text(doc, "//auth/sso-v2-login"), !login.isEmpty else {
             // Самая частая причина — группа вообще не SSO: шлюз прислал форму
             // с username/password (и, возможно, ждёт OTP вторым шагом).
             // Это не лечится на стороне клиента: такой группе нужен голый
@@ -113,7 +113,11 @@ enum VPNProtocol {
         guard let cookie = text(doc, "//auth/sso-v2-token-cookie-name") else {
             throw ProtocolError.missing("sso-v2-token-cookie-name")
         }
-        guard let opaque = (try? doc.nodes(forXPath: "//opaque"))?.first as? XMLElement else {
+        // ASA в части конфигураций отдаёт несколько <opaque>; шлюзу нужен тот,
+        // что помечен is-for="sg". Раньше брался первый в документе.
+        let opaqueNode = (try? doc.nodes(forXPath: "//opaque[@is-for='sg']"))?.first
+            ?? (try? doc.nodes(forXPath: "//opaque"))?.first
+        guard let opaque = opaqueNode as? XMLElement else {
             throw ProtocolError.missing("opaque")
         }
         return AuthRequest(
@@ -129,7 +133,7 @@ enum VPNProtocol {
 
     static func parseComplete(_ data: Data) throws -> AuthComplete {
         let doc: XMLDocument
-        do { doc = try XMLDocument(data: data) }
+        do { doc = try parse(data) }
         catch { throw ProtocolError.badXML(error.localizedDescription) }
 
         if let err = text(doc, "//auth/error"), !err.isEmpty {
@@ -148,15 +152,26 @@ enum VPNProtocol {
     /// <sso-v2-browser-mode>external</sso-v2-browser-mode> — если есть, шлюз
     /// готов к внешнему браузеру и webview не нужен.
     static func browserMode(_ data: Data) -> String? {
-        guard let doc = try? XMLDocument(data: data) else { return nil }
+        guard let doc = try? parse(data) else { return nil }
         return text(doc, "//sso-v2-browser-mode")
     }
 
     /// Способы аутентификации, которые сервер согласился использовать.
     static func offeredAuthMethods(_ data: Data) -> [String] {
-        guard let doc = try? XMLDocument(data: data),
+        guard let doc = try? parse(data),
               let nodes = try? doc.nodes(forXPath: "//auth-method") else { return [] }
         return nodes.compactMap { $0.stringValue }
+    }
+
+    /// Единственная точка разбора XML — и единственное место, где задаётся
+    /// запрет внешних сущностей.
+    ///
+    /// Без него ответ шлюза вида `<!DOCTYPE r [<!ENTITY x SYSTEM "file:///…">]>`
+    /// подставляет содержимое локального файла в элемент `<opaque>`, а тот по
+    /// протоколу возвращается шлюзу следующим запросом. То есть любой файл,
+    /// читаемый пользователем, уезжает на сервер. Проверено на этом коде.
+    private static func parse(_ data: Data) throws -> XMLDocument {
+        try XMLDocument(data: data, options: [.nodeLoadExternalEntitiesNever])
     }
 
     private static func text(_ doc: XMLDocument, _ xpath: String) -> String? {
@@ -166,9 +181,13 @@ enum VPNProtocol {
     }
 
     private static func esc(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;")
-         .replacingOccurrences(of: "<", with: "&lt;")
-         .replacingOccurrences(of: ">", with: "&gt;")
-         .replacingOccurrences(of: "\"", with: "&quot;")
+        // Значение приходит из cookie, то есть снаружи. Управляющие символы
+        // в XML недопустимы: с ними запрос не парсится, и шлюз отвечает
+        // невнятной ошибкой вместо понятной.
+        let cleaned = String(s.unicodeScalars.filter { $0.value == 9 || $0.value == 10 || $0.value == 13 || $0.value >= 32 })
+        return cleaned.replacingOccurrences(of: "&", with: "&amp;")
+                      .replacingOccurrences(of: "<", with: "&lt;")
+                      .replacingOccurrences(of: ">", with: "&gt;")
+                      .replacingOccurrences(of: "\"", with: "&quot;")
     }
 }

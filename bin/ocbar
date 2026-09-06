@@ -189,7 +189,7 @@ profiles_summary() {
         END { if (cur != "") print cur "|" nm "|" au }
     ' "$PROFILES"
 }
-profile_exists() { profile_list | grep -x "$1" >/dev/null; }
+profile_exists() { profile_list | grep -Fxq "$1"; }
 
 # Профиль → переменные P_*
 load_profile() {
@@ -212,6 +212,9 @@ load_profile() {
     P_KP_DB=$(profile_get "$p" keepass_db); P_KP_DB="${P_KP_DB/#\~/$HOME}"
     P_KP_SVC=$(profile_get "$p" keepass_keychain_service); P_KP_SVC="${P_KP_SVC:-keepassxc-docs}"
     P_HEALTH=$(profile_get "$p" healthcheck)
+    # Хосты, где разрешено автозаполнение. Пусто — заполняем везде, как раньше,
+    # но в лог попадёт хост каждой страницы, по нему список и составляется.
+    P_FILL_HOSTS=$(profile_get "$p" idp_hosts)
     case "$(global_get notifications)" in off|0|no) NOTIFY_ENABLED=0 ;; esac
     [ -n "$P_KP_ENTRY" ] && [ "$P_TOTP" = auto ] && P_TOTP=keepassxc
     P_RULES=$(profile_get "$p" rules); P_RULES="${P_RULES/#\~/$HOME}"
@@ -266,7 +269,13 @@ active_networks() { read_networks | while read -r n;     do is_off "$n" "$ROUTES
 # ----------------------------------------------------------- состояние ----
 env_get() { [ -f "$TUNNEL_ENV" ] && sed -n "s/^$1=//p" "$TUNNEL_ENV" | head -1 || true; }
 tunnel_pid() { [ -f "$PIDFILE" ] && grep -E '^[0-9]+$' "$PIDFILE" 2>/dev/null || true; }
-tunnel_alive() { local p; p=$(tunnel_pid); [ -n "$p" ] && ps -p "$p" >/dev/null 2>&1; }
+# Номер процесса переживает перезагрузку и достаётся кому попало. Без сверки
+# имени супервизор считает живым чужой процесс, а хелпер шлёт ему сигнал от
+# root. Поэтому проверяем, что это действительно openconnect.
+tunnel_alive() {
+    local p; p=$(tunnel_pid); [ -n "$p" ] || return 1
+    case "$(ps -p "$p" -o comm= 2>/dev/null)" in *openconnect) return 0 ;; *) return 1 ;; esac
+}
 is_paused() { [ -f "$PAUSED_FLAG" ]; }
 # paused — это подсостояние connected: процесс жив, сессия цела, но трафик
 # идёт мимо туннеля. Отдельное имя нужно, чтобы супервизор не «чинил» это.
@@ -284,24 +293,25 @@ tunnel_iface() {
     local n; n=$(read_networks | head -1)
     [ -n "$n" ] && route_via "$n"
 }
-# netstat -rn — самый дорогой вызов в status, а нужен он по разу на сеть.
-# Снимаем таблицу один раз за запуск: плагин меню зовёт status каждые 5 с.
-_ROUTES_CACHE=""
-routes_table() {
-    [ -n "$_ROUTES_CACHE" ] || _ROUTES_CACHE=$(netstat -rn -f inet 2>/dev/null)
-    printf '%s' "$_ROUTES_CACHE"
-}
+# Куда реально пойдёт трафик этой сети. Раньше здесь разбирался вывод
+# netstat, и это было неверно дважды: бралась не та колонка (у строк с
+# полем Expire последняя колонка — оно), а формат записи угадывался по
+# длине префикса, хотя BSD опускает её только для «классовых» масок.
+# Спрашиваем ядро — оно знает точно.
+#
+# Пробуем ПЕРВЫЙ адрес сети, а не нулевой: `route get 172.16.0.0` попадает
+# в default (ядро трактует .0 особо), а `route get 172.16.0.1` отвечает
+# верно. Проверено на живой таблице.
 route_via() { # cidr → интерфейс
-    local key; key=$(cidr_key "${1%%/*}" "${1#*/}")
-    routes_table | awk -v k="$key" '$1==k {print $NF; exit}'
-}
-cidr_key() {
-    local base="$1" len="$2" IFS=. a b c d; read -r a b c d <<< "$base"
-    case "$len" in
-        32) printf '%s' "$base" ;; 24) printf '%s.%s.%s' "$a" "$b" "$c" ;; 16) printf '%s.%s' "$a" "$b" ;; 8) printf '%s' "$a" ;;
-        *) if [ "$d" != 0 ]; then printf '%s/%s' "$base" "$len"; elif [ "$c" != 0 ]; then printf '%s.%s.%s/%s' "$a" "$b" "$c" "$len"
-           elif [ "$b" != 0 ]; then printf '%s.%s/%s' "$a" "$b" "$len"; else printf '%s/%s' "$a" "$len"; fi ;;
-    esac
+    local base="${1%%/*}" len="${1#*/}" probe
+    if [ "$len" = 32 ]; then
+        probe="$base"
+    else
+        local IFS=. a b c d; read -r a b c d <<< "$base"
+        d=$((d + 1)); [ "$d" -gt 254 ] && d=1
+        probe="$a.$b.$c.$d"
+    fi
+    route -n get "$probe" 2>/dev/null | awk '/interface:/{print $2; exit}'
 }
 active_iface() { route -n get default 2>/dev/null | awk '/interface:/{print $2}'; }
 active_service() {
@@ -314,7 +324,13 @@ active_service() {
     done
 }
 manifest_zones() { [ -f "$MANIFEST" ] && cat "$MANIFEST" || true; }
-sup_alive() { [ -f "$SUP_PID" ] && ps -p "$(cat "$SUP_PID" 2>/dev/null)" >/dev/null 2>&1; }
+sup_alive() {
+    local p; p=$(cat "$SUP_PID" 2>/dev/null | grep -E '^[0-9]+$') || return 1
+    [ -n "$p" ] || return 1
+    # Тот же расчёт, что и для туннеля: иначе после перезагрузки чужой процесс
+    # выдаёт себя за супервизора, launchd молча не стартует, а doctor врёт.
+    case "$(ps -p "$p" -o command= 2>/dev/null)" in *"$(basename "$SELF") supervise"*|*"ocbar supervise"*) return 0 ;; *) return 1 ;; esac
+}
 port53_busy() { nc -z -G 1 127.0.0.1 53 >/dev/null 2>&1; }
 services_with_localhost_dns() {
     local svc
@@ -470,6 +486,7 @@ authenticate() { # печатает "token hash post_url"
     local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
     local -a args=(--url "$P_URL" --useragent "$P_UA")
     [ -n "$P_RULES" ] && [ -f "$P_RULES" ] && args+=(--rules "$P_RULES")
+    [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
     [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
     [ "${OCBAR_VERBOSE:-}" = 1 ] && args+=(--verbose)
     local pw totp="" code=""; pw=$(kc_get "$P_SVC" "$P_USER")
@@ -597,8 +614,14 @@ cmd_status() {
         printf 'state=%s\nprofile=%s\ntundev=%s\nip=%s\nsince=%s\ngateway=%s\ndns=%s\nurl=%s\nmode=%s\nforeign=%s\nsupervisor=%s\niface=%s\n' \
             "$st" "$prof" "$dev" "$ip" "$since" "$gw" "$dns" "$url" "$mode" "$foreign" "$(sup_alive && echo 1 || echo 0)" "$(active_iface)"
         local n z
-        while read -r n; do [ -n "$n" ] || continue; printf 'route=%s %s %s\n' "$n" "$(route_via "$n")" "$(is_off "$n" "$ROUTES_OFF" && echo off || echo on)"; done <<< "$(read_networks)"
-        while read -r z d p; do [ -n "$z" ] || continue; printf 'zone=%s %s %s %s\n' "$z" "$d" "$(manifest_zones | grep -x "$z" >/dev/null && echo applied || echo -)" "$(is_off "$z" "$ZONES_OFF" && echo off || echo on)"; done <<< "$(read_zones)"
+        while read -r n; do
+            [ -n "$n" ] || continue
+            # Плейсхолдер обязателен: пустое поле схлопывается при разборе, и
+            # меню принимает признак «включено» за имя интерфейса.
+            printf 'route=%s %s %s\n' "$n" "$(route_via "$n" || true)" "$(is_off "$n" "$ROUTES_OFF" && echo off || echo on)" \
+                | sed 's/  / - /'
+        done <<< "$(read_networks)"
+        while read -r z d p; do [ -n "$z" ] || continue; printf 'zone=%s %s %s %s\n' "$z" "$d" "$(manifest_zones | grep -Fxq "$z" && echo applied || echo -)" "$(is_off "$z" "$ZONES_OFF" && echo off || echo on)"; done <<< "$(read_zones)"
         profiles_summary | while IFS= read -r line; do [ -n "$line" ] && printf 'profile_list=%s\n' "$line"; done
         printf 'default=%s\n' "$(profile_default)"
         return 0
@@ -636,11 +659,17 @@ cmd_routes() {
         add|on)
             valid_cidr "${2:-}" || die "routes add <CIDR>"
             mkdir -p "$USER_STATE"; [ -f "$ROUTES_OFF" ] && { grep -vx "$2" "$ROUTES_OFF" > "$ROUTES_OFF.tmp" || true; mv "$ROUTES_OFF.tmp" "$ROUTES_OFF"; }
-            [ "$(tunnel_state)" = connected ] && priv route-add "$2" || info "$2 включена; применится при подключении" ;;
+            case "$(tunnel_state)" in
+                connected|paused) priv route-add "$2" ;;
+                *) info "$2 включена; применится при подключении" ;;
+            esac ;;
         del|off)
             valid_cidr "${2:-}" || die "routes del <CIDR>"
-            mkdir -p "$USER_STATE"; read_networks | grep -x "$2" >/dev/null && { is_off "$2" "$ROUTES_OFF" || printf '%s\n' "$2" >> "$ROUTES_OFF"; }
-            [ "$(tunnel_state)" = connected ] && priv route-del "$2" || info "$2 выключена" ;;
+            mkdir -p "$USER_STATE"; read_networks | grep -Fxq "$2" && { is_off "$2" "$ROUTES_OFF" || printf '%s\n' "$2" >> "$ROUTES_OFF"; }
+            case "$(tunnel_state)" in
+                connected|paused) priv route-del "$2" ;;
+                *) info "$2 выключена" ;;
+            esac ;;
         toggle)
             valid_cidr "${2:-}" || die "routes toggle <CIDR>"
             if is_off "$2" "$ROUTES_OFF"; then cmd_routes add "$2"; else cmd_routes del "$2"; fi ;;
@@ -659,7 +688,7 @@ cmd_dns_status() {
     local found=0 f z
     for f in "$RESOLVER_DIR"/*; do
         [ -e "$f" ] || continue; z=$(basename "$f"); found=1
-        if manifest_zones | grep -x "$z" >/dev/null; then printf '  %s %s %s(наша)%s\n' "$(pad "$z" 32)" "$(tr '\n' ' ' < "$f")" "$c_dim" "$c_off"
+        if manifest_zones | grep -Fxq "$z"; then printf '  %s %s %s(наша)%s\n' "$(pad "$z" 32)" "$(tr '\n' ' ' < "$f")" "$c_dim" "$c_off"
         else printf '  %s %s %s(чужая, не трогаем)%s\n' "$(pad "$z" 32)" "$(tr '\n' ' ' < "$f")" "$c_dim" "$c_off"; fi
     done
     [ "$found" = 1 ] || skip "пусто"
@@ -692,10 +721,23 @@ cmd_dns() {
         apply)  cmd_dns_apply ;;
         clear)  priv dns-clear ;;
         init)   cmd_dns_init "${2:-}" "${3:-}" ;;
-        on|add)  valid_zone "${2:-}" || die "dns on <зона>"; mkdir -p "$USER_STATE"; [ -f "$ZONES_OFF" ] && { grep -vx "$2" "$ZONES_OFF" > "$ZONES_OFF.tmp" || true; mv "$ZONES_OFF.tmp" "$ZONES_OFF"; }
-                 [ "$(tunnel_state)" = connected ] && cmd_dns_apply || info "$2 включена; применится при подключении" ;;
-        off|del) valid_zone "${2:-}" || die "dns off <зона>"; mkdir -p "$USER_STATE"; is_off "$2" "$ZONES_OFF" || printf '%s\n' "$2" >> "$ZONES_OFF"
-                 [ "$(tunnel_state)" = connected ] && cmd_dns_apply || info "$2 выключена" ;;
+        on|add)
+            valid_zone "${2:-}" || die "dns on <зона>"
+            mkdir -p "$USER_STATE"
+            [ -f "$ZONES_OFF" ] && { grep -Fvx "$2" "$ZONES_OFF" > "$ZONES_OFF.tmp" || true; mv "$ZONES_OFF.tmp" "$ZONES_OFF"; }
+            local zl; zl=$(read_zones | awk -v z="$2" '$1==z {print $2, $3; exit}')
+            case "$(tunnel_state)" in
+                connected|paused) priv zone-add "$2" ${zl:-vpn 53} ;;
+                *) info "$2 включена; применится при подключении" ;;
+            esac ;;
+        off|del)
+            valid_zone "${2:-}" || die "dns off <зона>"
+            mkdir -p "$USER_STATE"
+            is_off "$2" "$ZONES_OFF" || printf '%s\n' "$2" >> "$ZONES_OFF"
+            case "$(tunnel_state)" in
+                connected|paused) priv zone-del "$2" ;;
+                *) info "$2 выключена" ;;
+            esac ;;
         toggle)  valid_zone "${2:-}" || die "dns toggle <зона>"; if is_off "$2" "$ZONES_OFF"; then cmd_dns on "$2"; else cmd_dns off "$2"; fi ;;
         *) die "dns: status | apply | clear | init <файл> <DNS|vpn> | on|off|toggle <зона>" ;;
     esac
@@ -817,9 +859,16 @@ cmd_cleanup() { priv cleanup; }
 # Цикл: держать туннель профиля из $DESIRED. Опрос раз в 5 с (DECISIONS D9).
 wake_ts() { sysctl -n kern.waketime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p'; }
 primary_iface() { scutil <<< 'show State:/Network/Global/IPv4' 2>/dev/null | awk '/PrimaryInterface/{print $3}'; }
-tunnel_probe() { # 0 = туннель отвечает
-    local dns; dns=$(env_get DNS); dns="${dns%% *}"
-    [ -n "$dns" ] || return 0     # нечего спрашивать — считаем живым, пока pid жив
+# 0 = туннель отвечает (или спросить нечего — тогда критерий только процесс).
+# Важно: спрашивать резолвер шлюза можно ТОЛЬКО если до него есть маршрут
+# через туннель. Иначе проба честно проваливается на здоровом туннеле —
+# например, когда сеть с этим резолвером выключена в меню или её нет в
+# networks.conf, — и супервизор устраивает переподключение на ровном месте.
+tunnel_probe() {
+    local dns dev; dns=$(env_get DNS); dns="${dns%% *}"
+    [ -n "$dns" ] || return 0
+    dev=$(env_get TUNDEV); [ -n "$dev" ] || return 0
+    [ "$(route_via "$dns/32")" = "$dev" ] || return 0
     dig +time=2 +tries=1 @"$dns" . NS >/dev/null 2>&1
 }
 
@@ -846,9 +895,20 @@ cmd_supervise() {
     # раньше — значит менять целую сессию (новый SAML и одноразовый код) там,
     # где хватило бы нескольких секунд терпения.
     local reconnect_grace="${OCBAR_RECONNECT_GRACE:-100}"
-    local last_wake last_iface backoff=5 next_try=0 fails=0 n=0 desired st now wake iface
+    # Предохранитель от шторма: полный вход тратит одноразовый код, а несколько
+    # неверных подряд блокируют учётную запись. Больше этого числа входов за
+    # час супервизор не делает — ждёт человека.
+    local logins_max="${OCBAR_LOGINS_PER_HOUR:-6}" logins_win_start=0 logins=0
+    local last_wake last_iface backoff=5 next_try=0 n=0 desired st now wake iface
     local probe_bad_since=0 last_probe_log=0
     last_wake=$(wake_ts); last_iface=$(primary_iface)
+
+    # Хвосты от прошлой сессии (аварийное завершение, перезагрузка) убирает
+    # только connect. Если профиль снят, зоны и маршруты висели бы вечно.
+    if [ ! -f "$DESIRED" ] && { [ "$(manifest_zones | grep -c . || true)" -gt 0 ] || [ -s "$ROUTES_STATE" ]; } && ! tunnel_alive; then
+        log "при старте найдены следы прошлой сессии без туннеля — убираю"
+        priv cleanup >>"$SUP_LOG" 2>&1 || true
+    fi
     while :; do
         n=$((n+1)); now=$(date +%s)
         if [ "$(stat -f %m "$SELF" 2>/dev/null || echo 0)" != "$self_mtime" ]; then
@@ -860,12 +920,12 @@ cmd_supervise() {
         st=$(tunnel_state)
         wake=$(wake_ts); iface=$(primary_iface)
         if [ "$wake" != "$last_wake" ]; then
-            log "событие: пробуждение ($(date -r "$wake" '+%H:%M:%S' 2>/dev/null))"; last_wake="$wake"; fails=0; next_try=0
+            log "событие: пробуждение ($(date -r "$wake" '+%H:%M:%S' 2>/dev/null))"; last_wake="$wake"; next_try=0; backoff=5
             [ "$DRY_RUN" = 1 ] || sleep 3   # сети нужно время после сна
         fi
         if [ "$iface" != "$last_iface" ]; then
             log "событие: смена интерфейса $last_iface → ${iface:-нет}"
-            last_iface="$iface"; fails=0; probe_bad_since=0
+            last_iface="$iface"; probe_bad_since=0; next_try=0; backoff=5
             # Восстановиться по старому локальному адресу openconnect не сможет
             # («Can't assign requested address» в логе), поэтому ждать смысла
             # нет: сразу закрываем сессию и заходим заново.
@@ -876,14 +936,19 @@ cmd_supervise() {
             fi
         fi
 
+        # Отсчёт потери связи имеет смысл только в connected. Иначе после
+        # паузы или чужого переподключения первая же неудачная проба увидит
+        # «ждём три часа» и мгновенно порвёт живую сессию.
+        [ "$st" = connected ] || probe_bad_since=0
+
         if [ -n "$desired" ]; then
             if [ "$st" = paused ]; then
                 # На паузе DNS шлюза недостижим по определению — проверять
                 # туннель его опросом нельзя, живость процесса и есть критерий.
-                fails=0; backoff=5
+                backoff=5
             elif [ "$st" = connected ]; then
                 if tunnel_probe; then
-                    fails=0; backoff=5
+                    backoff=5
                     # маршруты могли слететь при пересоздании utun
                     local dev miss; dev=$(env_get TUNDEV); miss=""
                     while read -r net; do [ -n "$net" ] && [ "$(route_via "$net")" != "$dev" ] && miss="$miss $net"; done <<< "$(active_networks)"
@@ -892,7 +957,7 @@ cmd_supervise() {
                         log "связь восстановилась сама за $((now - probe_bad_since)) с — вход не потребовался"
                         notify "ocbar: связь восстановлена" "openconnect поднял сессию сам, без повторного входа"
                     fi
-                    probe_bad_since=0
+                    probe_bad_since=0; backoff=5
                 else
                     # Процесс жив — значит openconnect либо ещё держит связь,
                     # либо сам её восстанавливает. Не мешаем: новый вход стоит
@@ -907,13 +972,34 @@ cmd_supervise() {
                         log "за $waited с сессия не восстановилась — закрываю и захожу заново"
                         notify "ocbar: связь потеряна" "Сессия не восстановилась за $waited с, подключаюсь заново"
                         priv tunnel-stop || true
-                        probe_bad_since=0; fails=0; next_try=0
+                        probe_bad_since=0
+                        # Этот путь тоже наращивает задержку: раньше он её
+                        # сбрасывал, и при стабильно неудачной пробе получался
+                        # полный вход каждые сто секунд без конца.
+                        next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
                     fi
                 fi
             elif [ "$st" = starting ]; then
                 :
+            elif is_paused; then
+                # Туннель умер, но человек просил «как будто выключен».
+                # Молча поднимать и отменять его решение — нельзя.
+                if [ $((now - last_probe_log)) -ge 300 ]; then
+                    log "туннель не поднят, но стоит пауза — не подключаюсь (ocbar resume отменит паузу)"
+                    last_probe_log=$now
+                fi
             elif [ "$now" -ge "$next_try" ]; then
-                log "туннель не поднят, профиль $desired — подключаю (backoff $backoff с)"
+                if [ $((now - logins_win_start)) -ge 3600 ]; then logins_win_start=$now; logins=0; fi
+                if [ "$logins" -ge "$logins_max" ]; then
+                    if [ $((now - last_probe_log)) -ge 300 ]; then
+                        log "за час уже $logins входов — больше не пробую автоматически (ocbar connect вручную)"
+                        notify "ocbar: слишком много входов" "Автоподключение приостановлено, чтобы не заблокировать учётную запись"
+                        last_probe_log=$now
+                    fi
+                    sleep 5; continue
+                fi
+                logins=$((logins + 1))
+                log "туннель не поднят, профиль $desired — подключаю (backoff $backoff с, вход $logins/$logins_max за час)"
                 if ( load_profile "$desired" && do_connect ) >>"$SUP_LOG" 2>&1; then
                     backoff=5
                 else

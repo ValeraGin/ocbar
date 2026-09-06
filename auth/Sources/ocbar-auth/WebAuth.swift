@@ -15,8 +15,11 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         var insecure = false
         var rules: [AutofillRule] = []
         var creds = Credentials()
-        var totpCode: String? = nil
+        var totpSecret: String? = nil     // код считаем в момент заполнения, не заранее
+        var totpCode: String? = nil       // если код пришёл готовым (из внешней базы)
         var autofill = true
+        var cookieDomain: String? = nil   // домен шлюза: cookie принимаем только оттуда
+        var fillHosts: [String] = []      // где разрешено заполнять форму; пусто = везде
     }
 
     private let request: AuthRequest
@@ -151,7 +154,16 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         guard !finished else { return }
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
             guard let self = self, !self.finished else { return }
-            if let tok = cookies.first(where: { $0.name == self.request.tokenCookieName }) {
+            // Имя cookie задаёт шлюз, а хранилище общее и постоянное. Без
+            // проверки домена сюда попадала бы cookie от другого шлюза или
+            // остаток от прошлого запуска.
+            let matching = cookies.filter { c in
+                guard c.name == self.request.tokenCookieName else { return false }
+                guard let want = self.opts.cookieDomain, !want.isEmpty else { return true }
+                let dom = c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain
+                return want == dom || want.hasSuffix("." + dom)
+            }
+            if let tok = matching.first {
                 Log.info("cookie \(tok.name) получена (домен \(tok.domain), \(tok.value.count) символов)")
                 self.finish(.success(tok.value))
                 return
@@ -229,6 +241,18 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     private func autofillTick() {
         guard !finished, opts.autofill, !opts.rules.isEmpty, stoppedReason == nil else { return }
         guard fillAttempts < 12 else { return }
+        // Правила — это просто селекторы, они совпадут на любой странице с
+        // похожими полями. Без привязки к адресу логин с паролем ушли бы
+        // туда, куда увёл бы шлюз.
+        let host = webView.url?.host ?? ""
+        if !opts.fillHosts.isEmpty && !opts.fillHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
+            if fillAttempts == 0 {
+                Log.info("страница \(host) не в списке разрешённых для автозаполнения — заполняет человек")
+                fillAttempts = 1
+                show()
+            }
+            return
+        }
         let sigJS = "location.href + '|' + document.querySelectorAll('input').length + '|' + (document.body ? document.body.innerText.length : 0)"
         webView.evaluateJavaScript(sigJS) { [weak self] sig, _ in
             guard let self = self, let sig = sig as? String else { return }
@@ -236,7 +260,18 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             self.fillAttempts += 1
             // Второй автоввод TOTP бессмысленен (тот же секрет) и опасен:
             // несколько неверных кодов подряд блокируют учётную запись.
-            let code = self.totpFills > 0 ? nil : self.opts.totpCode
+            // Код считается ЗДЕСЬ, а не при старте: между запуском и появлением
+            // поля проходят десятки секунд, а код живёт тридцать. Раньше
+            // подставлялся код, сгенерированный до открытия окна, и он вполне
+            // мог протухнуть — при том что вторая попытка запрещена намеренно.
+            var code: String? = nil
+            if self.totpFills == 0 {
+                if let secret = self.opts.totpSecret, !secret.isEmpty {
+                    code = TOTP.code(secretBase32: secret)
+                } else {
+                    code = self.opts.totpCode
+                }
+            }
             let js = Autofill.script(rules: self.opts.rules, creds: self.opts.creds, totpCode: code)
             self.webView.evaluateJavaScript(js) { result, err in
                 if let err = err { Log.debug("autofill JS: \(err.localizedDescription)"); return }

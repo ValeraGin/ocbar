@@ -21,6 +21,8 @@
 #   route-add <cidr>     маршрут через живой туннель (+ в routes.wanted)
 #   route-del <cidr>
 #   dns-apply            stdin: "<зона> <dns> [порт]" — применить зоны, снять свои лишние
+#   zone-add <зона> <dns|vpn> [порт]   добавить зону в список и применить
+#   zone-del <зона>      убрать зону из списка и снять
 #   dns-clear            снять только свои зоны
 #   cleanup              мусор от прошлых сессий
 #   flush-dns
@@ -35,7 +37,7 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.4.0"
+VERSION="0.5.0"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
 TRUST="$PREFIX/etc/ocbar/trust.sha256"
@@ -179,33 +181,35 @@ verify_trust() { # печатает путь к проверенному opencon
 }
 
 # --------------------------------------------------------------- маршруты ----
-route_present() { # cidr → печатает utun, через который идёт
-    local base="${1%%/*}" len="${1#*/}" key
-    # netstat показывает 10/8 как "10", 172.16/12 как "172.16/12", хосты как есть
-    key=$(cidr_key "$base" "$len")
-    netstat -rn -f inet 2>/dev/null | awk -v k="$key" '$1==k {print $NF; exit}'
-}
-cidr_key() { # base len → как это печатает netstat
-    local base="$1" len="$2" IFS=. a b c d
-    read -r a b c d <<< "$base"
-    if [ "$len" = 32 ]; then printf '%s' "$base"
-    elif [ "$len" = 24 ]; then printf '%s.%s.%s' "$a" "$b" "$c"
-    elif [ "$len" = 16 ]; then printf '%s.%s' "$a" "$b"
-    elif [ "$len" = 8 ]; then printf '%s' "$a"
+# Куда реально пойдёт трафик сети. Разбор вывода netstat здесь был неверен
+# (бралась не та колонка, а формат записи угадывался по длине префикса) —
+# спрашиваем ядро. Пробуем ПЕРВЫЙ адрес сети, а не нулевой: на .0 ядро
+# отвечает маршрутом по умолчанию.
+route_via() { # cidr → интерфейс
+    local base="${1%%/*}" len="${1#*/}" probe
+    if [ "$len" = 32 ]; then
+        probe="$base"
     else
-        # нестандартная длина: netstat печатает минимальную запись + /len
-        if [ "$d" != 0 ]; then printf '%s/%s' "$base" "$len"
-        elif [ "$c" != 0 ]; then printf '%s.%s.%s/%s' "$a" "$b" "$c" "$len"
-        elif [ "$b" != 0 ]; then printf '%s.%s/%s' "$a" "$b" "$len"
-        else printf '%s/%s' "$a" "$len"; fi
+        local IFS=. a b c d; read -r a b c d <<< "$base"
+        d=$((d + 1)); [ "$d" -gt 254 ] && d=1
+        probe="$a.$b.$c.$d"
     fi
+    route -n get "$probe" 2>/dev/null | awk '/interface:/{print $2; exit}'
 }
 
 add_route() { # cidr utun
-    if [ "$(route_present "$1")" = "$2" ]; then say "маршрут уже есть: $1 → $2"; return 0; fi
-    run route -n add -net "$1" -interface "$2" >/dev/null
-    grep -qx "$1 $2" "$ROUTES_STATE" 2>/dev/null || printf '%s %s\n' "$1" "$2" >> "$ROUTES_STATE"
-    say "маршрут: $1 → $2"
+    # Неудача одного маршрута не должна обрывать всё остальное: из-за set -e
+    # падение здесь оставляло туннель без части маршрутов и совсем без зон
+    # DNS, причём молча.
+    if run route -n add -net "$1" -interface "$2" >/dev/null 2>&1; then
+        say "маршрут: $1 → $2"
+    elif [ "$(route_via "$1")" = "$2" ]; then
+        say "маршрут уже есть: $1 → $2"
+    else
+        say "не удалось поставить маршрут $1 → $2 (продолжаю)"
+        return 0
+    fi
+    grep -Fqx "$1 $2" "$ROUTES_STATE" 2>/dev/null || printf '%s %s\n' "$1" "$2" >> "$ROUTES_STATE"
 }
 del_route() { # cidr
     run route -n delete -net "$1" >/dev/null 2>&1 || true
@@ -312,7 +316,10 @@ cmd_tunnel_start() {
         esac
     done
     [ -n "$cookie" ] || die "в stdin нет cookie=…"
-    rm -f "$PAUSED"        # новое подключение начинается не на паузе
+    # Флаг паузы снимает только явный resume или disconnect. Здесь его тоже
+    # снимаем — но лишь потому, что tunnel-start зовётся человеком (connect),
+    # а не супервизором при восстановлении: тот обязан паузу уважать.
+    [ "${OCBAR_KEEP_PAUSE:-0}" = 1 ] || rm -f "$PAUSED"
     printf '%s' "$nets"  > "$ROUTES_WANTED"
     printf '%s' "$zones" > "$ZONES_WANTED"
     rm -f "$ROUTES_STATE" "$GW_ROUTE"
@@ -446,12 +453,7 @@ vpnc_connect() {
 
     apply_wanted_routes "$dev"
 
-    # Зоны: "vpn" вместо адреса = первый DNS, который прислал шлюз.
-    if [ -s "$ZONES_WANTED" ]; then
-        local vpndns="${INTERNAL_IP4_DNS%% *}"
-        [ -n "$vpndns" ] || say "шлюз не прислал DNS — зоны с 'vpn' пропущены"
-        awk -v d="$vpndns" '$2=="vpn" { if (d=="") next; $2=d } {print}' "$ZONES_WANTED" | apply_zones
-    fi
+    apply_wanted_zones
 }
 
 vpnc_disconnect() {
@@ -496,15 +498,20 @@ cmd_suspend() {
     say "пауза: маршруты и зоны сняты, туннель (pid $(tunnel_pid)) оставлен поднятым"
 }
 
+# Применить зоны из wanted, подставив резолвер шлюза вместо слова vpn.
+apply_wanted_zones() {
+    [ -s "$ZONES_WANTED" ] || { clear_zones; return 0; }
+    local vpndns; vpndns=$(sed -n 's/^DNS=//p' "$TUNNEL_ENV" 2>/dev/null | head -1); vpndns="${vpndns%% *}"
+    [ -n "$vpndns" ] || say "шлюз не прислал DNS — зоны со значением vpn пропущены"
+    awk -v d="$vpndns" '$2=="vpn" { if (d=="") next; $2=d } {print}' "$ZONES_WANTED" | apply_zones
+}
+
 cmd_resume() {
     tunnel_alive || die "туннель не поднят — возвращать некуда"
     local dev; dev=$(tunnel_dev)
     valid_utun "$dev" || die "не знаю интерфейс туннеля (нет TUNDEV в $TUNNEL_ENV)"
     apply_wanted_routes "$dev"
-    if [ -s "$ZONES_WANTED" ]; then
-        local vpndns; vpndns=$(sed -n 's/^DNS=//p' "$TUNNEL_ENV" | head -1); vpndns="${vpndns%% *}"
-        awk -v d="$vpndns" '$2=="vpn" { if (d=="") next; $2=d } {print}' "$ZONES_WANTED" | apply_zones
-    fi
+    apply_wanted_zones
     if [ "$DRY_RUN" = 1 ]; then printf '  $ rm -f %s\n' "$PAUSED"; else rm -f "$PAUSED"; fi
     say "возобновлено: маршруты и зоны на месте"
 }
@@ -551,15 +558,38 @@ case "$cmd" in
     vpnc)         cmd_vpnc ;;
     route-add)
         valid_cidr "${1:-}" || die "некорректный CIDR: ${1:-}"
+        ensure_state_dir
+        grep -Fqx "$1" "$ROUTES_WANTED" 2>/dev/null || printf '%s\n' "$1" >> "$ROUTES_WANTED"
+        # На паузе список правим, а таблицу — нет: применится при resume.
+        if [ -f "$PAUSED" ]; then say "маршрут в списке: $1 (стоит пауза, применю при возобновлении)"; exit 0; fi
         dev=$(tunnel_dev); valid_utun "$dev" || die "туннель не поднят (нет TUNDEV в $TUNNEL_ENV)"
         [ "$(tunnel_state)" = connected ] || die "туннель не в состоянии connected"
-        ensure_state_dir
-        add_route "$1" "$dev"
-        grep -qx "$1" "$ROUTES_WANTED" 2>/dev/null || printf '%s\n' "$1" >> "$ROUTES_WANTED" ;;
+        add_route "$1" "$dev" ;;
     route-del)
         valid_cidr "${1:-}" || die "некорректный CIDR: ${1:-}"
-        del_route "$1"
-        if [ -f "$ROUTES_WANTED" ]; then grep -vx "$1" "$ROUTES_WANTED" > "$ROUTES_WANTED.tmp" || true; mv "$ROUTES_WANTED.tmp" "$ROUTES_WANTED"; fi ;;
+        if [ -f "$ROUTES_WANTED" ]; then grep -Fvx "$1" "$ROUTES_WANTED" > "$ROUTES_WANTED.tmp" || true; mv "$ROUTES_WANTED.tmp" "$ROUTES_WANTED"; fi
+        [ -f "$PAUSED" ] && { say "маршрут убран из списка: $1 (стоит пауза)"; exit 0; }
+        del_route "$1" ;;
+    zone-add)
+        # Правка списка зон переживает реконнект: раньше zones.wanted писался
+        # один раз при подключении, и выключенная зона возвращалась сама.
+        valid_zone "${1:-}" || die "zone-add <зона> <dns|vpn> [порт]"
+        ensure_state_dir
+        grep -Fv "${1} " "$ZONES_WANTED" 2>/dev/null > "$ZONES_WANTED.tmp" || true
+        printf '%s %s %s\n' "$1" "${2:-vpn}" "${3:-53}" >> "$ZONES_WANTED.tmp"
+        mv "$ZONES_WANTED.tmp" "$ZONES_WANTED"
+        say "зона в списке: $1 → ${2:-vpn}"
+        [ -f "$PAUSED" ] && { say "стоит пауза — применю при возобновлении"; exit 0; }
+        apply_wanted_zones ;;
+    zone-del)
+        valid_zone "${1:-}" || die "zone-del <зона>"
+        if [ -f "$ZONES_WANTED" ]; then
+            grep -Fv "${1} " "$ZONES_WANTED" > "$ZONES_WANTED.tmp" || true
+            mv "$ZONES_WANTED.tmp" "$ZONES_WANTED"
+        fi
+        say "зона убрана из списка: $1"
+        [ -f "$PAUSED" ] && exit 0
+        apply_wanted_zones ;;
     dns-apply)    apply_zones ;;
     dns-clear)    clear_zones ;;
     cleanup)      cmd_cleanup ;;

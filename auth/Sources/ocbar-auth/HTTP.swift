@@ -76,6 +76,12 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
         return try out.get()
     }
 
+    private func requireSecure(_ url: URL) throws {
+        guard url.scheme?.lowercased() == "https" else {
+            throw ProtocolError.badXML("редирект на незащищённый адрес \(url.scheme ?? "?")://\(url.host ?? "?") — отказываюсь")
+        }
+    }
+
     private func headers(_ req: inout URLRequest) {
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         req.setValue("*/*", forHTTPHeaderField: "Accept")
@@ -98,6 +104,7 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
             Log.debug("GET \(target.absoluteString) → \(r.status)\(r.location.map { " Location: \($0)" } ?? "")")
             if (301...308).contains(r.status), let loc = r.location,
                let next = URL(string: loc, relativeTo: target)?.absoluteURL {
+                try requireSecure(next)
                 hops.append("\(r.status) → \(next.absoluteString)")
                 target = next
                 continue
@@ -122,6 +129,10 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
             Log.debug("POST \(target.absoluteString) → \(r.status), \(r.body.count) байт")
             if (301...308).contains(r.status), let loc = r.location,
                let next = URL(string: loc, relativeTo: target)?.absoluteURL {
+                // Тело этого POST содержит sso-token. Уйти по редиректу на
+                // http:// значит отдать его открытым текстом, причём проверка
+                // сертификата к такому запросу уже неприменима.
+                try requireSecure(next)
                 target = next
                 continue
             }

@@ -21,7 +21,7 @@ class Ocbar < Formula
     bin.install "bin/ocbar"
     (pkgshare/"swiftbar").install "swiftbar/ocbar.5s.sh"
     (pkgshare/"examples").install Dir["etc/*.example"]
-    doc.install Dir["docs/0*.md"], "README.md"
+    doc.install Dir["docs/0*.md"], "README.md", "INSTALL.md", "TROUBLESHOOTING.md", "ROADMAP.md", "DECISIONS.md"
   end
 
   def caveats
