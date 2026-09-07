@@ -103,4 +103,5 @@ struct AboutView: View {
 enum WindowID {
     static let about = "about"
     static let logs = "logs"
+    static let profiles = "profiles"
 }
