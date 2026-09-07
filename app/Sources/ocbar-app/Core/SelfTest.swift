@@ -128,3 +128,72 @@ enum SelfTest {
         return failures == 0 ? 0 : 1
     }
 }
+
+// `--selftest --live-actions` — проверка действий на живом подключении тем
+// же кодом, которым их делает меню: OcbarClient.action → ocbar → хелпер.
+// Меняет состояние системы, поэтому отдельным флагом: сеть и зона
+// выключаются и возвращаются, туннель ставится на паузу и снимается с неё.
+extension SelfTest {
+    static func liveActions() -> Int32 {
+        var failures = 0
+        let client = OcbarClient.shared
+        func step(_ name: String, _ condition: @autoclosure () -> Bool, _ detail: String = "") {
+            if condition() { print("  [ OK ] \(name)") }
+            else { failures += 1; print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)") }
+        }
+        func settle() { Thread.sleep(forTimeInterval: 1.0) }
+
+        print("ocbar-app selftest --live-actions")
+        let start = client.status()
+        guard start.presentation == .connected else {
+            print("  [ -- ] туннель не поднят (состояние: \(start.state.rawValue)) — проверять нечего")
+            return 0
+        }
+        print("  исходно: \(start.profile) · \(start.tundev) · сетей \(start.routes.count) · зон \(start.zones.count)")
+
+        // --- сеть ---
+        if let route = start.routes.first(where: { $0.enabled }) {
+            _ = client.toggleRoute(route.net); settle()
+            let off = client.status().routes.first { $0.net == route.net }
+            step("сеть \(route.net) выключена", off?.enabled == false)
+            step("маршрут снят", off?.via != start.tundev, off?.via ?? "нет")
+            _ = client.toggleRoute(route.net); settle()
+            let on = client.status().routes.first { $0.net == route.net }
+            step("сеть \(route.net) вернулась", on?.enabled == true)
+            step("маршрут вернулся в \(start.tundev)", on?.via == start.tundev, on?.via ?? "нет")
+        }
+
+        // --- зона ---
+        if let zone = start.zones.first(where: { $0.enabled && $0.applied }) {
+            _ = client.toggleZone(zone.zone); settle()
+            let off = client.status().zones.first { $0.zone == zone.zone }
+            step("зона \(zone.zone) выключена", off?.enabled == false)
+            step("файл в /etc/resolver снят", off?.applied == false)
+            _ = client.toggleZone(zone.zone); settle()
+            let on = client.status().zones.first { $0.zone == zone.zone }
+            step("зона \(zone.zone) вернулась", on?.enabled == true)
+            step("файл в /etc/resolver вернулся", on?.applied == true)
+        }
+
+        // --- пауза ---
+        _ = client.pause(); settle()
+        let paused = client.status()
+        step("состояние — пауза", paused.presentation == .paused, paused.state.rawValue)
+        step("зоны сняты", paused.zones.allSatisfy { !$0.applied }, "\(paused.zonesApplied.count) осталось")
+        step("туннель жив", !paused.tundev.isEmpty && paused.tundev == start.tundev)
+        _ = client.resume(); settle()
+        let resumed = client.status()
+        step("возобновлено", resumed.presentation == .connected, resumed.state.rawValue)
+        step("сети вернулись",
+             resumed.routes.filter { $0.enabled }.allSatisfy { $0.via == resumed.tundev },
+             resumed.routes.map { "\($0.net)→\($0.via ?? "нет")" }.joined(separator: " "))
+        step("зоны вернулись",
+             resumed.zonesApplied.count == start.zonesApplied.count,
+             "\(resumed.zonesApplied.count) из \(start.zonesApplied.count)")
+        step("сессия та же (время не сбросилось)",
+             resumed.since == start.since, humanSince(resumed.since))
+
+        print(failures == 0 ? "live-actions: всё OK" : "live-actions: провалов \(failures)")
+        return failures == 0 ? 0 : 1
+    }
+}

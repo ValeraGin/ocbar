@@ -38,7 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Только значок в меню-баре: ни в Dock, ни в переключателе приложений
         // ему делать нечего.
         NSApp.setActivationPolicy(.accessory)
-        if CommandLine.arguments.contains("--selftest") { exit(SelfTest.run()) }
+        if CommandLine.arguments.contains("--selftest") {
+            var code = SelfTest.run()
+            if CommandLine.arguments.contains("--live-actions") { code += SelfTest.liveActions() }
+            exit(code)
+        }
         OcbarClient.shared.preloadVersions()
         if CommandLine.arguments.contains("--stage") { openStage() }
         // --shot <файл>: снять витрину в PNG и выйти. Нужен, чтобы смотреть
