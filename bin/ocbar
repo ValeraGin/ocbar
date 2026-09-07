@@ -37,6 +37,7 @@ DESIRED="$USER_STATE/desired"            # имя профиля, который
 SUP_PID="$USER_STATE/supervisor.pid"
 SUP_CODE="$USER_STATE/supervisor.code-mtime"   # с какой версией скрипта он работает
 NEEDS_LOGIN="$USER_STATE/needs-login"    # автоподключение упёрлось во вход, ждём человека
+LINK_LOST="$USER_STATE/link-lost"        # отметка времени: с какого момента проба не проходит
 ROUTES_OFF="$USER_STATE/routes.disabled" # сети из networks.conf, выключенные из меню
 ZONES_OFF="$USER_STATE/zones.disabled"
 LOG_DIR="$HOME/Library/Logs/ocbar"
@@ -747,7 +748,7 @@ do_connect() { # профиль уже загружен
     [ "$(tunnel_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
     mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
-    rm -f "$NEEDS_LOGIN" 2>/dev/null || true
+    rm -f "$NEEDS_LOGIN" "$LINK_LOST" 2>/dev/null || true
     notify "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
     report_health || true
 }
@@ -788,7 +789,7 @@ cmd_connect() {
 }
 
 cmd_disconnect() {
-    rm -f "$DESIRED" 2>/dev/null || true
+    rm -f "$DESIRED" "$LINK_LOST" 2>/dev/null || true
     if ! tunnel_alive && [ "$(env_get STATE)" != connected ] && [ ! -s "$ROUTES_STATE" ] && [ "$(manifest_zones | grep -c .)" = 0 ]; then
         info "не подключён"; return 0
     fi
@@ -817,6 +818,12 @@ cmd_status() {
 
     if [ "$short" = 1 ]; then
         printf 'paused=%s\nneeds_login=%s\n' "$(is_paused && echo 1 || echo 0)" "$([ -f "$NEEDS_LOGIN" ] && echo 1 || echo 0)"
+        # Потеря связи — состояние живого туннеля, о котором знает только
+        # супервизор. Без него отметка устаревает мгновенно (он же её и
+        # снимает), поэтому мёртвый супервизор её не показывает.
+        if [ "$st" = connected ] && [ -f "$LINK_LOST" ] && sup_alive; then
+            printf 'link_lost=%s\n' "$(cat "$LINK_LOST" 2>/dev/null)"
+        fi
         printf 'state=%s\nprofile=%s\ntundev=%s\nip=%s\nsince=%s\ngateway=%s\ndns=%s\nurl=%s\nmode=%s\nforeign=%s\nsupervisor=%s\niface=%s\n' \
             "$st" "$prof" "$dev" "$ip" "$since" "$gw" "$dns" "$url" "$mode" "$foreign" "$(sup_alive && echo 1 || echo 0)" "$(active_iface)"
         local n z
@@ -855,6 +862,9 @@ cmd_status() {
     local zc; zc=$(manifest_zones | grep -c . || true)
     [ "$zc" -gt 0 ] && ok "Зоны /etc/resolver" "$zc наших: $(manifest_zones | tr '\n' ' ')" || skip "Зоны /etc/resolver" "наших нет"
     sup_alive && ok "Супервизор" "работает (pid $(cat "$SUP_PID"))" || skip "Супервизор" "не запущен"
+    if [ "$st" = connected ] && [ -f "$LINK_LOST" ] && sup_alive; then
+        warn "Связь" "не отвечает $(( $(date +%s) - $(cat "$LINK_LOST") )) с — openconnect восстанавливает сессию сам"
+    fi
     [ -f "$NEEDS_LOGIN" ] && warn "Автоподключение" "остановлено: нужен вход — ocbar connect"
 }
 
@@ -1281,7 +1291,7 @@ cmd_supervise() {
         # Отсчёт потери связи имеет смысл только в connected. Иначе после
         # паузы или чужого переподключения первая же неудачная проба увидит
         # «ждём три часа» и мгновенно порвёт живую сессию.
-        [ "$st" = connected ] || probe_bad_since=0
+        [ "$st" = connected ] || { probe_bad_since=0; rm -f "$LINK_LOST" 2>/dev/null || true; }
 
         if [ -n "$desired" ]; then
             if [ "$st" = paused ]; then
@@ -1299,12 +1309,15 @@ cmd_supervise() {
                         log "связь восстановилась сама за $((now - probe_bad_since)) с — вход не потребовался"
                         notify "ocbar: связь восстановлена" "openconnect поднял сессию сам, без повторного входа"
                     fi
+                    rm -f "$LINK_LOST" 2>/dev/null || true
                     probe_bad_since=0; backoff=5
                 else
                     # Процесс жив — значит openconnect либо ещё держит связь,
                     # либо сам её восстанавливает. Не мешаем: новый вход стоит
                     # одноразового кода и новой сессии на шлюзе.
-                    [ "$probe_bad_since" = 0 ] && { probe_bad_since=$now; last_probe_log=0; }
+                    # Отметку видит меню: пока она стоит, показывается не
+                    # «подключено», а «связь пропала, идёт восстановление».
+                    [ "$probe_bad_since" = 0 ] && { probe_bad_since=$now; last_probe_log=0; printf '%s\n' "$now" > "$LINK_LOST"; }
                     local waited=$((now - probe_bad_since))
                     if [ $((now - last_probe_log)) -ge 20 ]; then
                         log "связи нет $waited с — жду, openconnect восстанавливает сессию сам (до $reconnect_grace с)"
@@ -1314,7 +1327,7 @@ cmd_supervise() {
                         log "за $waited с сессия не восстановилась — закрываю и захожу заново"
                         notify "ocbar: связь потеряна" "Сессия не восстановилась за $waited с, подключаюсь заново"
                         priv tunnel-stop || true
-                        probe_bad_since=0
+                        probe_bad_since=0; rm -f "$LINK_LOST" 2>/dev/null || true
                         # Этот путь тоже наращивает задержку: раньше он её
                         # сбрасывал, и при стабильно неудачной пробе получался
                         # полный вход каждые сто секунд без конца.
