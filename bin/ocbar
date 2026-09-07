@@ -325,6 +325,16 @@ load_profile() {
     esac
 }
 
+# Загрузить выбранный профиль молча — для команд, которым нужны его сети и
+# зоны. Отсутствие профиля не повод рушить команду: показ состояния и
+# переключатели должны работать и без него.
+load_current_profile() {
+    [ -n "${P_NAME:-}" ] && return 0
+    local want; want=$(cat "$DESIRED" 2>/dev/null || true)
+    try_load_profile "$want" || try_load_profile "$(profile_default)" || true
+    return 0
+}
+
 # Загрузить профиль, если он вообще загружается. Нужен там, где отсутствие
 # профиля не должно рушить работу: показ состояния, меню. Сначала пробуем в
 # подоболочке (там die безвреден), и только потом — по-настоящему.
@@ -916,13 +926,10 @@ cmd_status() {
     local short=0; [ "${1:-}" = "--short" ] && short=1
     # Сети и зоны живут в профиле, поэтому для показа его надо загрузить.
     # Молча: отсутствие профиля — не повод рушить показ состояния.
-    if [ -z "${P_FILE:-}" ]; then
-        # Сначала выбранный профиль, при неудаче — умолчание: если в состоянии
-        # осталось имя удалённого профиля, показ состояния из-за этого страдать
-        # не должен.
-        local want; want=$(cat "$DESIRED" 2>/dev/null || true)
-        try_load_profile "$want" || try_load_profile "$(profile_default)" || true
-    fi
+    # Сначала выбранный профиль, при неудаче — умолчание: если в состоянии
+    # осталось имя удалённого профиля, показ состояния из-за этого страдать
+    # не должен.
+    load_current_profile
     local st; st=$(tunnel_state)
     local prof; prof=$(cat "$DESIRED" 2>/dev/null || true)
     local dev ip since gw dns url mode
@@ -987,6 +994,10 @@ cmd_status() {
 
 # ---------------------------------------------------------------- routes ----
 cmd_routes() {
+    # Сети живут в профиле (формат .ocbar). Без загрузки read_networks
+    # смотрит в старый networks.conf, не находит там ничего — и «выключить
+    # сеть» молча не срабатывает: отметка в routes.disabled не появляется.
+    load_current_profile
     local sub="${1:-status}" n
     case "$sub" in
         status) cmd_status ;;
@@ -1030,6 +1041,7 @@ cmd_dns_status() {
     scutil --dns 2>/dev/null | awk '/^resolver #/{d="";n=""} /domain *:/{d=$3} /nameserver\[0\]/{n=$3} d!="" && n!="" {printf "  %-32s %s\n", d, n; d="";n=""}' | sort -u
 }
 cmd_dns_apply() {
+    load_current_profile
     local zones; zones=$(active_zones); [ -n "$zones" ] || die "в $ZONES_CONF нет ни одной активной зоны"
     local vpndns; vpndns=$(env_get DNS); vpndns="${vpndns%% *}"
     zones=$(printf '%s\n' "$zones" | awk -v d="$vpndns" '$2=="vpn" { if (d=="") { print "zone " $1 " ждёт DNS от шлюза — туннель не поднят" > "/dev/stderr"; next } $2=d } {print}')
@@ -1050,6 +1062,9 @@ cmd_dns_init() {
     ok "создан $ZONES_CONF"; cat "$ZONES_CONF"
 }
 cmd_dns() {
+    # Зоны, как и сети, живут в профиле: без него «включить зону» отправило бы
+    # в хелпер резолвер по умолчанию вместо указанного в профиле.
+    load_current_profile
     case "${1:-status}" in
         status) cmd_dns_status ;;
         apply)  cmd_dns_apply ;;
@@ -1620,7 +1635,109 @@ cmd_uninstall() {
     [ "$DRY_RUN" = 1 ] || info "состояние в $STATE_DIR оставлено; ocbar cleanup перед удалением"
 }
 
-# ---------------------------------------------------------- разметка ----
+# --------------------------------------------------------- самопроверка ----
+# Проверяет разбор и выдачу на подставленных конфигах: ни сети, ни
+# привилегий, ни живого туннеля. Всё уводится во временный каталог
+# переменными OCBAR_CONFIG_DIR, OCBAR_USER_STATE и OCBAR_STATE_DIR, поэтому
+# запускать безопасно в любой момент, в том числе на рабочей машине.
+cmd_selftest() {
+    local tmp fails=0 total=0 out
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-selftest.XXXXXX") || die "нет временного каталога"
+    mkdir -p "$tmp/profiles" "$tmp/state" "$tmp/var" "$tmp/other/profiles"
+
+    run() { OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" "$SELF" "$@" 2>&1; }
+    has()  { # имя, что искать, где
+        total=$((total+1))
+        if printf '%s' "$3" | grep -Fq "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «$2»"; fi
+    }
+    hasnt() {
+        total=$((total+1))
+        if printf '%s' "$3" | grep -Fq "$2"; then fails=$((fails+1)); bad "$1" "нашлось «$2», а не должно"; else ok "$1"; fi
+    }
+    # Через регулярное выражение: интерфейс в строке маршрута зависит от
+    # таблицы маршрутизации машины, и сравнивать её целиком нельзя.
+    matches() {
+        total=$((total+1))
+        if printf '%s' "$3" | grep -Eq "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "не подошло /$2/"; fi
+    }
+
+    cat > "$tmp/profiles/t.ocbar" <<'PROFILE'
+[Connection]
+Name = Проба
+Url  = vpn.example.test/group
+User = tester
+
+[Routes]
+10.11.12.0/24
+не-сеть
+0.0.0.0/1
+
+[DNS]
+example.test = 192.0.2.10
+bad.test     = не-адрес
+
+[Auth]
+Totp = off
+
+[Health]
+Check = wiki.example.test:443
+PROFILE
+
+    info "ocbar selftest ($VERSION)"
+    out=$(run status --short)
+    has "состояние без туннеля" "state=down" "$out"
+    has "профиль в списке" "profile_list=t|Проба||" "$out"
+    has "профиль по умолчанию" "default=t" "$out"
+    has "режим профиля" "profile_mode=tunnel" "$out"
+    has "порт SOCKS по умолчанию" "proxy_port=11080" "$out"
+    has "сеть профиля" "route=10.11.12.0/24 " "$out"
+    hasnt "некорректная сеть отброшена" "route=не-сеть" "$out"
+    has "предупреждение о широкой сети" "уводит в туннель почти весь трафик" "$out"
+    has "зона профиля" "zone=example.test 192.0.2.10 - on" "$out"
+    hasnt "зона с нечисловым адресом отброшена" "zone=bad.test" "$out"
+
+    # Переключатели без туннеля меняют только состояние — привилегий не надо.
+    run routes del 10.11.12.0/24 >/dev/null
+    matches "сеть выключается" "route=10\.11\.12\.0/24 .* off" "$(run status --short)"
+    run routes add 10.11.12.0/24 >/dev/null
+    matches "сеть возвращается" "route=10\.11\.12\.0/24 .* on" "$(run status --short)"
+    run dns off example.test >/dev/null
+    has "зона выключается" "zone=example.test 192.0.2.10 - off" "$(run status --short)"
+    run dns on example.test >/dev/null
+    has "зона возвращается" "zone=example.test 192.0.2.10 - on" "$(run status --short)"
+
+    has "пути в version --all" "config_dir=$tmp" "$(run version --all)"
+    has "профиль в списке profiles" "Проба" "$(run profiles)"
+
+    # Экспорт и импорт: файл, выданный наружу, должен читаться обратно.
+    run export t "$tmp/out.ocbar" >/dev/null
+    out=$(cat "$tmp/out.ocbar" 2>/dev/null || true)
+    has "экспорт: секция сетей" "[Routes]" "$out"
+    has "экспорт: сеть на месте" "10.11.12.0/24" "$out"
+    has "экспорт: проверка доступа" "wiki.example.test:443" "$out"
+    cp "$tmp/out.ocbar" "$tmp/other/profiles/copy.ocbar"
+    has "экспортированный профиль читается" "Проба" \
+        "$(OCBAR_CONFIG_DIR="$tmp/other" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" "$SELF" profiles 2>&1)"
+
+    # Неверные значения должны отвергаться, а не молча менять поведение.
+    make_bad() { printf '[Connection]\nName = Плохой\nUrl = vpn.example.test/g\n%s\n' "$1" > "$tmp/profiles/bad.ocbar"; }
+    make_bad "Mode = никак"
+    has "неизвестный режим отвергнут" "Mode = tunnel или proxy" "$(run status bad 2>&1; run connect bad 2>&1)"
+    make_bad "$(printf '\n[Proxy]\nPort = 80')"
+    has "порт вне диапазона отвергнут" "вне диапазона" "$(run connect bad 2>&1)"
+    make_bad "$(printf '\n[Auth]\nPassword = ниоткуда')"
+    has "неизвестный источник пароля отвергнут" "password = auto" "$(run connect bad 2>&1)"
+    make_bad "$(printf '\n[Auth]\nPassword = ask\nTotp = off')"
+    has "пароль от человека виден в secret status" "вводит человек" "$(run secret status bad 2>&1)"
+    rm -f "$tmp/profiles/bad.ocbar"
+
+    rm -rf "$tmp"
+    info "----------------------------------------"
+    if [ "$fails" = 0 ]; then info "selftest: всё OK ($total проверок)"; return 0; fi
+    info "selftest: провалов $fails из $total"; return 1
+}
+
+# --------------------------------------------------------- разметка ----
 # Форма провайдера входа у каждой компании своя, а встроенные правила
 # покрывают только типовые. Разметка — способ объяснить программе чужую
 # форму мышью: человек показывает поля и кнопку, правила пишутся сами.
@@ -1785,6 +1902,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
   ocbar doctor                        диагностика, ничего не меняет
+  ocbar selftest                      проверка разбора на подставленных конфигах
   ocbar cleanup                       мусор от прошлой сессии
   ocbar supervise                     цикл реконнекта (его запускает LaunchAgent)
   ocbar supervisor status|restart     состояние и перезапуск агента супервизора
@@ -1815,6 +1933,7 @@ case "${1:-}" in
     ui-lab)     shift; cmd_ui_lab "$@" ;;
     app)        shift; cmd_app "$@" ;;
     learn)      shift; cmd_learn "$@" ;;
+    selftest)   cmd_selftest ;;
     import)     shift; cmd_import "$@" ;;
     export)     shift; cmd_export "$@" ;;
     supervisor) shift; cmd_supervisor "$@" ;;
