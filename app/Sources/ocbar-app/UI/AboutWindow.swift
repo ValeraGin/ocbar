@@ -45,6 +45,7 @@ struct AboutView: View {
             VStack(alignment: .leading, spacing: 6) {
                 link("Журналы", "Супервизор и openconnect") { openWindow(id: WindowID.logs) }
                 reveal("Каталог конфигурации", v["config_dir"] ?? OcbarClient.shared.configDir)
+                reveal("Приложение", v["app_path"] ?? (Bundle.main.bundlePath))
                 reveal("Журнал супервизора", v["supervisor_log"] ?? OcbarClient.shared.supervisorLog)
                 reveal("Журнал openconnect", v["openconnect_log"] ?? OcbarClient.shared.openconnectLog)
             }
@@ -101,8 +102,6 @@ struct AboutView: View {
 }
 
 enum WindowID {
-    static let about = "about"
+    static let settings = "settings"
     static let logs = "logs"
-    static let profiles = "profiles"
-    static let mode = "mode"
 }
