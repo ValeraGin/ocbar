@@ -31,17 +31,27 @@ struct MenuView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 13).padding(.top, 5)
             }
-            if let error = store.lastError {
-                Text(error)
-                    .font(.ocNote).foregroundStyle(Palette.bad)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(3)
-                    .padding(.horizontal, 13).padding(.top, 5)
+            if let message = store.actionNote ?? store.lastError {
+                HStack(alignment: .top, spacing: 6) {
+                    Text(message)
+                        .font(.ocNote)
+                        .foregroundStyle(store.actionFailed || store.actionNote == nil ? Palette.bad : Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(3)
+                    Spacer(minLength: 4)
+                    if store.actionNote != nil {
+                        Button { store.dismissNote() } label: {
+                            Image(systemName: "xmark.circle.fill").font(.system(size: 10))
+                        }
+                        .buttonStyle(.borderless).foregroundStyle(Palette.tertiary)
+                    }
+                }
+                .padding(.horizontal, 13).padding(.top, 5)
             }
             if look.graph { graph }
             Sep()
             actions
-            if !s.profiles.isEmpty { profiles }
+            profiles
             // Подробности имеют смысл, только когда есть туннель: у
             // отключённого клиента там одни прочерки.
             if look.details {
@@ -53,12 +63,32 @@ struct MenuView: View {
         }
         .frame(width: 320)
         .padding(.vertical, 7)
+        .background(shortcuts)
         .onAppear {
             store.menuOpen = true
             if showDetails { store.detailsOpen = true }
             store.refresh()
         }
         .onDisappear { store.menuOpen = false; store.detailsOpen = false }
+    }
+
+    // Клавиши работают, пока меню открыто: своего глобального перехвата у
+    // приложения нет и не заводится — это отдельное разрешение системы.
+    private var shortcuts: some View {
+        Group {
+            Button("") {
+                switch s.presentation {
+                case .connected, .lost: store.pause()
+                case .paused: store.resume()
+                default: break
+                }
+            }
+            .keyboardShortcut("p", modifiers: [.command, .option])
+            Button("") { NSApplication.shared.terminate(nil) }
+                .keyboardShortcut("q", modifiers: .command)
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
     }
 
     // --- шапка -----------------------------------------------------------
@@ -69,6 +99,12 @@ struct MenuView: View {
             Text(look.title).font(.ocTitle).foregroundStyle(Palette.text)
                 .lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 6)
+            // Индикатор занятости живёт в шапке, а не вместо строк действий:
+            // подмена строк меняла высоту меню, и оно прыгало под курсором.
+            if store.busy != nil {
+                ProgressView().controlSize(.small).scaleEffect(0.55)
+                    .frame(width: 12, height: 12)
+            }
             if look.showsTime {
                 Text(humanSince(s.since)).font(.ocMono).foregroundStyle(Palette.secondary)
             }
@@ -92,22 +128,18 @@ struct MenuView: View {
 
     // --- действия --------------------------------------------------------
 
-    @ViewBuilder
     private var actions: some View {
-        if let busy = store.busy {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 14, height: 14)
-                Text(busy).font(.ocBody).foregroundStyle(Palette.secondary)
-            }
-            .padding(.horizontal, 13).padding(.vertical, 5)
-        } else {
+        actionRows
+            .opacity(store.busy == nil ? 1 : 0.4)
+            .allowsHitTesting(store.busy == nil)
+    }
+
+    @ViewBuilder
+    private var actionRows: some View {
+        Group {
             switch s.presentation {
             case .connected, .lost:
-                MenuRow(action: { store.pause() }) {
-                    Label("Приостановить", systemImage: "pause.circle").labelStyle(.titleOnly)
-                    Spacer()
-                    Text("⌥⌘P").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
-                }
+                MenuRow(action: { store.pause() }) { Text("Приостановить") }
                 MenuRow(action: { store.disconnect() }) { Text("Отключить") }
             case .paused:
                 MenuRow(action: { store.resume() }) { Text("Возобновить").fontWeight(.medium) }
@@ -134,7 +166,22 @@ struct MenuView: View {
 
     // --- профили ---------------------------------------------------------
 
+    @ViewBuilder
     private var profiles: some View {
+        if s.profiles.isEmpty {
+            if s.available {
+                MenuRow(action: { open(WindowID.settings) }) {
+                    Text("Профилей нет — создать…")
+                    Spacer()
+                    Image(systemName: "plus").font(.system(size: 9)).foregroundStyle(Palette.tertiary)
+                }
+            }
+        } else {
+            profileList
+        }
+    }
+
+    private var profileList: some View {
         VStack(alignment: .leading, spacing: 0) {
             MenuRow(action: { withAnimation(.easeOut(duration: 0.12)) { showProfiles.toggle() } }) {
                 Text("Профили")
@@ -208,33 +255,40 @@ struct MenuView: View {
     }
 
     private func routeRow(_ r: RouteEntry) -> some View {
-        HStack(spacing: 8) {
+        let on = store.routeIsOn(r)
+        // Пока действие не доехало, состояние сети показывается по нажатию,
+        // а не по последнему опросу: иначе переключатель отщёлкивает назад.
+        let settled = store.pendingRoutes[r.net] == nil
+        return HStack(spacing: 8) {
             Text(r.net).font(.ocMono)
-                .foregroundStyle(r.enabled ? Palette.text : Palette.tertiary)
-            if r.enabled, let via = r.via, via != s.tundev {
+                .foregroundStyle(on ? Palette.text : Palette.tertiary)
+            if settled, on, let via = r.via, via != s.tundev {
                 Text("→ \(via)").font(.ocMonoSmall).foregroundStyle(Palette.warn)
-            } else if r.enabled, r.via == nil, s.state == .connected {
+            } else if settled, on, r.via == nil, s.state == .connected {
                 Text("нет маршрута").font(.ocMonoSmall).foregroundStyle(Palette.warn)
             }
             Spacer()
-            Toggle("", isOn: Binding(get: { r.enabled }, set: { _ in store.toggleRoute(r.net) }))
+            Toggle("", isOn: Binding(get: { on }, set: { store.toggleRoute(r.net, to: $0) }))
                 .toggleStyle(.switch).controlSize(.mini).labelsHidden()
                 .disabled(store.busy != nil || s.paused)
+                .accessibilityLabel("сеть \(r.net) в туннеле")
         }
         .padding(.horizontal, 13).padding(.vertical, 1)
     }
 
     private func zoneRow(_ z: ZoneEntry) -> some View {
-        HStack(spacing: 8) {
+        let on = store.zoneIsOn(z)
+        return HStack(spacing: 8) {
             Text(z.zone).font(.ocMono)
-                .foregroundStyle(z.enabled ? Palette.text : Palette.tertiary)
+                .foregroundStyle(on ? Palette.text : Palette.tertiary)
                 .lineLimit(1).truncationMode(.middle)
             Text("→ \(z.dns)").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
                 .lineLimit(1)
             Spacer(minLength: 4)
-            Toggle("", isOn: Binding(get: { z.enabled }, set: { _ in store.toggleZone(z.zone) }))
+            Toggle("", isOn: Binding(get: { on }, set: { store.toggleZone(z.zone, to: $0) }))
                 .toggleStyle(.switch).controlSize(.mini).labelsHidden()
                 .disabled(store.busy != nil || s.paused)
+                .accessibilityLabel("зона \(z.zone) через \(z.dns)")
         }
         .padding(.horizontal, 13).padding(.vertical, 1)
     }

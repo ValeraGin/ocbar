@@ -141,6 +141,15 @@ struct StageView: View {
                 card("пауза · подробности", .paused, expandDetails: true)
                 Spacer()
             }
+            // Высота меню не должна меняться, пока идёт действие: иначе оно
+            // прыгает под курсором ровно в момент нажатия на переключатель.
+            HStack(alignment: .top, spacing: 18) {
+                card("подключено", .connected)
+                card("подключено · идёт действие", .connected, busy: "Переключаю 10.0.0.0/8…")
+                card("подключено · не получилось", .connected,
+                     note: "ocbar: сеть 11.0.0.0/8 не включилась — хелпер вернул 1")
+                Spacer()
+            }
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -155,14 +164,15 @@ struct StageView: View {
     }
 
     private func card(_ name: String, _ presentation: Presentation,
-                      expandDetails: Bool = false, expandProfiles: Bool = false) -> some View {
+                      expandDetails: Bool = false, expandProfiles: Bool = false,
+                      busy: String? = nil, note: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(name).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles)
                 .environmentObject(StatusStore(
                     preview: Fixture.status(presentation),
                     samples: Fixture.samples(active: presentation == .connected),
-                    latency: "41 мс"))
+                    latency: "41 мс", busy: busy, actionNote: note))
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
         }
