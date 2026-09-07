@@ -104,4 +104,5 @@ enum WindowID {
     static let about = "about"
     static let logs = "logs"
     static let profiles = "profiles"
+    static let mode = "mode"
 }

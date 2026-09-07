@@ -25,6 +25,9 @@ struct OcbarApp: App {
 
         Window("Профили ocbar", id: WindowID.profiles) { ProfileEditorView() }
             .defaultSize(width: 860, height: 600)
+
+        Window("Режим работы", id: WindowID.mode) { ModeView() }
+            .defaultSize(width: 680, height: 520)
     }
 }
 
