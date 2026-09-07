@@ -143,15 +143,21 @@ ocbar secret import-qr ~/Downloads/qr.png --select <часть-имени>   # �
 импорт откажется работать: занести чужой секрет и получить блокировку
 учётной записи на неверных кодах — слишком дорогая ошибка.
 
-Секрет можно вообще не копировать: `ocbar` попросит готовый код у того, кто
-его хранит. Для KeePassXC в профиле:
+Пароль и одноразовый код берутся из одного из нескольких источников — это
+одна и та же схема для обоих. Для KeePassXC в профиле:
 
 ```ini
-totp = keepassxc
+password = keepassxc          # keychain (по умолчанию) | keepassxc | command | ask
+totp = keepassxc              # keychain | keepassxc | command | off
 keepass_entry = Группа/Запись
 keepass_db = ~/путь/база.kdbx
 keepass_keychain_service = keepassxc-docs
 ```
+
+Ни пароль, ни секрет при этом не копируются: `keepassxc-cli` читает базу
+напрямую, значения уходят в окружение подпроцесса и нигде не печатаются.
+`password = ask` означает «вводит человек» — тогда молчаливого
+переподключения не будет.
 
 Мастер-пароль базы берётся из Keychain по имени сервиса и в аргументы не
 попадает; `keepassxc-cli` читает файл напрямую, разблокировать окно
@@ -162,6 +168,9 @@ KeePassXC не нужно.
 ```ini
 totp = command
 totp_command = op item get VPN --otp
+
+password = command
+password_command = op item get VPN --fields password
 ```
 
 Если источник недоступен, вход не ломается — код вводит человек, причина

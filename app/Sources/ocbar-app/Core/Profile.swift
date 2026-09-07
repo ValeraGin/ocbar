@@ -22,6 +22,8 @@ struct ProfileDoc {
     var auth = ""           // пусто = sso
     var routes: [String] = []
     var zones: [ZoneLine] = []
+    var password = "auto"
+    var passwordCommand = ""
     var totp = "auto"
     var totpCommand = ""
     var keepassEntry = ""
@@ -52,6 +54,9 @@ struct ProfileDoc {
     ]
 
     static let totpSources = ["auto", "keychain", "keepassxc", "command", "off"]
+    // Источник пароля — один из нескольких, как и источник кода: связка
+    // ключей, база KeePassXC, произвольная команда, «вводит человек».
+    static let passwordSources = ["auto", "keychain", "keepassxc", "command", "ask"]
 
     // --- разбор ----------------------------------------------------------
 
@@ -91,6 +96,8 @@ struct ProfileDoc {
                                         port: rhs.count > 1 ? rhs[1] : ""))
             case "auth":
                 switch key {
+                case "password": d.password = value.isEmpty ? "auto" : value
+                case "passwordcommand": d.passwordCommand = value
                 case "totp": d.totp = value
                 case "totpcommand": d.totpCommand = value
                 case "keepassentry": d.keepassEntry = value
@@ -145,6 +152,8 @@ struct ProfileDoc {
         }
 
         out += "\n[Auth]\n"
+        if password != "auto" && !password.isEmpty { out += kv("Password", 15, password) }
+        if !passwordCommand.isEmpty { out += kv("PasswordCommand", 15, passwordCommand) }
         out += kv("Totp", 15, totp.isEmpty ? "auto" : totp)
         if !totpCommand.isEmpty { out += kv("TotpCommand", 15, totpCommand) }
         if !keepassEntry.isEmpty { out += kv("KeepassEntry", 15, keepassEntry) }
@@ -275,6 +284,18 @@ enum ProfileCheck {
         case "keepassxc" where d.keepassEntry.trimmed.isEmpty:
             err("Totp = keepassxc, но не указана запись KeepassEntry")
         default: break
+        }
+        switch d.password {
+        case "command" where d.passwordCommand.trimmed.isEmpty:
+            err("Password = command, но PasswordCommand пуст")
+        case "keepassxc" where d.keepassEntry.trimmed.isEmpty:
+            err("Password = keepassxc, но не указана запись KeepassEntry")
+        case "ask":
+            warn("пароль вводит человек: молчаливое переподключение работать не будет")
+        default: break
+        }
+        if !ProfileDoc.passwordSources.contains(d.password) {
+            err("источник пароля «\(d.password)» — бывает " + ProfileDoc.passwordSources.joined(separator: ", "))
         }
         if d.mode != "tunnel" && d.mode != "proxy" {
             err("режим «\(d.mode)» — бывает tunnel или proxy")
