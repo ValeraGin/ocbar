@@ -17,17 +17,11 @@ struct OcbarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("О программе", id: WindowID.about) { AboutView() }
-            .windowResizability(.contentSize)
+        Window("Настройка ocbar", id: WindowID.settings) { SettingsWindow() }
+            .defaultSize(width: 880, height: 620)
 
         Window("Журналы ocbar", id: WindowID.logs) { LogsView() }
             .defaultSize(width: 880, height: 540)
-
-        Window("Профили ocbar", id: WindowID.profiles) { ProfileEditorView() }
-            .defaultSize(width: 860, height: 600)
-
-        Window("Режим работы", id: WindowID.mode) { ModeView() }
-            .defaultSize(width: 680, height: 520)
     }
 }
 
