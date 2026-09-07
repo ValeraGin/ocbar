@@ -965,6 +965,63 @@ cmd_profiles() {
     done <<< "$(profiles_summary)"
 }
 
+# ------------------------------------------------------------- песочница ----
+# Отдельная страница, где интерфейс смотрится во всех состояниях: подключено,
+# пауза, потеря связи, ожидание входа, отключено. С --live подкладывает снимок
+# реального состояния, поэтому видно настоящие адреса, сети и счётчики.
+cmd_ui_lab() {
+    local lab live=0 a
+    for a in "$@"; do case "$a" in --live) live=1 ;; esac; done
+    for c in "$SELF_DIR/../tools/ui-lab/index.html" "$SELF_DIR/../share/ocbar/ui-lab/index.html"; do
+        [ -f "$c" ] && { lab="$(cd "$(dirname "$c")" && pwd)/index.html"; break; }
+    done
+    [ -n "${lab:-}" ] || die "не нашёл страницу песочницы (tools/ui-lab/index.html)"
+    local dir; dir=$(dirname "$lab")
+    if [ "$live" = 1 ]; then
+        ui_lab_snapshot > "$dir/state.json" && ok "снимок состояния" "$dir/state.json"
+    else
+        rm -f "$dir/state.json" 2>/dev/null || true
+    fi
+    info "открываю $lab"
+    open "$lab"
+}
+
+# Снимок в JSON: ровно те поля, которые рисует страница.
+ui_lab_snapshot() {
+    local dev ip gw mtu dns since rx tx lat prof
+    prof=$(cat "$DESIRED" 2>/dev/null || profile_default)
+    dev=$(env_get TUNDEV); ip=$(env_get IP4); gw=$(env_get GATEWAY)
+    mtu=$(env_get MTU); dns=$(env_get DNS); since=$(env_get CONNECTED)
+    if [ -n "$dev" ]; then
+        # Счётчики читаются с конца строки: колонки адреса у utun нет,
+        # и позиционный разбор смещается.
+        read -r rx tx <<< "$(netstat -ib -I "$dev" 2>/dev/null | awk 'NR==2{printf "%.1f %.1f", $(NF-4)/1048576, $(NF-1)/1048576}')"
+    fi
+    lat=$(ping -c 1 -W 900 "${gw:-127.0.0.1}" 2>/dev/null | awk -F'time=' '/time=/{print int($2)" мс"; exit}')
+    printf '{\n'
+    printf '  "profile": "%s",\n' "${prof:-—}"
+    printf '  "tundev": "%s",\n' "${dev:-—}"
+    printf '  "ip": "%s",\n' "${ip:-—}"
+    printf '  "gateway": "%s",\n' "${gw:-—}"
+    printf '  "mtu": "%s",\n' "${mtu:-—}"
+    printf '  "dns": "%s",\n' "${dns:-—}"
+    printf '  "since": "%s",\n' "$( [ -n "$since" ] && human_since "$since" || echo '—')"
+    printf '  "rx": "%s МБ",\n' "${rx:-0}"
+    printf '  "tx": "%s МБ",\n' "${tx:-0}"
+    printf '  "latency": "%s",\n' "${lat:-нет ответа}"
+    printf '  "zones": %s,\n' "$(manifest_zones | grep -c . || true)"
+    printf '  "routes": ['
+    local first=1 n via
+    while read -r n; do
+        [ -n "$n" ] || continue
+        via=$(route_via "$n")
+        [ "$first" = 1 ] || printf ', '
+        printf '["%s", %s]' "$n" "$( [ "$via" = "$dev" ] && echo true || echo false)"
+        first=0
+    done <<< "$(read_networks 2>/dev/null)"
+    printf ']\n}\n'
+}
+
 # ------------------------------------------------------- импорт/экспорт ----
 cmd_import() {
     local src="${1:-}" name="${2:-}"
@@ -1449,6 +1506,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
+  ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar doctor                        диагностика, ничего не меняет
   ocbar cleanup                       мусор от прошлой сессии
   ocbar supervise                     цикл реконнекта (его запускает LaunchAgent)
@@ -1477,6 +1535,7 @@ case "${1:-}" in
     pause)      cmd_pause ;;
     resume)     cmd_resume ;;
     toggle)     cmd_toggle_pause ;;
+    ui-lab)     shift; cmd_ui_lab "$@" ;;
     import)     shift; cmd_import "$@" ;;
     export)     shift; cmd_export "$@" ;;
     supervisor) shift; cmd_supervisor "$@" ;;
