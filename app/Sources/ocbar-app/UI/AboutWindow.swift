@@ -35,10 +35,18 @@ struct AboutView: View {
             }
             .padding(.horizontal, 18)
 
-            Text("Приложению права не нужны: всё привилегированное делает хелпер, разрешённый через sudoers.")
-                .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 18).padding(.top, 10)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Приложению права не нужны: всё привилегированное делает хелпер, разрешённый через sudoers.")
+                    .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) {
+                    Text("ValeraGin — Ignatkovich Valery").font(.system(size: 11))
+                        .foregroundStyle(Palette.secondary)
+                    Text("· лицензия MIT").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 18).padding(.top, 10)
 
             Divider().padding(.vertical, 12)
 

@@ -47,6 +47,16 @@ enum SelfTest {
 
         [Health]
         Check = wiki.example.com:443
+
+        [Connection]
+        Notifications = off
+
+        [Auth]
+        Rules = ~/.config/ocbar/autofill.rules
+        БудущийКлюч = значение
+
+        [СовсемНоваяСекция]
+        Ключ = значение
         """
         let doc = ProfileDoc.parse(sample, fileName: "sample")
         check("имя профиля", doc.name == "Основной")
@@ -57,6 +67,16 @@ enum SelfTest {
         check("резолвер vpn", doc.zones[1].resolver == "vpn")
         check("источник кода", doc.totp == "keepassxc")
         check("источник пароля", doc.password == "keepassxc")
+        check("файл правил", doc.rulesFile == "~/.config/ocbar/autofill.rules")
+        check("уведомления", doc.notifications == "off")
+
+        // Ключи, которых редактор не знает, должны пережить запись: молча
+        // потерять чужую строку — худшее, что может сделать редактор.
+        let rendered = doc.render()
+        check("незнакомый ключ сохранён", rendered.contains("БудущийКлюч"), rendered)
+        check("незнакомая секция сохранена", rendered.contains("[СовсемНоваяСекция]"))
+        check("значение незнакомого ключа на месте",
+              ProfileDoc.parse(rendered, fileName: "s").extras.contains { $0.key == "Ключ" && $0.value == "значение" })
         check("проверка доступа", doc.health == "wiki.example.com:443")
         check("режим по умолчанию — туннель", doc.mode == "tunnel")
         check("порт SOCKS", doc.proxyPort == "11080")

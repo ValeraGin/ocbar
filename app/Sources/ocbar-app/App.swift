@@ -1,7 +1,8 @@
 import SwiftUI
 import AppKit
 
-// Приложение меню-бара. Заменяет плагин SwiftBar: то же состояние из
+// Приложение меню-бара ocbar. Автор: ValeraGin — Ignatkovich Valery, MIT.
+// Заменяет плагин SwiftBar: то же состояние из
 // `ocbar status --short`, те же действия через `ocbar`, но с графиком,
 // переключателями и своими окнами. Привилегий не требует.
 @main

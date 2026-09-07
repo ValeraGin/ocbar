@@ -38,7 +38,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
-    <key>NSHumanReadableCopyright</key><string>MIT</string>
+    <key>NSHumanReadableCopyright</key><string>© 2026 ValeraGin (Ignatkovich Valery). MIT</string>
 </dict>
 </plist>
 PLIST

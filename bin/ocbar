@@ -3,6 +3,8 @@
 # ocbar — клиент Cisco AnyConnect (OpenConnect) для macOS: SSO через WKWebView,
 # split DNS через /etc/resolver, split tunneling, супервизор, меню-бар.
 #
+# Автор: ValeraGin — Ignatkovich Valery. Лицензия MIT.
+#
 # Этот файл работает от пользователя и НИЧЕГО привилегированного не делает сам:
 # всё, что требует root, уходит в libexec/ocbar-helper (см. DECISIONS.md, D2).
 # --dry-run печатает команды хелпера вместо выполнения.
@@ -1618,6 +1620,37 @@ cmd_uninstall() {
     [ "$DRY_RUN" = 1 ] || info "состояние в $STATE_DIR оставлено; ocbar cleanup перед удалением"
 }
 
+# ---------------------------------------------------------- разметка ----
+# Форма провайдера входа у каждой компании своя, а встроенные правила
+# покрывают только типовые. Разметка — способ объяснить программе чужую
+# форму мышью: человек показывает поля и кнопку, правила пишутся сами.
+cmd_learn() {
+    local p="" out="" a
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --out) out="${2:-}"; shift 2 ;;
+            -*) die "learn: --out <файл>" ;;
+            *) p="$1"; shift ;;
+        esac
+    done
+    load_profile "$p"
+    local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
+    local target="$out"
+    [ -n "$target" ] || target="${P_RULES:-$RULES_FILE}"
+    info "Разметка формы входа: профиль [$P_NAME], $P_URL"
+    info "  открою форму; отмечайте поля и кнопку мышью, потом «Готово»"
+    info "  правила лягут в $target (прошлые — туда же с суффиксом .bak)"
+    local rc=0
+    "$auth" --learn --url "$P_URL" --useragent "$P_UA" --out "$target" >/dev/null || rc=$?
+    case "$rc" in
+        0)  ok "правила записаны" "$target"
+            info "что получилось:"; sed 's/^/    /' "$target"
+            info "проверить на живом входе: ocbar connect --show" ;;
+        3)  info "разметка отменена — файл не тронут" ;;
+        *)  die "разметка не удалась (код $rc)" ;;
+    esac
+}
+
 # --------------------------------------------------------- приложение ----
 # Приложение меню-бара — обычный бандл без привилегий. Оно ставится вместе
 # с остальным, но запускать и заводить в автозапуск его должен человек:
@@ -1735,6 +1768,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
+  ocbar learn [профиль] [--out файл]  разметить форму входа мышью: правила
+                                      автозаполнения для своего портала
   ocbar app [start|stop|status]       приложение меню-бара; autostart on|off
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
@@ -1768,6 +1803,7 @@ case "${1:-}" in
     toggle)     cmd_toggle_pause ;;
     ui-lab)     shift; cmd_ui_lab "$@" ;;
     app)        shift; cmd_app "$@" ;;
+    learn)      shift; cmd_learn "$@" ;;
     import)     shift; cmd_import "$@" ;;
     export)     shift; cmd_export "$@" ;;
     supervisor) shift; cmd_supervisor "$@" ;;

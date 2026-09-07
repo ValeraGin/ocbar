@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # ocbar-helper — единственный привилегированный компонент ocbar.
+# Автор: ValeraGin — Ignatkovich Valery. Лицензия MIT.
 #
 # Ставится в /usr/local/libexec/ocbar-helper (root:wheel 0755) и разрешён
 # в /etc/sudoers.d/ocbar без пароля. Поэтому:

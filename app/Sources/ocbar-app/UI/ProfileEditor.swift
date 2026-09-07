@@ -12,6 +12,8 @@ struct ProfileEditorView: View {
     @State private var dirty = false
     @State private var message: String?
     @State private var showFile = false
+    @State private var learning = false
+    @State private var learnResult: String?
 
     private var errors: [Issue] { issues.filter { $0.level == .error } }
 
@@ -116,6 +118,7 @@ struct ProfileEditorView: View {
                         field("Сервис в связке ключей", $doc.keychainService, hint: "по умолчанию ru.ocbar.client")
                         field("Хосты провайдера входа", $doc.idpHosts, hint: "где разрешено автозаполнение")
                     }
+                    group("Форма входа на портале") { learnBlock }
                     group("Проверка доступа") {
                         field("Что проверять", $doc.health, hint: "URL, «хост:порт» или имя — поднятый туннель ещё не значит доступ")
                     }
@@ -134,6 +137,77 @@ struct ProfileEditorView: View {
             }
             Divider()
             bottomBar
+        }
+    }
+
+    // Разметка формы: встроенные правила покрывают типовые порталы
+    // (Keycloak, Microsoft), а чужую форму человек показывает мышью сам.
+    private var learnBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            field("Файл правил", $doc.rulesFile,
+                  hint: rulesPath.isEmpty ? "по умолчанию ~/.config/ocbar/autofill.rules" : rulesPath)
+            HStack(spacing: 8) {
+                Button(learning ? "Идёт разметка…" : "Разметить портал…") { learn() }
+                    .disabled(learning || dirty || doc.fileName.trimmed.isEmpty || !fileExists)
+                if learning { ProgressView().controlSize(.small).scaleEffect(0.6) }
+                Button("Показать файл правил") {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: rulesPath)])
+                }
+                .disabled(!FileManager.default.fileExists(atPath: rulesPath))
+                Spacer()
+            }
+            Text(learnHint)
+                .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let learnResult {
+                Text(learnResult)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+            }
+        }
+    }
+
+    private var learnHint: String {
+        if doc.fileName.trimmed.isEmpty { return "Сначала сохраните профиль — размечать нужно его форму входа." }
+        if !fileExists { return "Профиль ещё не записан на диск: сохраните, потом размечайте." }
+        if dirty { return "Есть несохранённые правки — сохраните, чтобы разметка шла по актуальному адресу." }
+        return "Откроется форма входа вашего портала. Отмечайте мышью поле логина, поле пароля, поле кода и кнопку — правила запишутся сами. Прошлые останутся рядом с суффиксом .bak."
+    }
+
+    private var fileExists: Bool {
+        FileManager.default.fileExists(atPath: ProfileStore.path(doc.fileName))
+    }
+
+    private var rulesPath: String {
+        let raw = doc.rulesFile.trimmed
+        if raw.isEmpty { return OcbarClient.shared.configDir + "/autofill.rules" }
+        return (raw as NSString).expandingTildeInPath
+    }
+
+    private func learn() {
+        guard !learning else { return }
+        learning = true
+        learnResult = nil
+        let name = doc.fileName
+        let path = rulesPath
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Окно разметки живёт, пока человек не нажмёт «Готово»: ждём долго.
+            let result = OcbarClient.shared.action(["learn", name], timeout: 1800)
+            let rules = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            DispatchQueue.main.async {
+                learning = false
+                switch result {
+                case .ok:
+                    learnResult = rules.isEmpty ? "разметка отменена — файл не тронут" : rules
+                case .needsLogin:
+                    learnResult = "разметка не завершена"
+                case .failed(_, let text):
+                    learnResult = "не получилось: " + text
+                }
+            }
         }
     }
 
