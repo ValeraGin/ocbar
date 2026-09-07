@@ -38,6 +38,12 @@ struct ProfileDoc {
     var mode = "tunnel"
     var proxyPort = "11080"
     var systemProxy = false
+    var rulesFile = ""            // [Auth] Rules — правила автозаполнения формы
+    var notifications = ""        // [Connection] Notifications = off выключает уведомления
+    // Ключи, которых редактор не знает. Хранятся и записываются обратно:
+    // молча потерять строку из чужого профиля — худшее, что может сделать
+    // редактор конфигурации.
+    var extras: [(section: String, key: String, value: String)] = []
 
     static let defaultUserAgent = "AnyConnect Windows 4.10.06079"
 
@@ -63,12 +69,13 @@ struct ProfileDoc {
     static func parse(_ text: String, fileName: String) -> ProfileDoc {
         var d = ProfileDoc()
         d.fileName = fileName
-        var section = ""
+        var section = "", sectionName = ""
         for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let line = raw.trimmed
             if line.isEmpty || line.hasPrefix("#") || line.hasPrefix(";") { continue }
             if line.hasPrefix("[") && line.hasSuffix("]") {
-                section = String(line.dropFirst().dropLast()).lowercased()
+                sectionName = String(line.dropFirst().dropLast())
+                section = sectionName.lowercased()
                 continue
             }
             let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmed }
@@ -85,7 +92,8 @@ struct ProfileDoc {
                 case "csdwrapper": d.csdWrapper = value
                 case "auth": d.auth = value
                 case "mode": d.mode = value.isEmpty ? "tunnel" : value
-                default: break
+                case "notifications": d.notifications = value
+                default: d.extras.append((section: "Connection", key: parts[0], value: value))
                 }
             case "routes":
                 if parts.count == 1 { d.routes.append(line) }
@@ -105,17 +113,21 @@ struct ProfileDoc {
                 case "keepasskeychain": d.keepassKeychain = value
                 case "keychainservice": d.keychainService = value
                 case "idphosts": d.idpHosts = value
-                default: break
+                case "rules": d.rulesFile = value
+                default: d.extras.append((section: "Auth", key: parts[0], value: value))
                 }
             case "proxy":
                 switch key {
                 case "port": d.proxyPort = value
                 case "systemproxy": d.systemProxy = ["on", "1", "yes", "true"].contains(value.lowercased())
-                default: break
+                default: d.extras.append((section: "Proxy", key: parts[0], value: value))
                 }
             case "health":
                 if key == "check" { d.health = value }
-            default: break
+                else { d.extras.append((section: "Health", key: parts[0], value: value)) }
+            default:
+                guard parts.count > 1, !section.isEmpty else { continue }
+                d.extras.append((section: sectionName, key: parts[0], value: value))
             }
         }
         return d
@@ -139,6 +151,8 @@ struct ProfileDoc {
         if !csdWrapper.isEmpty { out += kv("CsdWrapper", 11, csdWrapper) }
         if !auth.isEmpty && auth != "sso" { out += kv("Auth", 11, auth) }
         if mode != "tunnel" { out += kv("Mode", 11, mode) }
+        if !notifications.isEmpty { out += kv("Notifications", 11, notifications) }
+        out += extra("Connection", 11)
 
         out += "\n[Routes]\n"
         for r in routes where !r.trimmed.isEmpty { out += r.trimmed + "\n" }
@@ -161,14 +175,34 @@ struct ProfileDoc {
         if !keepassKeychain.isEmpty { out += kv("KeepassKeychain", 15, keepassKeychain) }
         if !keychainService.isEmpty { out += kv("KeychainService", 15, keychainService) }
         if !idpHosts.isEmpty { out += kv("IdpHosts", 15, idpHosts) }
+        if !rulesFile.isEmpty { out += kv("Rules", 15, rulesFile) }
+        out += extra("Auth", 15)
 
         if mode != "tunnel" || systemProxy {
             out += "\n[Proxy]\n"
             out += kv("Port", 12, proxyPort.isEmpty ? "11080" : proxyPort)
             out += kv("SystemProxy", 12, systemProxy ? "on" : "off")
+            out += extra("Proxy", 12)
         }
-        if !health.isEmpty { out += "\n[Health]\nCheck = \(health)\n" }
+        if !health.isEmpty { out += "\n[Health]\nCheck = \(health)\n" + extra("Health", 5) }
+        // Секции, о которых редактор не знает вовсе, дописываются как есть.
+        let known = ["connection", "routes", "dns", "auth", "proxy", "health"]
+        for section in orderedExtraSections where !known.contains(section.lowercased()) {
+            out += "\n[\(section)]\n" + extra(section, 12)
+        }
         return out
+    }
+
+    private var orderedExtraSections: [String] {
+        var seen: [String] = []
+        for e in extras where !seen.contains(e.section) { seen.append(e.section) }
+        return seen
+    }
+
+    private func extra(_ section: String, _ width: Int) -> String {
+        extras.filter { $0.section.lowercased() == section.lowercased() }
+              .map { kv($0.key, width, $0.value) }
+              .joined()
     }
 
     private func kv(_ key: String, _ width: Int, _ value: String) -> String {

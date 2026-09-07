@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 
 // ocbar-auth — аутентификатор Cisco AnyConnect в режиме single-sign-on-v2.
+// Автор: ValeraGin — Ignatkovich Valery. Лицензия MIT.
 //
 // Режимы:
 //   (по умолчанию)  пройти SSO, напечатать JSON {session_token, server_cert_hash, url}
@@ -35,6 +36,9 @@ struct Args {
     var selectEntry: String?
     var listEntries = false
     var totpNow = false
+    var learn = false
+    var learnSelfTest = false
+    var outFile: String?
     var help = false
 }
 
@@ -51,6 +55,10 @@ func usage() -> String {
       --print-secret        вывести секрет в stdout (для ocbar secret import)
       --list                показать все записи в QR и выйти
       --select ПОДСТРОКА    выбрать запись по issuer/имени (иначе — первая TOTP)
+      --learn               режим обучения: открыть форму входа и показать
+                            мышью, где логин, пароль, код и кнопка, — правила
+                            составятся сами (--out куда записать)
+      --out FILE            файл для --learn (иначе печать в stdout)
       --rules FILE          правила автозаполнения (см. etc/autofill.rules)
       --no-autofill         не заполнять форму
       --fill-hosts a,b      заполнять только на этих хостах (иначе — на любом)
@@ -101,6 +109,9 @@ func parseArgs() -> Args {
         case "--print-secret": a.printSecret = true
         case "--list": a.listEntries = true
         case "--totp-now": a.totpNow = true
+        case "--learn": a.learn = true
+        case "--learn-selftest": a.learnSelfTest = true
+        case "--out": a.outFile = next(arg)
         case "--select": a.selectEntry = next(arg)
         case "--json": a.json = true
         case "--insecure": a.insecure = true
@@ -357,6 +368,46 @@ if args.probe {
         Log.error("\(error)")
         exit(1)
     }
+}
+
+// Проверка разметки без человека: селекторы по странице-образцу.
+if args.learnSelfTest {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    out("ocbar-auth learn-selftest")
+    var check: LearnCheck?
+    DispatchQueue.main.async {
+        check = LearnCheck { code in exit(code) }
+        check?.start()
+    }
+    app.run()
+}
+
+// Режим обучения: открыть форму входа и записать, что человек покажет мышью.
+if args.learn {
+    guard let raw = args.url, let groupURL = normalize(raw) else {
+        FileHandle.standardError.write(Data("ocbar-auth: --learn требует --url\n".utf8)); exit(4)
+    }
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    var session: LearnSession?
+    DispatchQueue.global().async {
+        // Открываем ровно ту страницу, которую человек увидит при настоящем
+        // входе: её отдаёт шлюз в sso-v2-login. Если шлюз недоступен, берём
+        // адрес как есть — размечать можно и по своей копии страницы.
+        var target = groupURL
+        do {
+            let r = try runInit(args, http: http)
+            if let u = URL(string: r.request.loginURL) { target = u }
+        } catch {
+            Log.info("шлюз не ответил (\(error)) — открываю адрес как есть")
+        }
+        DispatchQueue.main.async {
+            session = LearnSession(startURL: target, outFile: args.outFile) { code in exit(code) }
+            session?.start()
+        }
+    }
+    app.run()
 }
 
 // Полный проход: init → окно → auth-reply → JSON.
