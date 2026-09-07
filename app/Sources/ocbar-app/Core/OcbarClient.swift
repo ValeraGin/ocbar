@@ -123,6 +123,10 @@ extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
+extension StringProtocol {
+    var trimmed: String { String(self).trimmingCharacters(in: .whitespacesAndNewlines) }
+}
+
 extension OcbarClient {
     // Задержка до шлюза. Считается только когда открыты подробности: лишний
     // ping раз в две секунды в фоне никому не нужен.

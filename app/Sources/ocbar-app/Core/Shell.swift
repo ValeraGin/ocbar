@@ -16,6 +16,7 @@ enum Shell {
     @discardableResult
     static func run(_ path: String, _ args: [String] = [],
                     stdin input: String? = nil,
+                    env extra: [String: String] = [:],
                     timeout: TimeInterval = 30) -> Result {
         guard FileManager.default.isExecutableFile(atPath: path) else {
             return Result(code: 127, out: "", err: "нет такой программы: \(path)")
@@ -27,6 +28,7 @@ enum Shell {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         env["LC_CTYPE"] = env["LC_CTYPE"] ?? "UTF-8"
+        for (k, v) in extra { env[k] = v }
         task.environment = env
 
         let outPipe = Pipe(), errPipe = Pipe()

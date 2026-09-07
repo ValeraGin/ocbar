@@ -246,6 +246,7 @@ struct MenuView: View {
             .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             .padding(.horizontal, 13).padding(.bottom, 3)
 
+            MenuRow(action: { open(WindowID.profiles) }) { Text("Профили и настройка…") }
             MenuRow(action: { open(WindowID.logs) }) { Text("Журналы…") }
             MenuRow(action: { open(WindowID.about) }) { Text("О программе…") }
             MenuRow(action: {
