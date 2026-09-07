@@ -95,6 +95,26 @@ struct LiveStageView: View {
     }
 }
 
+// Витрина окон: «о программе» и журналы на живых данных, чтобы их тоже
+// можно было увидеть снимком, а не только открыв руками.
+struct StageWindowsView: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 18) {
+            AboutView()
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
+            LogsView()
+                .frame(width: 820, height: 620)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
+            Spacer()
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
 struct StageView: View {
     private let cases: [(String, Presentation)] = [
         ("подключено", .connected), ("связь пропала", .lost), ("пауза", .paused),

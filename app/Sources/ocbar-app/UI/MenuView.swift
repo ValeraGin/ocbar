@@ -4,6 +4,7 @@ import SwiftUI
 // Подробности разворачиваются здесь же — отдельного окна для них не нужно.
 struct MenuView: View {
     @EnvironmentObject var store: StatusStore
+    @Environment(\.openWindow) private var openWindow
     @State private var showDetails: Bool
     @State private var showProfiles: Bool
 
@@ -245,6 +246,8 @@ struct MenuView: View {
             .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             .padding(.horizontal, 13).padding(.bottom, 3)
 
+            MenuRow(action: { open(WindowID.logs) }) { Text("Журналы…") }
+            MenuRow(action: { open(WindowID.about) }) { Text("О программе…") }
             MenuRow(action: {
                 NSWorkspace.shared.open(URL(fileURLWithPath: OcbarClient.shared.configDir))
             }) { Text("Открыть конфигурацию") }
@@ -255,6 +258,15 @@ struct MenuView: View {
                 Text("⌘Q").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
             }
         }
+    }
+}
+
+// Окна открываются поверх: приложение живёт значком в меню-баре, и без
+// явной активации окно уходит за чужие.
+extension MenuView {
+    func open(_ id: String) {
+        openWindow(id: id)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 

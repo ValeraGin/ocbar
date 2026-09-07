@@ -1484,6 +1484,31 @@ cmd_uninstall() {
     [ "$DRY_RUN" = 1 ] || info "состояние в $STATE_DIR оставлено; ocbar cleanup перед удалением"
 }
 
+# ---------------------------------------------------------------- версии ----
+# `version --all` — машинный вид для приложения: что установлено, какой
+# версии и где лежит. Поиск бинарников живёт здесь, чтобы приложению не
+# пришлось повторять его у себя и расходиться с CLI.
+cmd_version() {
+    [ "${1:-}" = "--all" ] || { printf 'ocbar %s\n' "$VERSION"; return 0; }
+    local h a oc
+    printf 'ocbar=%s\nocbar_path=%s\n' "$VERSION" "$SELF_ENTRY"
+    if h=$(helper_path); then
+        printf 'helper=%s\nhelper_path=%s\nhelper_nopasswd=%s\n' \
+            "$("$h" version 2>/dev/null | awk '{print $2}')" "$h" \
+            "$(helper_nopasswd && echo 1 || echo 0)"
+    fi
+    a=$(auth_path) && printf 'auth_path=%s\n' "$a"
+    if oc=$(openconnect_bin); then
+        printf 'openconnect=%s\nopenconnect_path=%s\n' \
+            "$("$oc" --version 2>&1 | head -1 | awk '{print $3}')" "$oc"
+    fi
+    [ -x "$LIBDIR/openconnect" ] && printf 'openconnect_root=%s\n' "$LIBDIR/openconnect"
+    printf 'config_dir=%s\nprofile_dir=%s\nstate_dir=%s\nsupervisor_log=%s\nopenconnect_log=%s\n' \
+        "$CONFIG_DIR" "$PROFILE_DIR" "$STATE_DIR" "$SUP_LOG" "$OC_LOG"
+    printf 'supervisor=%s\n' "$(sup_alive && echo 1 || echo 0)"
+    return 0
+}
+
 # ------------------------------------------------------------------ main ----
 usage() {
     cat <<'USAGE'
@@ -1507,6 +1532,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
   ocbar ui-lab [--live]               песочница интерфейса в браузере
+  ocbar version [--all]               версия; --all — все части и пути, для приложения
   ocbar doctor                        диагностика, ничего не меняет
   ocbar cleanup                       мусор от прошлой сессии
   ocbar supervise                     цикл реконнекта (его запускает LaunchAgent)
@@ -1544,7 +1570,7 @@ case "${1:-}" in
     supervise)  shift; cmd_supervise "$@" ;;
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
-    version)    printf 'ocbar %s\n' "$VERSION" ;;
+    version)    shift; cmd_version "${1:-}" ;;
     ''|help)    usage ;;
     *) usage; exit 1 ;;
 esac
