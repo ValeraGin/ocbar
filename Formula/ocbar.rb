@@ -17,6 +17,9 @@ class Ocbar < Formula
     system "swift", "build", "-c", "release", "--disable-sandbox",
            "--package-path", "auth", "--scratch-path", buildpath/"auth/.build"
     libexec.install "auth/.build/release/ocbar-auth"
+    # Приложение меню-бара: SwiftPM даёт исполняемый файл, бандл с
+    # Info.plist (LSUIElement) собирает make-app.sh.
+    cd("app") { system "./make-app.sh", prefix }
     libexec.install "libexec/ocbar-helper"
     bin.install "bin/ocbar"
     (pkgshare/"swiftbar").install "swiftbar/ocbar.5s.sh"
@@ -32,6 +35,11 @@ class Ocbar < Formula
       Конфиги (образцы в #{pkgshare}/examples):
         ~/.config/ocbar/profiles.conf, zones.conf, networks.conf, autofill.rules
 
+      Меню-бар — приложение (плагин SwiftBar остаётся как запасной вариант):
+        ocbar app start                 запустить сейчас
+        ocbar app autostart on          запускать при входе в систему
+        open #{prefix}/ocbar.app        то же самое руками
+
       Плагин SwiftBar — символической ссылкой в каталог плагинов:
         ln -s #{pkgshare}/swiftbar/ocbar.5s.sh ~/Library/Application\\ Support/SwiftBar/Plugins/
 
@@ -44,5 +52,7 @@ class Ocbar < Formula
     assert_match "ocbar 0.", shell_output("#{bin}/ocbar version")
     assert_match "selftest: всё OK", shell_output("#{libexec}/ocbar-auth --selftest")
     assert_match "ocbar-helper", shell_output("#{libexec}/ocbar-helper version")
+    assert_predicate prefix/"ocbar.app/Contents/MacOS/ocbar-app", :executable?
+    system "plutil", "-lint", prefix/"ocbar.app/Contents/Info.plist"
   end
 end
