@@ -34,6 +34,13 @@ int.example.com  = 192.168.10.12
 corp.example.com = vpn
 
 [Auth]
+# Откуда брать пароль: auto | keychain | keepassxc | command | ask
+# auto = команда, если задана; иначе связка ключей, если пароль там есть;
+# иначе база, если указана запись. ask — вводит человек (тогда молчаливого
+# переподключения не будет).
+# Password        = keepassxc
+# PasswordCommand = op item get VPN --fields password
+#
 # Откуда брать одноразовый код: auto | keychain | keepassxc | command | off
 Totp            = keepassxc
 KeepassEntry    = Группа/Запись

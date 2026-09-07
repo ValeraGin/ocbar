@@ -41,6 +41,7 @@ enum SelfTest {
         SystemProxy = on
 
         [Auth]
+        Password     = keepassxc
         Totp         = keepassxc
         KeepassEntry = Группа/Запись
 
@@ -55,6 +56,7 @@ enum SelfTest {
         check("зона с портом", doc.zones.last?.port == "5353")
         check("резолвер vpn", doc.zones[1].resolver == "vpn")
         check("источник кода", doc.totp == "keepassxc")
+        check("источник пароля", doc.password == "keepassxc")
         check("проверка доступа", doc.health == "wiki.example.com:443")
         check("режим по умолчанию — туннель", doc.mode == "tunnel")
         check("порт SOCKS", doc.proxyPort == "11080")
@@ -74,6 +76,17 @@ enum SelfTest {
         check("режим proxy переживает запись", proxyAgain.mode == "proxy")
         check("прокси-режим предупреждает, что не реализован",
               ProfileCheck.check(proxy).contains { $0.level == .warning && $0.text.contains("не реализован") })
+        var pwCmd = doc
+        pwCmd.password = "command"; pwCmd.passwordCommand = ""
+        check("Password = command без команды — ошибка",
+              ProfileCheck.check(pwCmd).contains { $0.level == .error && $0.text.contains("PasswordCommand") })
+        var pwAsk = doc
+        pwAsk.password = "ask"
+        check("Password = ask предупреждает о молчаливом входе",
+              ProfileCheck.check(pwAsk).contains { $0.level == .warning && $0.text.contains("молчаливое") })
+        check("источник пароля переживает запись",
+              ProfileDoc.parse(doc.render(), fileName: "s").password == "keepassxc")
+
         var badPort = doc
         badPort.proxyPort = "80"
         check("порт ниже 1024 — ошибка",

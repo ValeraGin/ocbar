@@ -291,6 +291,8 @@ load_profile() {
     # «главный»: keychain — секрет в связке ключей, keepassxc — готовый код из
     # базы, command — произвольная команда (менеджер паролей, свой скрипт),
     # off — вводит человек.
+    P_PASSWORD=$(profile_get "$p" password); P_PASSWORD="${P_PASSWORD:-auto}"
+    P_PW_CMD=$(profile_get "$p" password_command)
     P_TOTP=$(profile_get "$p" totp); P_TOTP="${P_TOTP:-auto}"
     P_TOTP_CMD=$(profile_get "$p" totp_command)
     P_KP_ENTRY=$(profile_get "$p" keepass_entry)
@@ -308,6 +310,10 @@ load_profile() {
         elif [ -n "$P_KP_ENTRY" ]; then P_TOTP=keepassxc
         else P_TOTP=keychain; fi
     fi
+    case "$P_PASSWORD" in
+        auto|keychain|keepassxc|command|ask) ;;
+        *) die "профиль [$P_NAME]: password = auto | keychain | keepassxc | command | ask, а не '$P_PASSWORD'" ;;
+    esac
     P_RULES=$(profile_get "$p" rules); P_RULES="${P_RULES/#\~/$HOME}"
     [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
     case "$P_MODE" in
@@ -357,6 +363,8 @@ load_profile_file() { # файл имя
     P_SYS_PROXY=$(pf_get "$f" Proxy SystemProxy); P_SYS_PROXY="${P_SYS_PROXY:-off}"
 
     P_SVC=$(pf_get "$f" Auth KeychainService); P_SVC="${P_SVC:-ru.ocbar.client}"
+    P_PASSWORD=$(pf_get "$f" Auth Password); P_PASSWORD="${P_PASSWORD:-auto}"
+    P_PW_CMD=$(pf_get "$f" Auth PasswordCommand)
     P_TOTP=$(pf_get "$f" Auth Totp); P_TOTP="${P_TOTP:-auto}"
     P_TOTP_CMD=$(pf_get "$f" Auth TotpCommand)
     P_KP_ENTRY=$(pf_get "$f" Auth KeepassEntry)
@@ -370,6 +378,10 @@ load_profile_file() { # файл имя
         elif [ -n "$P_KP_ENTRY" ]; then P_TOTP=keepassxc
         else P_TOTP=keychain; fi
     fi
+    case "$P_PASSWORD" in
+        auto|keychain|keepassxc|command|ask) ;;
+        *) die "профиль [$P_NAME]: password = auto | keychain | keepassxc | command | ask, а не '$P_PASSWORD'" ;;
+    esac
     P_HEALTH=$(pf_get "$f" Health Check)
     case "$(pf_get "$f" Connection Notifications)" in off|0|no) NOTIFY_ENABLED=0 ;; esac
 }
@@ -571,6 +583,66 @@ command_totp() {
     esac
 }
 
+# Пароль из KeePassXC. То же, что с кодом (D34): берём готовое значение из
+# базы, копию в Keychain не заводим. Значение уходит в stdout и нигде не
+# печатается — вызывающий кладёт его сразу в окружение.
+keepass_password() {
+    local cli db out
+    cli=$(keepassxc_cli) || { printf 'нет keepassxc-cli (KeePassXC не установлен?)\n' >&2; return 1; }
+    db=$(keepass_db_path) || { printf 'не задан keepass_db в профиле (и нет KP_DB)\n' >&2; return 1; }
+    [ -f "$db" ] || { printf 'базы нет: %s\n' "$db" >&2; return 1; }
+    [ -n "$P_KP_ENTRY" ] || { printf 'не задан keepass_entry в профиле\n' >&2; return 1; }
+    if ! security find-generic-password -s "$P_KP_SVC" >/dev/null 2>&1; then
+        printf 'в Keychain нет мастер-пароля базы (сервис %s)\n' "$P_KP_SVC" >&2; return 1
+    fi
+    out=$(kp_master | "$cli" show -q -a Password "$db" "$P_KP_ENTRY" 2>/dev/null) || {
+        printf 'keepassxc-cli не отдал пароль записи «%s»\n' "$P_KP_ENTRY" >&2; return 1
+    }
+    # Пробелы внутри пароля законны, поэтому режем только перевод строки.
+    out=${out%$'\n'}; out=${out%$'\r'}
+    [ -n "$out" ] || { printf 'в записи «%s» пустой пароль\n' "$P_KP_ENTRY" >&2; return 1; }
+    printf '%s' "$out"
+}
+
+# Произвольный источник пароля: команда печатает его первой строкой.
+command_password() {
+    [ -n "${P_PW_CMD:-}" ] || { printf 'не задан password_command в профиле\n' >&2; return 1; }
+    local out
+    out=$(sh -c "$P_PW_CMD" 2>/dev/null | head -1) || {
+        printf 'команда password_command завершилась с ошибкой\n' >&2; return 1; }
+    out=${out%$'\r'}
+    [ -n "$out" ] || { printf 'команда password_command ничего не вернула\n' >&2; return 1; }
+    printf '%s' "$out"
+}
+
+# Откуда взять пароль. Источник один из нескольких, как и у кода: связка
+# ключей, база KeePassXC, произвольная команда, «вводит человек».
+password_source() {
+    local src="${P_PASSWORD:-auto}"
+    # auto: заданная команда — значит команда; иначе связка ключей, если
+    # пароль там есть; иначе база, если указана запись. Порядок именно такой:
+    # у тех, кто держит в KeePassXC только код, пароль остаётся в связке
+    # ключей, и «auto» не должен молча увести источник в сторону.
+    if [ "$src" = auto ]; then
+        if [ -n "${P_PW_CMD:-}" ]; then src=command
+        elif kc_has "$P_SVC" "$P_USER"; then src=keychain
+        elif [ -n "${P_KP_ENTRY:-}" ]; then src=keepassxc
+        else src=keychain; fi
+    fi
+    printf '%s' "$src"
+}
+
+resolve_password() {
+    case "$(password_source)" in
+        ask)       printf 'источник пароля — человек (password = ask)\n' >&2; return 1 ;;
+        keepassxc) keepass_password ;;
+        command)   command_password ;;
+        *)         local v; v=$(kc_get "$P_SVC" "$P_USER")
+                   [ -n "$v" ] || { printf 'в Keychain нет пароля (%s/%s)\n' "$P_SVC" "$P_USER" >&2; return 1; }
+                   printf '%s' "$v" ;;
+    esac
+}
+
 # Печатает готовый одноразовый код или ничего; причина — в stderr.
 keepass_totp() {
     local cli db out
@@ -649,7 +721,22 @@ cmd_secret() {
             info "Файл с QR лучше удалить: rm -P \"$img\""
             ;;
         status|'')
-            if kc_has "$P_SVC" "$P_USER"; then ok "пароль" "есть ($P_SVC / $P_USER)"; else warn "пароль" "нет — ocbar secret set-password $P_NAME"; fi
+            local psrc; psrc=$(password_source)
+            case "$psrc" in
+                keychain)
+                    if kc_has "$P_SVC" "$P_USER"; then ok "пароль" "из Keychain ($P_SVC / $P_USER)"
+                    else warn "пароль" "источник Keychain, но пароля там нет — ocbar secret set-password $P_NAME"; fi ;;
+                ask) warn "пароль" "вводит человек (password = ask)" ;;
+                keepassxc|command)
+                    local perr; perr=$(mktemp "${TMPDIR:-/tmp}/ocbar-pw.XXXXXX")
+                    # Значение не печатаем никогда — только факт, что оно есть.
+                    if [ -n "$(resolve_password 2>"$perr")" ]; then
+                        ok "пароль" "$([ "$psrc" = keepassxc ] && echo "из KeePassXC: $P_KP_ENTRY" || echo "из команды password_command")"
+                    else
+                        bad "пароль" "$psrc — $(head -1 "$perr" 2>/dev/null)"
+                    fi
+                    rm -f "$perr" ;;
+            esac
             # При источнике KeePassXC секрета в Keychain быть и не должно —
             # советовать его завести значит звать копировать секрет второй раз.
             if kc_has "$P_SVC" "totp/$P_USER"; then
@@ -691,7 +778,8 @@ authenticate() { # печатает "token hash post_url"
     [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
     [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
     [ "${OCBAR_VERBOSE:-}" = 1 ] && args+=(--verbose)
-    local pw totp="" code=""; pw=$(kc_get "$P_SVC" "$P_USER")
+    local pw totp="" code="" pwerr; pwerr=$(mktemp "${TMPDIR:-/tmp}/ocbar-pw.XXXXXX")
+    pw=$(resolve_password 2>"$pwerr") || true
     case "$P_TOTP" in
         off) ;;
         keepassxc)
@@ -701,7 +789,8 @@ authenticate() { # печатает "token hash post_url"
             code=$(command_totp) || log "код от totp_command не получен — введёт человек" ;;
         *)   totp=$(kc_get "$P_SVC" "totp/$P_USER") ;;
     esac
-    [ -n "$pw" ] || log "пароля в Keychain нет ($P_SVC/$P_USER) — форму заполнит человек"
+    [ -n "$pw" ] || log "пароль не получен (источник $(password_source): $(head -1 "$pwerr" 2>/dev/null)) — форму заполнит человек"
+    rm -f "$pwerr"
     local json
     json=$(OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp" \
            OCBAR_TOTP_CODE="$code" "$auth" "${args[@]}") || {
@@ -1116,6 +1205,8 @@ cmd_export() {
             fi
         done
         printf '\n[Auth]\n'
+        if [ "${P_PASSWORD:-keychain}" != keychain ]; then printf 'Password        = %s\n' "$P_PASSWORD"; fi
+        if [ -n "${P_PW_CMD:-}" ]; then printf 'PasswordCommand = %s\n' "$P_PW_CMD"; fi
         printf 'Totp            = %s\n' "${P_TOTP:-auto}"
         if [ -n "${P_TOTP_CMD:-}" ];   then printf 'TotpCommand     = %s\n' "$P_TOTP_CMD"; fi
         if [ -n "${P_KP_ENTRY:-}" ];   then printf 'KeepassEntry    = %s\n' "$P_KP_ENTRY"; fi

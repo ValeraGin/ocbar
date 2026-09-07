@@ -91,12 +91,24 @@ struct ProfileEditorView: View {
                     group("Сети в туннеле") { routesEditor }
                     group("Зоны DNS") { zonesEditor }
                     group("Вход") {
+                        Picker("Пароль", selection: $doc.password) {
+                            ForEach(ProfileDoc.passwordSources, id: \.self) { Text($0).tag($0) }
+                        }
+                        .onChange(of: doc.password) { _ in touched() }
+                        if doc.password == "command" {
+                            field("Команда для пароля", $doc.passwordCommand,
+                                  hint: "печатает пароль первой строкой: op item get VPN --fields password")
+                        }
+                        if doc.password == "ask" {
+                            Text("Пароль вводит человек — молчаливое переподключение работать не будет.")
+                                .font(.system(size: 10)).foregroundStyle(Palette.warn)
+                        }
                         Picker("Одноразовый код", selection: $doc.totp) {
                             ForEach(ProfileDoc.totpSources, id: \.self) { Text($0).tag($0) }
                         }
                         .onChange(of: doc.totp) { _ in touched() }
                         if doc.totp == "command" { field("Команда", $doc.totpCommand, hint: "например: op item get VPN --otp") }
-                        if doc.totp == "keepassxc" || !doc.keepassEntry.isEmpty {
+                        if doc.totp == "keepassxc" || doc.password == "keepassxc" || !doc.keepassEntry.isEmpty {
                             field("Запись KeePassXC", $doc.keepassEntry, hint: "Группа/Запись")
                             field("База KeePassXC", $doc.keepassDb)
                             field("Мастер-пароль в связке", $doc.keepassKeychain, hint: "имя сервиса в Keychain")
