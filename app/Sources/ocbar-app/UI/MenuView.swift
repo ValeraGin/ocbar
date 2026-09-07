@@ -25,6 +25,12 @@ struct MenuView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 13).padding(.top, 5)
             }
+            if s.profileMode == "proxy" {
+                Text("Профиль просит прокси-режим — в клиенте его пока нет, подключение откажет. Настройка → Режим.")
+                    .font(.ocNote).foregroundStyle(Palette.warn)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 13).padding(.top, 5)
+            }
             if let error = store.lastError {
                 Text(error)
                     .font(.ocNote).foregroundStyle(Palette.bad)
@@ -249,7 +255,9 @@ struct MenuView: View {
             MenuRow(action: { open(WindowID.settings) }) {
                 Text("Настройка…")
                 Spacer()
-                Text("режим: туннель").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+                Text("режим: " + (s.profileMode == "proxy" ? "прокси" : "туннель"))
+                    .font(.ocMonoSmall)
+                    .foregroundStyle(s.profileMode == "proxy" ? Palette.warn : Palette.tertiary)
             }
             MenuRow(action: { open(WindowID.logs) }) { Text("Журналы…") }
             MenuRow(action: { NSApplication.shared.terminate(nil) }) {

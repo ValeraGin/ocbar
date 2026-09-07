@@ -100,7 +100,12 @@ struct LiveStageView: View {
 struct StageWindowsView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
-            if CommandLine.arguments.contains("--logs") {
+            if CommandLine.arguments.contains("--mode") {
+                ModeView()
+                    .frame(width: 700, height: 640)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
+            } else if CommandLine.arguments.contains("--logs") {
                 LogsView()
                     .frame(width: 860, height: 620)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))

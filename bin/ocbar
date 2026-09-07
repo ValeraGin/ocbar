@@ -278,6 +278,7 @@ load_profile() {
     P_NAME="$p"
     P_FILE=$(profile_file "$p")
     if [ -n "$P_FILE" ]; then load_profile_file "$P_FILE" "$p"; return 0; fi
+    P_KIND=tunnel; P_PROXY_PORT=11080; P_SYS_PROXY=off
     P_URL=$(profile_get "$p" url);   [ -n "$P_URL" ] || die "у профиля [$p] нет url"
     P_TITLE=$(profile_get "$p" name); P_TITLE="${P_TITLE:-$p}"
     P_USER=$(profile_get "$p" user);  P_USER="${P_USER:-$(id -un)}"
@@ -338,6 +339,22 @@ load_profile_file() { # файл имя
     P_CSD=$(pf_get "$f" Connection CsdWrapper); P_CSD="${P_CSD/#\~/$HOME}"
     P_MODE=split
     P_AUTH=$(pf_get "$f" Connection Auth); P_AUTH="${P_AUTH:-sso}"
+    # Как пускать трафик: tunnel — интерфейс и маршруты (сегодняшний путь),
+    # proxy — локальный SOCKS через ocproxy (docs/09-proxy-mode.md, пока не
+    # реализовано). Это не то же самое, что mode = split|full в старом
+    # profiles.conf: там речь о том, что заворачивать, а не чем.
+    P_KIND=$(pf_get "$f" Connection Mode); P_KIND="${P_KIND:-tunnel}"
+    case "$P_KIND" in
+        tunnel|proxy) ;;
+        *) die "профиль [$2]: Mode = tunnel или proxy, а не '$P_KIND'" ;;
+    esac
+    P_PROXY_PORT=$(pf_get "$f" Proxy Port); P_PROXY_PORT="${P_PROXY_PORT:-11080}"
+    case "$P_PROXY_PORT" in
+        ''|*[!0-9]*) die "профиль [$2]: Proxy Port = число, а не '$P_PROXY_PORT'" ;;
+    esac
+    [ "$P_PROXY_PORT" -ge 1024 ] && [ "$P_PROXY_PORT" -le 65535 ] \
+        || die "профиль [$2]: Proxy Port вне диапазона 1024-65535"
+    P_SYS_PROXY=$(pf_get "$f" Proxy SystemProxy); P_SYS_PROXY="${P_SYS_PROXY:-off}"
 
     P_SVC=$(pf_get "$f" Auth KeychainService); P_SVC="${P_SVC:-ru.ocbar.client}"
     P_TOTP=$(pf_get "$f" Auth Totp); P_TOTP="${P_TOTP:-auto}"
@@ -707,6 +724,9 @@ build_spec() { # cookie → stdin для tunnel-start
 }
 
 do_connect() { # профиль уже загружен
+    if [ "${P_KIND:-tunnel}" = proxy ]; then
+        die "профиль [$P_NAME] просит прокси-режим (Mode = proxy), а он ещё не реализован: нужна вторая ветка запуска — openconnect --script-tun и ocproxy (docs/09-proxy-mode.md). Уберите ключ, чтобы подключаться туннелем."
+    fi
     if [ "$P_AUTH" = password ]; then
         die "профиль [$P_NAME] — парольная группа (auth = password): шлюз ждёт логин/пароль и OTP из SMS, ocbar этого не автоматизирует. Подключайся голым openconnect (см. README)."
     fi
@@ -837,6 +857,10 @@ cmd_status() {
                 | sed 's/  / - /'
         done <<< "$(read_networks)"
         while read -r z d p; do [ -n "$z" ] || continue; printf 'zone=%s %s %s %s\n' "$z" "$d" "$(manifest_zones | grep -Fxq "$z" && echo applied || echo -)" "$(is_off "$z" "$ZONES_OFF" && echo off || echo on)"; done <<< "$(read_zones)"
+        # Режим выбранного профиля: приложение показывает его в меню и не даёт
+        # подключиться профилем, который просит нереализованный режим.
+        printf 'profile_mode=%s\nproxy_port=%s\nsystem_proxy=%s\n' \
+            "${P_KIND:-tunnel}" "${P_PROXY_PORT:-11080}" "${P_SYS_PROXY:-off}"
         profiles_summary | while IFS= read -r line; do [ -n "$line" ] && printf 'profile_list=%s\n' "$line"; done
         printf 'default=%s\n' "$(profile_default)"
         return 0
@@ -1076,6 +1100,10 @@ cmd_export() {
         printf 'UserAgent   = %s\n' "$P_UA"
         if [ -n "${P_CSD:-}" ]; then printf 'CsdWrapper  = %s\n' "$P_CSD"; fi
         if [ "${P_AUTH:-sso}" != sso ]; then printf 'Auth        = %s\n' "$P_AUTH"; fi
+        if [ "${P_KIND:-tunnel}" != tunnel ]; then printf 'Mode        = %s\n' "$P_KIND"; fi
+        if [ "${P_KIND:-tunnel}" != tunnel ] || [ "${P_SYS_PROXY:-off}" != off ]; then
+            printf '\n[Proxy]\nPort         = %s\nSystemProxy  = %s\n' "${P_PROXY_PORT:-11080}" "${P_SYS_PROXY:-off}"
+        fi
         printf '\n[Routes]\n'
         read_networks 2>/dev/null | while read -r n _; do
             if [ -n "$n" ]; then printf '%s\n' "$n"; fi

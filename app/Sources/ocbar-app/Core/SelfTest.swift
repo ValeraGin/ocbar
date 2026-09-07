@@ -36,6 +36,10 @@ enum SelfTest {
         corp.example.com = vpn
         odd.example.com  = 10.0.0.2 5353
 
+        [Proxy]
+        Port        = 11080
+        SystemProxy = on
+
         [Auth]
         Totp         = keepassxc
         KeepassEntry = Группа/Запись
@@ -52,13 +56,28 @@ enum SelfTest {
         check("резолвер vpn", doc.zones[1].resolver == "vpn")
         check("источник кода", doc.totp == "keepassxc")
         check("проверка доступа", doc.health == "wiki.example.com:443")
+        check("режим по умолчанию — туннель", doc.mode == "tunnel")
+        check("порт SOCKS", doc.proxyPort == "11080")
+        check("галочка системного прокси", doc.systemProxy)
 
         // --- запись и повторный разбор ---
         let again = ProfileDoc.parse(doc.render(), fileName: "sample")
         check("запись и разбор совпадают",
               again.name == doc.name && again.url == doc.url && again.routes == doc.routes
               && again.zones.count == doc.zones.count && again.health == doc.health
-              && again.zones.last?.port == "5353")
+              && again.zones.last?.port == "5353" && again.systemProxy == doc.systemProxy
+              && again.proxyPort == doc.proxyPort)
+
+        var proxy = doc
+        proxy.mode = "proxy"
+        let proxyAgain = ProfileDoc.parse(proxy.render(), fileName: "sample")
+        check("режим proxy переживает запись", proxyAgain.mode == "proxy")
+        check("прокси-режим предупреждает, что не реализован",
+              ProfileCheck.check(proxy).contains { $0.level == .warning && $0.text.contains("не реализован") })
+        var badPort = doc
+        badPort.proxyPort = "80"
+        check("порт ниже 1024 — ошибка",
+              ProfileCheck.check(badPort).contains { $0.level == .error })
 
         // --- правила проверки ---
         check("CIDR принимается", ProfileCheck.validCIDR("10.0.0.0/8"))
