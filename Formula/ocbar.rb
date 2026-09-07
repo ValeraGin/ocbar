@@ -50,6 +50,7 @@ class Ocbar < Formula
 
   test do
     assert_match "ocbar 0.", shell_output("#{bin}/ocbar version")
+    assert_match "selftest: всё OK", shell_output("#{bin}/ocbar selftest")
     assert_match "selftest: всё OK", shell_output("#{libexec}/ocbar-auth --selftest")
     assert_match "ocbar-helper", shell_output("#{libexec}/ocbar-helper version")
     assert_predicate prefix/"ocbar.app/Contents/MacOS/ocbar-app", :executable?

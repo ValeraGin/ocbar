@@ -45,6 +45,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     private var marking = true
     private var kind = "auto"
     private var finished = false
+    private var lastHost: String?      // где реально показалась форма: там же живёт IdP
 
     init(startURL: URL, outFile: String?, completion: @escaping (Int32) -> Void) {
         self.startURL = startURL
@@ -99,6 +100,13 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         undo.frame = NSRect(x: width - 250, y: webHeight + 6, width: 130, height: 22)
         undo.autoresizingMask = [.minXMargin]
 
+        let verify = NSButton(title: "Проверить", target: self, action: #selector(checkRules))
+        verify.bezelStyle = .rounded
+        verify.font = .systemFont(ofSize: 11)
+        verify.frame = NSRect(x: width - 340, y: webHeight + 6, width: 86, height: 22)
+        verify.autoresizingMask = [.minXMargin]
+        verify.toolTip = "Найти отмеченное на этой странице: правило без элемента не сработает"
+
         let finish = NSButton(title: "Готово", target: self, action: #selector(finishAndSave))
         finish.bezelStyle = .rounded
         finish.keyEquivalent = "\r"
@@ -108,7 +116,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
 
         let content = NSView(frame: NSRect(x: 0, y: 0, width: width, height: webHeight + barHeight))
         content.addSubview(webView)
-        [kindPicker, modeButton, status, collected, undo, finish].forEach { content.addSubview($0!) }
+        [kindPicker, modeButton, status, collected, verify, undo, finish].forEach { content.addSubview($0!) }
 
         window = NSWindow(contentRect: content.frame,
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -149,6 +157,36 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let removed = marks.removeLast()
         status.stringValue = "убрано: \(removed.selector)"
         refreshCollected()
+    }
+
+    /// Правило, которое ничего не находит на странице, не сработает и на
+    /// живом входе. Проверка отвечает на это сразу, а не через неделю, когда
+    /// автозаполнение промолчит.
+    @objc private func checkRules() {
+        guard !marks.isEmpty else {
+            status.stringValue = "проверять нечего: ничего не отмечено"
+            return
+        }
+        webView.evaluateJavaScript(Self.checkScript(for: marks.map { $0.selector })) { [weak self] value, _ in
+            guard let self, let codes = value as? [Int], codes.count == self.marks.count else {
+                self?.status.stringValue = "проверка не удалась"
+                return
+            }
+            var parts: [String] = []
+            for (mark, code) in zip(self.marks, codes) {
+                let name = self.title(for: mark.kind)
+                switch code {
+                case 2: parts.append(name + " ✓")
+                case 1: parts.append(name + " есть, но скрыт")
+                case 0: parts.append(name + " ✗")
+                default: parts.append(name + ": селектор не разобрался")
+                }
+            }
+            // Многошаговая форма — это нормально: поле пароля на первой
+            // странице и не должно находиться.
+            self.status.stringValue = "на этой странице: " + parts.joined(separator: ", ")
+                + (codes.contains(0) ? " · ненайденное может быть на другом шаге" : "")
+        }
     }
 
     @objc private func finishAndSave() {
@@ -244,6 +282,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         applyState()
         if let host = webView.url?.host {
+            lastHost = host
             window.title = "ocbar — разметка формы входа · \(host)"
         }
     }
@@ -258,7 +297,12 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         var out = "# Правила автозаполнения формы входа, размечены вручную \(df.string(from: Date())).\n"
         out += "# Портал: \(startURL.host ?? startURL.absoluteString)\n"
         out += "# Формат и остальные возможности — etc/autofill.rules.example.\n"
-        out += "# Проверить, что получится: ocbar-auth --dump-script --rules <этот файл>\n\n"
+        out += "# Проверить, что получится: ocbar-auth --dump-script --rules <этот файл>\n"
+        if let host = lastHost ?? startURL.host {
+            out += "#\n# Форма входа живёт на " + host + ". Чтобы заполнять только там,\n"
+            out += "# добавьте в профиль:  IdpHosts = " + host + "\n"
+        }
+        out += "\n"
         if marks.isEmpty {
             out += "# Ничего не отмечено.\n"
             return out
@@ -282,6 +326,17 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     /// Подсветка под курсором и перехват щелчка. Щелчок в режиме разметки
     /// НЕ доходит до страницы: иначе отметка кнопки «Войти» её же и нажала бы.
     static var pageScript: String { js }
+
+    /// Скрипт проверки: для каждого селектора 2 — виден, 1 — есть, но скрыт,
+    /// 0 — не найден, -1 — селектор не разобрался. Отдельной функцией, чтобы
+    /// проверка (--learn-selftest) гоняла ровно тот же код, что и кнопка.
+    static func checkScript(for selectors: [String]) -> String {
+        let json = (try? JSONSerialization.data(withJSONObject: selectors)) ?? Data("[]".utf8)
+        let array = String(data: json, encoding: .utf8) ?? "[]"
+        return "(function(sels){ return sels.map(function(s){"
+            + " try { var e = document.querySelector(s); return e ? (e.offsetParent !== null ? 2 : 1) : 0; }"
+            + " catch (err) { return -1; } }); })(" + array + ")"
+    }
     static func js(_ s: String) -> String { jsString(s) }
 
     private static let js = """
@@ -441,6 +496,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     private static let page = """
     <html><body>
       <div class="alert alert-error" id="passwordError">Неверный пароль</div>
+      <div id="hiddenStep" style="display:none">поле следующего шага</div>
       <form>
         <input type="text" id="username" name="username" autocomplete="username">
         <input type="password" id="password" name="password">
@@ -521,13 +577,31 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                     self.failures += 1
                 }
                 pending -= 1
-                if pending == 0 { self.checkClick() }
+                if pending == 0 { self.checkVerify { self.checkClick() } }
             }
         }
     }
 
     /// Щелчок мышью: синтетическое событие должно дойти до приложения и не
     /// нажать саму кнопку (иначе разметка отправляла бы форму).
+    /// Кнопка «Проверить» в окне разметки: скрытое поле и отсутствующее
+    /// должны различаться, иначе проверка бесполезна.
+    private func checkVerify(_ then: @escaping () -> Void) {
+        let selectors = ["input[id=username]", "button[id=kc-login]", "div[id=hiddenStep]", "div[id=nosuch]"]
+        webView.evaluateJavaScript(LearnSession.checkScript(for: selectors)) { [weak self] value, _ in
+            guard let self else { return }
+            let got = (value as? [Int]) ?? []
+            let want = [2, 2, 1, 0]
+            if got == want {
+                print("  [ OK ] проверка правил на странице: \(got)")
+            } else {
+                print("  [FAIL] проверка правил: \(got), ожидалось \(want)")
+                self.failures += 1
+            }
+            then()
+        }
+    }
+
     private func checkClick() {
         webView.evaluateJavaScript("""
         window.__ocbarSet(true, 'click');
