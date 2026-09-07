@@ -26,6 +26,7 @@ SELF="$(cd "$(dirname "$SELF")" && pwd)/$(basename "$SELF")"
 SELF_DIR="$(dirname "$SELF")"
 
 CONFIG_DIR="${OCBAR_CONFIG_DIR:-$HOME/.config/ocbar}"
+PROFILE_DIR="$CONFIG_DIR/profiles"      # по файлу на подключение, формат .ocbar
 PROFILES="$CONFIG_DIR/profiles.conf"
 ZONES_CONF="${OCBAR_CONFIG:-$CONFIG_DIR/zones.conf}"
 NETWORKS_CONF="${OCBAR_NETWORKS:-$CONFIG_DIR/networks.conf}"
@@ -167,6 +168,58 @@ profile_get() { # имя ключ
         inside && $0 ~ "^[ \t]*" k "[ \t]*=" { sub("^[^=]*=[ \t]*", ""); sub("[ \t]+$", ""); print; exit }
     ' "$PROFILES"
 }
+# --- профиль одним файлом (.ocbar), по образцу конфигов WireGuard ---
+#
+# Секции: [Connection] ключ = значение · [Routes] список сетей ·
+# [DNS] зона = резолвер · [Auth] ключ = значение · [Health] ключ = значение.
+# Файл самодостаточен: сети и зоны живут в нём, а не в общих конфигах.
+
+profile_file() { # имя → путь файла или пусто
+    # Всегда возвращает 0: при set -e присваивание вида f=$(profile_file x)
+    # с ненулевым кодом завершает скрипт, а «файла нет» — это не ошибка.
+    local f="$PROFILE_DIR/$1.ocbar"
+    [ -n "${1:-}" ] && [ -f "$f" ] && printf '%s' "$f"
+    return 0
+}
+
+# Значение ключа из указанной секции. Регистр ключа не важен.
+pf_get() { # файл секция ключ
+    [ -f "$1" ] || return 0
+    awk -v want="$2" -v key="$3" '
+        function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
+        /^[ \t]*[#;]/ { next }
+        {
+            line = trim($0)
+            if (line == "" || index(line, "=") == 0) next
+            k = trim(substr(line, 1, index(line, "=") - 1))
+            v = trim(substr(line, index(line, "=") + 1))
+            if (tolower(sec) == tolower(want) && tolower(k) == tolower(key)) { print v; exit }
+        }
+    ' "$1"
+}
+
+# Все строки секции как есть (для [Routes]) или пары «ключ значение» (для [DNS]).
+pf_section() { # файл секция
+    [ -f "$1" ] || return 0
+    awk -v want="$2" '
+        function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
+        /^[ \t]*[#;]/ { next }
+        {
+            line = trim($0)
+            if (line == "" || tolower(sec) != tolower(want)) next
+            if (index(line, "=") > 0) {
+                k = trim(substr(line, 1, index(line, "=") - 1))
+                v = trim(substr(line, index(line, "=") + 1))
+                print k " " v
+            } else print line
+        }
+    ' "$1"
+}
+
+profile_files() { [ -d "$PROFILE_DIR" ] && ls "$PROFILE_DIR"/*.ocbar 2>/dev/null | while read -r f; do basename "$f" .ocbar; done || true; }
+
 # Глобальные ключи из шапки profiles.conf (до первой секции).
 global_get() {
     [ -f "$PROFILES" ] || return 0
@@ -174,14 +227,33 @@ global_get() {
 }
 
 profile_default() {
-    [ -f "$PROFILES" ] || return 0
-    awk '/^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
+    # 1) явный default в старом profiles.conf
+    if [ -f "$PROFILES" ]; then
+        local d; d=$(awk '/^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t\r]+$",""); print; exit}' "$PROFILES")
+        [ -n "$d" ] && { printf '%s' "$d"; return 0; }
+    fi
+    # 2) файл-профиль с именем default, 3) единственный файл-профиль
+    [ -n "$(profile_file default)" ] && { printf 'default'; return 0; }
+    local files; files=$(profile_files)
+    [ "$(printf '%s\n' "$files" | grep -c .)" = 1 ] && printf '%s' "$files"
 }
-profile_list() { [ -f "$PROFILES" ] && sed -n 's/^\[\(.*\)\]$/\1/p' "$PROFILES" || true; }
+profile_list() {
+    # Завершающий `true` обязателен: без него отсутствие profiles.conf делает
+    # код группы ненулевым, а с pipefail это рушит весь конвейер — и
+    # profile_exists начинает врать «профиля нет» при существующем профиле.
+    { profile_files; [ -f "$PROFILES" ] && sed -n 's/^\[\(.*\)\]$/\1/p' "$PROFILES"; true; } 2>/dev/null \
+        | awk 'NF && !seen[$0]++'
+}
 
 # "имя|name|auth" по всем профилям за один проход: раньше это было два
 # вызова awk на каждый профиль, то есть шестнадцать процессов на восемь строк.
 profiles_summary() {
+    local n f
+    while read -r n; do
+        [ -n "$n" ] || continue
+        f=$(profile_file "$n")
+        [ -n "$f" ] && printf '%s|%s|%s|%s\n' "$n" "$(pf_get "$f" Connection Name)" "$(pf_get "$f" Connection Auth)" "$(pf_get "$f" Connection Description)"
+    done <<< "$(profile_files)"
     [ -f "$PROFILES" ] || return 0
     awk '
         function val(line,   v) { v = line; sub("^[^=]*=[ \t]*", "", v); sub("[ \t\r]+$", "", v); return v }
@@ -199,8 +271,10 @@ load_profile() {
     local p="${1:-}"
     [ -n "$p" ] || p=$(profile_default)
     [ -n "$p" ] || die "нет профиля: укажи имя или default в $PROFILES (образец: etc/profiles.conf.example)"
-    profile_exists "$p" || die "профиля [$p] нет в $PROFILES (есть: $(profile_list | tr '\n' ' '))"
+    profile_exists "$p" || die "профиля [$p] нет (есть: $(profile_list | tr '\n' ' ')); ищу в $PROFILE_DIR/*.ocbar и в $PROFILES"
     P_NAME="$p"
+    P_FILE=$(profile_file "$p")
+    if [ -n "$P_FILE" ]; then load_profile_file "$P_FILE" "$p"; return 0; fi
     P_URL=$(profile_get "$p" url);   [ -n "$P_URL" ] || die "у профиля [$p] нет url"
     P_TITLE=$(profile_get "$p" name); P_TITLE="${P_TITLE:-$p}"
     P_USER=$(profile_get "$p" user);  P_USER="${P_USER:-$(id -un)}"
@@ -239,6 +313,47 @@ load_profile() {
     esac
 }
 
+# Загрузить профиль, если он вообще загружается. Нужен там, где отсутствие
+# профиля не должно рушить работу: показ состояния, меню. Сначала пробуем в
+# подоболочке (там die безвреден), и только потом — по-настоящему.
+try_load_profile() {
+    [ -n "${1:-}" ] || return 1
+    ( load_profile "$1" ) >/dev/null 2>&1 || return 1
+    load_profile "$1"
+}
+
+# Профиль из отдельного файла. Заполняет те же переменные, что и старый путь,
+# поэтому остальной код о формате не знает.
+load_profile_file() { # файл имя
+    local f="$1"
+    P_NAME="$2"; P_FILE="$f"
+    P_URL=$(pf_get "$f" Connection Url); [ -n "$P_URL" ] || die "в $f нет Url в секции [Connection]"
+    P_TITLE=$(pf_get "$f" Connection Name); P_TITLE="${P_TITLE:-$2}"
+    P_DESCR=$(pf_get "$f" Connection Description)
+    P_USER=$(pf_get "$f" Connection User); P_USER="${P_USER:-$(id -un)}"
+    P_UA=$(pf_get "$f" Connection UserAgent); P_UA="${P_UA:-AnyConnect Windows 4.10.06079}"
+    P_CSD=$(pf_get "$f" Connection CsdWrapper); P_CSD="${P_CSD/#\~/$HOME}"
+    P_MODE=split
+    P_AUTH=$(pf_get "$f" Connection Auth); P_AUTH="${P_AUTH:-sso}"
+
+    P_SVC=$(pf_get "$f" Auth KeychainService); P_SVC="${P_SVC:-ru.ocbar.client}"
+    P_TOTP=$(pf_get "$f" Auth Totp); P_TOTP="${P_TOTP:-auto}"
+    P_TOTP_CMD=$(pf_get "$f" Auth TotpCommand)
+    P_KP_ENTRY=$(pf_get "$f" Auth KeepassEntry)
+    P_KP_DB=$(pf_get "$f" Auth KeepassDb); P_KP_DB="${P_KP_DB/#\~/$HOME}"
+    P_KP_SVC=$(pf_get "$f" Auth KeepassKeychain)
+    P_FILL_HOSTS=$(pf_get "$f" Auth IdpHosts)
+    P_RULES=$(pf_get "$f" Auth Rules); P_RULES="${P_RULES/#\~/$HOME}"
+    [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
+    if [ "$P_TOTP" = auto ]; then
+        if [ -n "$P_TOTP_CMD" ]; then P_TOTP=command
+        elif [ -n "$P_KP_ENTRY" ]; then P_TOTP=keepassxc
+        else P_TOTP=keychain; fi
+    fi
+    P_HEALTH=$(pf_get "$f" Health Check)
+    case "$(pf_get "$f" Connection Notifications)" in off|0|no) NOTIFY_ENABLED=0 ;; esac
+}
+
 # ------------------------------------------------------------- конфиги ----
 # Без подпроцессов: status зовётся плагином меню каждые 5 с, и каждый
 # grep здесь — отдельный процесс на каждую зону и сеть.
@@ -261,6 +376,17 @@ valid_cidr() {
 
 # zones.conf: "<зона> <DNS|vpn> [порт]"
 read_zones() {
+    # Профиль-файл самодостаточен: зоны берутся из него, а не из общего конфига.
+    if [ -n "${P_FILE:-}" ] && [ -f "$P_FILE" ]; then
+        local zone dns port
+        pf_section "$P_FILE" DNS | while read -r zone dns port _; do
+            [ -n "${zone:-}" ] && [ -n "${dns:-}" ] || continue
+            valid_zone "$zone" || { warn "недопустимое имя зоны, пропущено: $zone" >&2; continue; }
+            [ "$dns" = vpn ] || valid_ip "$dns" || { warn "недопустимый адрес, пропущено: $zone $dns" >&2; continue; }
+            printf '%s %s %s\n' "$zone" "$dns" "${port:-53}"
+        done
+        return 0
+    fi
     [ -f "$ZONES_CONF" ] || return 0
     local zone dns port
     while read -r zone dns port _; do
@@ -272,6 +398,18 @@ read_zones() {
     done < "$ZONES_CONF"
 }
 read_networks() {
+    if [ -n "${P_FILE:-}" ] && [ -f "$P_FILE" ]; then
+        local n
+        pf_section "$P_FILE" Routes | while read -r n _; do
+            [ -n "${n:-}" ] || continue
+            valid_cidr "$n" || { warn "некорректная сеть в профиле: $n" >&2; continue; }
+            case "${n#*/}" in
+                0|1|2|3|4|5|6|7) warn "сеть $n уводит в туннель почти весь трафик" >&2 ;;
+            esac
+            printf '%s\n' "$n"
+        done
+        return 0
+    fi
     [ -f "$NETWORKS_CONF" ] || return 0
     local n
     while read -r n _; do
@@ -662,6 +800,15 @@ cmd_disconnect() {
 # ---------------------------------------------------------------- status ----
 cmd_status() {
     local short=0; [ "${1:-}" = "--short" ] && short=1
+    # Сети и зоны живут в профиле, поэтому для показа его надо загрузить.
+    # Молча: отсутствие профиля — не повод рушить показ состояния.
+    if [ -z "${P_FILE:-}" ]; then
+        # Сначала выбранный профиль, при неудаче — умолчание: если в состоянии
+        # осталось имя удалённого профиля, показ состояния из-за этого страдать
+        # не должен.
+        local want; want=$(cat "$DESIRED" 2>/dev/null || true)
+        try_load_profile "$want" || try_load_profile "$(profile_default)" || true
+    fi
     local st; st=$(tunnel_state)
     local prof; prof=$(cat "$DESIRED" 2>/dev/null || true)
     local dev ip since gw dns url mode
@@ -805,16 +952,93 @@ cmd_dns() {
 
 # -------------------------------------------------------------- profiles ----
 cmd_profiles() {
-    [ -f "$PROFILES" ] || die "нет $PROFILES — скопируй etc/profiles.conf.example и заполни"
+    [ -n "$(profile_list)" ] || die "профилей нет: положите файл в $PROFILE_DIR (образец etc/example.ocbar) или заполните $PROFILES"
     local d p nm au ds; d=$(profile_default)
     while IFS='|' read -r p nm au ds; do
         [ -n "$p" ] || continue
         case "$au" in password) au="(пароль+OTP, не SSO)" ;; esac
+        local url f; f=$(profile_file "$p")
+        if [ -n "$f" ]; then url=$(pf_get "$f" Connection Url); else url=$(profile_get "$p" url); fi
         printf '  %s %s %s %s  %s\n' "$([ "$p" = "$d" ] && echo '*' || echo ' ')" \
-            "$(pad "$p" 18)" "$(pad "$nm" 20)" "$(profile_get "$p" url)" "$au"
+            "$(pad "$p" 18)" "$(pad "$nm" 20)" "$url" "$au"
         [ -n "$ds" ] && printf '      %s%s%s\n' "$c_dim" "$ds" "$c_off"
     done <<< "$(profiles_summary)"
 }
+
+# ------------------------------------------------------- импорт/экспорт ----
+cmd_import() {
+    local src="${1:-}" name="${2:-}"
+    [ -n "$src" ] || die "использование: ocbar import <файл.ocbar> [имя]"
+    [ -f "$src" ] || die "нет файла $src"
+    local url; url=$(pf_get "$src" Connection Url)
+    [ -n "$url" ] || die "это не похоже на профиль ocbar: в [Connection] нет Url"
+    [ -n "$name" ] || { name=$(basename "$src"); name="${name%.ocbar}"; name="${name%.conf}"; }
+    valid_name_soft "$name" || die "имя профиля может содержать буквы, цифры, дефис и точку: $name"
+    mkdir -p "$PROFILE_DIR"
+    local dst="$PROFILE_DIR/$name.ocbar"
+    [ -f "$dst" ] && die "профиль [$name] уже есть: $dst (удалите или укажите другое имя)"
+    cp "$src" "$dst"; chmod 600 "$dst"
+    ok "профиль [$name] импортирован" "$dst"
+    info ""
+    if try_load_profile "$name"; then
+        info "  подключение: $P_URL"
+        info "  сетей в туннель: $(read_networks 2>/dev/null | grep -c . || true), зон DNS: $(read_zones 2>/dev/null | grep -c . || true)"
+        info "  код второго фактора: $P_TOTP"
+    else
+        warn "профиль импортирован, но прочитать его целиком не удалось"
+    fi
+}
+
+# Экспорт годится и как миграция: старый профиль из profiles.conf вместе с
+# общими networks.conf и zones.conf собирается в один самодостаточный файл.
+cmd_export() {
+    local p="${1:-}" out="${2:-}"
+    load_profile "$p"
+    # Каждая необязательная строка — через if, а не через `[ ] && printf`:
+    # ложное условие в конце подстановки завершает её с ошибкой, и при set -e
+    # экспорт молча возвращает пустоту.
+    local body; body=$(
+        printf '# Профиль ocbar, выгружен %s\n\n' "$(date '+%Y-%m-%d')"
+        printf '[Connection]\n'
+        printf 'Name        = %s\n' "$P_TITLE"
+        if [ -n "${P_DESCR:-}" ]; then printf 'Description = %s\n' "$P_DESCR"; fi
+        printf 'Url         = %s\n' "$P_URL"
+        printf 'User        = %s\n' "$P_USER"
+        printf 'UserAgent   = %s\n' "$P_UA"
+        if [ -n "${P_CSD:-}" ]; then printf 'CsdWrapper  = %s\n' "$P_CSD"; fi
+        if [ "${P_AUTH:-sso}" != sso ]; then printf 'Auth        = %s\n' "$P_AUTH"; fi
+        printf '\n[Routes]\n'
+        read_networks 2>/dev/null | while read -r n _; do
+            if [ -n "$n" ]; then printf '%s\n' "$n"; fi
+        done
+        printf '\n[DNS]\n'
+        read_zones 2>/dev/null | while read -r z d pt; do
+            if [ -n "$z" ]; then
+                if [ "${pt:-53}" = 53 ]; then printf '%-24s = %s\n' "$z" "$d"
+                else printf '%-24s = %s %s\n' "$z" "$d" "$pt"; fi
+            fi
+        done
+        printf '\n[Auth]\n'
+        printf 'Totp            = %s\n' "${P_TOTP:-auto}"
+        if [ -n "${P_TOTP_CMD:-}" ];   then printf 'TotpCommand     = %s\n' "$P_TOTP_CMD"; fi
+        if [ -n "${P_KP_ENTRY:-}" ];   then printf 'KeepassEntry    = %s\n' "$P_KP_ENTRY"; fi
+        if [ -n "${P_KP_DB:-}" ];      then printf 'KeepassDb       = %s\n' "$P_KP_DB"; fi
+        if [ -n "${P_KP_SVC:-}" ];     then printf 'KeepassKeychain = %s\n' "$P_KP_SVC"; fi
+        if [ -n "${P_SVC:-}" ];        then printf 'KeychainService = %s\n' "$P_SVC"; fi
+        if [ -n "${P_FILL_HOSTS:-}" ]; then printf 'IdpHosts        = %s\n' "$P_FILL_HOSTS"; fi
+        if [ -n "${P_HEALTH:-}" ]; then printf '\n[Health]\nCheck = %s\n' "$P_HEALTH"; fi
+        true
+    )
+    if [ -n "$out" ]; then
+        printf '%s\n' "$body" > "$out"; chmod 600 "$out"
+        ok "профиль [$P_NAME] выгружен" "$out"
+        info "  секретов в файле нет — можно передавать"
+    else
+        printf '%s\n' "$body"
+    fi
+}
+
+valid_name_soft() { local re='^[A-Za-z0-9][A-Za-z0-9._-]*$'; [[ $1 =~ $re ]]; }
 
 # ---------------------------------------------------------------- doctor ----
 cmd_doctor() {
@@ -1216,6 +1440,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar toggle                        pause ↔ resume
   ocbar status [--short]              состояние; --short — машинный вид для меню
   ocbar profiles                      список профилей
+  ocbar import <файл.ocbar> [имя]     добавить профиль одним файлом
+  ocbar export <профиль> [файл]       выгрузить профиль (и перевести в новый формат)
   ocbar routes add|del|toggle <CIDR>  маршруты в туннель на лету; apply | clear
   ocbar dns status|apply|clear        зоны /etc/resolver; on|off|toggle <зона>
   ocbar dns init <файл> <DNS|vpn>     создать zones.conf из списка доменов
@@ -1251,6 +1477,8 @@ case "${1:-}" in
     pause)      cmd_pause ;;
     resume)     cmd_resume ;;
     toggle)     cmd_toggle_pause ;;
+    import)     shift; cmd_import "$@" ;;
+    export)     shift; cmd_export "$@" ;;
     supervisor) shift; cmd_supervisor "$@" ;;
     doctor)     cmd_doctor ;;
     cleanup)    cmd_cleanup ;;

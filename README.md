@@ -65,6 +65,50 @@ sudo ./bin/ocbar install
 
 ## Настройка
 
+### Профиль одним файлом
+
+По образцу конфигов WireGuard: один файл — одно подключение, целиком.
+Кладётся в `~/.config/ocbar/profiles/<имя>.ocbar`, образец —
+[etc/example.ocbar](etc/example.ocbar).
+
+```ini
+[Connection]
+Name = Основной
+Url  = vpn.example.com/employees
+User = alice
+
+[Routes]
+10.0.0.0/8
+172.16.0.0/12
+
+[DNS]
+example.com     = 10.0.0.1
+corp.example.com = vpn
+
+[Auth]
+Totp         = keepassxc
+KeepassEntry = Группа/Запись
+
+[Health]
+Check = wiki.example.com:443
+```
+
+Секретов в файле нет и быть не должно — только ссылки на хранилище, поэтому
+такой профиль можно переслать коллеге:
+
+```bash
+ocbar import ~/Downloads/office.ocbar        # добавить
+ocbar export main office.ocbar               # выгрузить
+```
+
+Экспорт работает и как перевод со старого формата: он соберёт профиль вместе
+с сетями и зонами из общих конфигов в один самодостаточный файл.
+
+### Старый формат
+
+Прежняя раскладка продолжает работать: общий `profiles.conf` плюс отдельные
+`networks.conf` и `zones.conf`.
+
 Конфиги в `~/.config/ocbar/`, образцы в [etc/](etc/):
 
 | Файл | Что |
