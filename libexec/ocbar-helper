@@ -15,6 +15,8 @@
 #   tunnel-start <url> <servercert> <split|full> <user> [ua] [csd-name]
 #                        stdin: cookie=<token>, net <cidr>…, zone <зона> <dns|vpn> [порт]…
 #   tunnel-stop          SIGINT openconnect, уборка маршрутов и зон
+#   stats                попросить openconnect выписать статистику в лог
+#   reconnect-now        переподключиться по текущей сессии (без нового входа)
 #   suspend              снять маршруты и зоны, туннель оставить поднятым
 #   resume               вернуть маршруты и зоны из *.wanted
 #   vpnc                 вызывается openconnect как vpnc-script (env: reason, TUNDEV…)
@@ -37,7 +39,7 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.5.0"
+VERSION="0.6.0"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
 TRUST="$PREFIX/etc/ocbar/trust.sha256"
@@ -553,6 +555,19 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
     tunnel-start) cmd_tunnel_start "$@" ;;
     tunnel-stop)  cmd_tunnel_stop ;;
+    stats)
+        # SIGUSR1 просит openconnect выписать в лог подробную статистику
+        # соединения: транспорт (DTLS или TLS), шифры, счётчики пакетов.
+        # Ничего не меняет, только пишет.
+        p=$(tunnel_pid); [ -n "$p" ] || die "туннель не поднят"
+        tunnel_alive || die "процесс $p — не наш openconnect"
+        run kill -USR1 "$p" && say "статистика запрошена, смотрите $LOG" ;;
+    reconnect-now)
+        # SIGUSR2 — немедленное переподключение по той же сессии. Именно то,
+        # что нужно при смене адреса в локальной сети: не тратит новый вход.
+        p=$(tunnel_pid); [ -n "$p" ] || die "туннель не поднят"
+        tunnel_alive || die "процесс $p — не наш openconnect"
+        run kill -USR2 "$p" && say "запрошено переподключение по текущей сессии" ;;
     suspend)      cmd_suspend ;;
     resume)       cmd_resume ;;
     vpnc)         cmd_vpnc ;;
