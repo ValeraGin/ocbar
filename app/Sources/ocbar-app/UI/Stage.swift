@@ -112,7 +112,7 @@ struct StageWindowsView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
             } else {
                 SettingsWindow()
-                    .frame(width: 900, height: 640)
+                    .frame(width: 900, height: 900)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
             }
