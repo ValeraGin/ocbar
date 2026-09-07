@@ -9,9 +9,12 @@ import AppKit
 struct OcbarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = StatusStore.shared
+    // Витрина показывает окно и значок в меню-баре не заводит: иначе рядом с
+    // живым приложением появлялся бы второй такой же значок.
+    @State private var inMenuBar = !CommandLine.arguments.contains("--stage")
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(isInserted: $inMenuBar) {
             MenuView().environmentObject(store)
         } label: {
             Image(nsImage: MenuBarIcon.image(for: store.status))
@@ -26,7 +29,7 @@ struct OcbarApp: App {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var stageWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -83,9 +86,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.contentView = NSHostingView(rootView: StageView())
         }
         window.setFrameOrigin(NSPoint(x: 60, y: 60))
+        window.delegate = self
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         stageWindow = window
+    }
+
+    // Витрина без значка в меню-баре: закрыли окно — процессу больше делать
+    // нечего, иначе он остался бы жить невидимкой.
+    func windowWillClose(_ notification: Notification) {
+        if CommandLine.arguments.contains("--stage") { NSApp.terminate(nil) }
     }
 
     private func shoot(to path: String) {
