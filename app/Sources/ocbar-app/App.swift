@@ -16,6 +16,12 @@ struct OcbarApp: App {
             Image(nsImage: MenuBarIcon.image(for: store.status))
         }
         .menuBarExtraStyle(.window)
+
+        Window("О программе", id: WindowID.about) { AboutView() }
+            .windowResizability(.contentSize)
+
+        Window("Журналы ocbar", id: WindowID.logs) { LogsView() }
+            .defaultSize(width: 880, height: 540)
     }
 }
 
@@ -26,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Только значок в меню-баре: ни в Dock, ни в переключателе приложений
         // ему делать нечего.
         NSApp.setActivationPolicy(.accessory)
+        OcbarClient.shared.preloadVersions()
         if CommandLine.arguments.contains("--stage") { openStage() }
         // --shot <файл>: снять витрину в PNG и выйти. Нужен, чтобы смотреть
         // на интерфейс, не открывая меню руками, — и чтобы разницу между
@@ -47,7 +54,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--light") {
             window.appearance = NSAppearance(named: .aqua)
         }
-        if CommandLine.arguments.contains("--live") {
+        if CommandLine.arguments.contains("--windows") {
+            window.contentView = NSHostingView(rootView: StageWindowsView())
+        } else if CommandLine.arguments.contains("--live") {
             window.contentView = NSHostingView(rootView: LiveStageView())
         } else {
             window.contentView = NSHostingView(rootView: StageView())
@@ -64,7 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Дать SwiftUI разложить содержимое: снимок сразу после показа
         // получается пустым.
         // Живому состоянию нужно время: опрос ocbar и вторая точка счётчиков.
-        let settle: TimeInterval = CommandLine.arguments.contains("--live") ? 8 : 1.2
+        let settle: TimeInterval = CommandLine.arguments.contains("--live") ? 8
+            : (CommandLine.arguments.contains("--windows") ? 4 : 1.2)
         RunLoop.current.run(until: Date().addingTimeInterval(settle))
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
         view.cacheDisplay(in: view.bounds, to: rep)

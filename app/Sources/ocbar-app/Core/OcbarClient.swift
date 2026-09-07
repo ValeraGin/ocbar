@@ -8,6 +8,10 @@ final class OcbarClient: @unchecked Sendable {
 
     let binary: String?
 
+    private let versionsLock = NSLock()
+    private var versionsCache: [String: String]?
+    private var versionsStamp = Date.distantPast
+
     // Где искать ocbar. Приложение может лежать и в дереве проекта, и в
     // Homebrew, поэтому кандидатов несколько; путь можно задать явно
     // переменной OCBAR_BIN.
@@ -131,5 +135,35 @@ extension OcbarClient {
         let number = tail.prefix { $0.isNumber || $0 == "." }
         guard let ms = Double(number) else { return nil }
         return "\(Int(ms.rounded())) мс"
+    }
+}
+
+// Версии и пути всех частей: `ocbar version --all`. Поиск бинарников живёт
+// в CLI, приложение его не повторяет — иначе они разойдутся.
+extension OcbarClient {
+    func versions(maxAge: TimeInterval = 60) -> [String: String] {
+        versionsLock.lock()
+        if let cached = versionsCache, Date().timeIntervalSince(versionsStamp) < maxAge {
+            versionsLock.unlock()
+            return cached
+        }
+        versionsLock.unlock()
+        var map: [String: String] = [:]
+        if let binary {
+            let r = Shell.run(binary, ["version", "--all"], timeout: 15)
+            for line in r.out.split(separator: "\n") {
+                guard let eq = line.firstIndex(of: "=") else { continue }
+                map[String(line[line.startIndex..<eq])] = String(line[line.index(after: eq)...])
+            }
+        }
+        versionsLock.lock()
+        versionsCache = map
+        versionsStamp = Date()
+        versionsLock.unlock()
+        return map
+    }
+
+    func preloadVersions() {
+        DispatchQueue.global(qos: .utility).async { _ = self.versions() }
     }
 }
