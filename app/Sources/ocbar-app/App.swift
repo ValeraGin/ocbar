@@ -50,6 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         if CommandLine.arguments.contains("--stage") { openStage() }
+        else {
+            AppLog.write("запуск \(AppInfo.version); ocbar: "
+                + (OcbarClient.shared.binary ?? "не найден — " + OcbarClient.shared.lookupNote)
+                + "; ⌥⌘P: " + (GlobalHotkeys.shared.isRegistered("pause") ? "занята нами" : "не досталась"))
+        }
         // --shot <файл>: снять витрину в PNG и выйти. Нужен, чтобы смотреть
         // на интерфейс, не открывая меню руками, — и чтобы разницу между
         // правками было видно, а не приходилось описывать словами.

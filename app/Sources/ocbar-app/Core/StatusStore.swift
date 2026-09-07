@@ -185,8 +185,10 @@ final class StatusStore: ObservableObject {
                     break
                 case .needsLogin:
                     self.note("Молча войти не удалось — нужен вход", failed: true)
-                case .failed(_, let message):
+                    AppLog.write("действие «\(title)»: нужен вход (код 5)")
+                case .failed(let code, let message):
                     self.note(message.isEmpty ? "не получилось" : message, failed: true)
+                    AppLog.write("действие «\(title)»: код \(code) — \(message)")
                 }
             }
         }

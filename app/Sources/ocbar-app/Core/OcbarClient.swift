@@ -31,10 +31,16 @@ final class OcbarClient: @unchecked Sendable {
             return
         }
         var candidates: [String] = []
-        // .build/release/ocbar-app → app/../bin/ocbar; внутри бандла
-        // ocbar.app/Contents/MacOS/ → ../../../../bin/ocbar
-        for up in ["../../../bin/ocbar", "../../../../bin/ocbar", "../bin/ocbar", "../../bin/ocbar"] {
-            candidates.append(exe.appendingPathComponent(up).standardizedFileURL.path)
+        // Идём вверх от самого себя и ищем bin/ocbar: раскладок несколько —
+        // дерево проекта, бандл внутри дерева (app/.build/ocbar.app) и
+        // бандл в каталоге Homebrew (prefix/ocbar.app рядом с prefix/bin).
+        // Считать «сколько точек вверх» руками уже приводило к тому, что
+        // бандл из репозитория молча звал ocbar из tap — то есть чужой,
+        // отстающий код.
+        var dir = exe
+        for _ in 0..<6 {
+            candidates.append(dir.appendingPathComponent("bin/ocbar").standardizedFileURL.path)
+            dir = dir.deletingLastPathComponent()
         }
         candidates += ["/opt/homebrew/bin/ocbar", "/usr/local/bin/ocbar"]
         binary = Shell.firstExecutable(candidates)

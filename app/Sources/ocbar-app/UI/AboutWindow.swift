@@ -66,6 +66,7 @@ struct AboutView: View {
                 reveal("Приложение", v["app_path"] ?? (Bundle.main.bundlePath))
                 reveal("Журнал супервизора", v["supervisor_log"] ?? OcbarClient.shared.supervisorLog)
                 reveal("Журнал openconnect", v["openconnect_log"] ?? OcbarClient.shared.openconnectLog)
+                reveal("Журнал приложения", AppLog.path)
             }
             .padding(.horizontal, 18).padding(.bottom, 16)
         }
