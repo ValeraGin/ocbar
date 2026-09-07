@@ -8,7 +8,7 @@ import AppKit
 @main
 struct OcbarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var store = StatusStore()
+    @StateObject private var store = StatusStore.shared
 
     var body: some Scene {
         MenuBarExtra {
@@ -39,6 +39,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             exit(code)
         }
         OcbarClient.shared.preloadVersions()
+        // Пауза и возобновление — единственное действие, которое стоит
+        // глобальной клавиши: оно обратимо и не стоит второго фактора.
+        // Витрина сочетание не занимает: иначе она отбирала бы его у живого
+        // приложения, запущенного рядом.
+        if !CommandLine.arguments.contains("--stage") {
+            GlobalHotkeys.shared.register("pause", keyCode: HotkeyCode.p,
+                                          modifiers: HotkeyCode.cmdOption) {
+                StatusStore.shared.togglePause()
+            }
+        }
         if CommandLine.arguments.contains("--stage") { openStage() }
         // --shot <файл>: снять витрину в PNG и выйти. Нужен, чтобы смотреть
         // на интерфейс, не открывая меню руками, — и чтобы разницу между

@@ -6,6 +6,11 @@ import SwiftUI
 // главной.
 @MainActor
 final class StatusStore: ObservableObject {
+    // Один живой экземпляр на приложение: к нему обращаются и меню, и
+    // глобальная горячая клавиша, которой до иерархии представлений не
+    // дотянуться. Витрина создаёт свои, с подставленным состоянием.
+    static let shared = StatusStore()
+
     @Published private(set) var status = Status()
     @Published private(set) var samples: [TrafficSample] = []
     @Published private(set) var busy: String?          // что сейчас выполняется
@@ -19,7 +24,10 @@ final class StatusStore: ObservableObject {
     // идёт, показываем то, что человек попросил.
     @Published private(set) var pendingRoutes: [String: Bool] = [:]
     @Published private(set) var pendingZones: [String: Bool] = [:]
-    @Published var menuOpen = false { didSet { retune() } }
+    @Published var menuOpen = false { didSet { retune(); if menuOpen { refreshHelperState() } } }
+    // Беда, о которой status не расскажет: без NOPASSWD хелпер спросит
+    // пароль в терминале, которого у меню нет, и действие просто не пройдёт.
+    @Published private(set) var helperWarning: String?
     @Published var detailsOpen = false
     @Published private(set) var latency: String?
 
@@ -57,12 +65,13 @@ final class StatusStore: ObservableObject {
 
     // Витрина (--stage): состояние подставлено, ничего не опрашивается.
     init(preview: Status, samples: [TrafficSample] = [], latency: String? = nil,
-         busy: String? = nil, actionNote: String? = nil) {
+         busy: String? = nil, actionNote: String? = nil, helperWarning: String? = nil) {
         self.status = preview
         self.samples = samples
         self.latency = latency
         self.busy = busy
         self.actionNote = actionNote
+        self.helperWarning = helperWarning
         self.totals = (7_632_631_260, 169_171_632)
         self.isPreview = true
     }
@@ -79,6 +88,24 @@ final class StatusStore: ObservableObject {
         }
         trafficTimer = Timer.scheduledTimer(withTimeInterval: sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleTraffic() }
+        }
+    }
+
+    private func refreshHelperState() {
+        guard !isPreview else { return }
+        queue.async { [weak self] in
+            let v = OcbarClient.shared.versions(maxAge: 300)
+            let warning: String?
+            if v.isEmpty {
+                warning = nil
+            } else if v["helper_path"] == nil {
+                warning = "Хелпер не установлен: действия из меню не сработают — sudo ocbar install"
+            } else if v["helper_nopasswd"] != "1" {
+                warning = "Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — sudo ocbar install"
+            } else {
+                warning = nil
+            }
+            Task { @MainActor in self?.helperWarning = warning }
         }
     }
 
@@ -201,6 +228,17 @@ final class StatusStore: ObservableObject {
     func routeIsOn(_ r: RouteEntry) -> Bool { pendingRoutes[r.net] ?? r.enabled }
     func zoneIsOn(_ z: ZoneEntry) -> Bool { pendingZones[z.zone] ?? z.enabled }
     func cleanup() { perform("Убираю следы…") { OcbarClient.shared.cleanup() } }
+
+    /// Пауза и возобновление одной клавишей: смысл действия зависит от того,
+    /// что сейчас. Отключение сюда не входит намеренно — случайное нажатие
+    /// стоило бы нового входа со вторым фактором.
+    func togglePause() {
+        switch status.presentation {
+        case .connected, .lost: pause()
+        case .paused: resume()
+        default: NSSound.beep()
+        }
+    }
 }
 
 // Человеческие размеры: 1,2 МБ/с, 7,2 ГБ. Разделитель — запятая, как везде
