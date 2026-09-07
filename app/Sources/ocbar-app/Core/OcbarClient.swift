@@ -7,6 +7,9 @@ final class OcbarClient: @unchecked Sendable {
     static let shared = OcbarClient()
 
     let binary: String?
+    /// Где искали клиента — чтобы сообщение «не найден» говорило по делу,
+    /// а не общими словами.
+    private(set) var lookupNote = ""
 
     private let versionsLock = NSLock()
     private var versionsCache: [String: String]?
@@ -18,7 +21,16 @@ final class OcbarClient: @unchecked Sendable {
     init() {
         let exe = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
             .resolvingSymlinksInPath().deletingLastPathComponent()
-        var candidates = [ProcessInfo.processInfo.environment["OCBAR_BIN"] ?? ""]
+        // Заданный явно путь — главнее всех: если человек указал OCBAR_BIN,
+        // молча взять другой ocbar значит скрыть его ошибку.
+        if let explicit = ProcessInfo.processInfo.environment["OCBAR_BIN"], !explicit.isEmpty {
+            binary = Shell.firstExecutable([explicit])
+            lookupNote = binary == nil
+                ? "Переменная OCBAR_BIN указывает на \(explicit) — там нет исполняемого файла."
+                : ""
+            return
+        }
+        var candidates: [String] = []
         // .build/release/ocbar-app → app/../bin/ocbar; внутри бандла
         // ocbar.app/Contents/MacOS/ → ../../../../bin/ocbar
         for up in ["../../../bin/ocbar", "../../../../bin/ocbar", "../bin/ocbar", "../../bin/ocbar"] {
@@ -26,6 +38,9 @@ final class OcbarClient: @unchecked Sendable {
         }
         candidates += ["/opt/homebrew/bin/ocbar", "/usr/local/bin/ocbar"]
         binary = Shell.firstExecutable(candidates)
+        if binary == nil {
+            lookupNote = "Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN."
+        }
     }
 
     var configDir: String {
@@ -44,7 +59,7 @@ final class OcbarClient: @unchecked Sendable {
         guard let binary else {
             var s = Status()
             s.available = false
-            s.error = "ocbar не найден: ни в PATH Homebrew, ни рядом с приложением"
+            s.error = nil
             return s
         }
         let r = Shell.run(binary, ["status", "--short"], timeout: 10)

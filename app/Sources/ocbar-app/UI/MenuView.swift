@@ -31,7 +31,14 @@ struct MenuView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 13).padding(.top, 5)
             }
-            if let message = store.actionNote ?? store.lastError {
+            if let warning = store.helperWarning {
+                Text(warning)
+                    .font(.ocNote).foregroundStyle(Palette.warn)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 13).padding(.top, 5)
+            }
+            if let message = store.actionNote ?? (s.presentation == .missing ? nil : store.lastError) {
                 HStack(alignment: .top, spacing: 6) {
                     Text(message)
                         .font(.ocNote)
@@ -139,10 +146,22 @@ struct MenuView: View {
         Group {
             switch s.presentation {
             case .connected, .lost:
-                MenuRow(action: { store.pause() }) { Text("Приостановить") }
+                MenuRow(action: { store.pause() }) {
+                    Text("Приостановить")
+                    Spacer()
+                    if GlobalHotkeys.shared.isRegistered("pause") {
+                        Text("⌥⌘P").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+                    }
+                }
                 MenuRow(action: { store.disconnect() }) { Text("Отключить") }
             case .paused:
-                MenuRow(action: { store.resume() }) { Text("Возобновить").fontWeight(.medium) }
+                MenuRow(action: { store.resume() }) {
+                    Text("Возобновить").fontWeight(.medium)
+                    Spacer()
+                    if GlobalHotkeys.shared.isRegistered("pause") {
+                        Text("⌥⌘P").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+                    }
+                }
                 MenuRow(action: { store.disconnect() }) { Text("Отключить совсем") }
             case .starting:
                 MenuRow(action: { store.disconnect() }) { Text("Отменить подключение") }
@@ -374,7 +393,9 @@ struct StateLook {
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .missing:
             return .init(color: Palette.bad, title: "ocbar не найден",
-                         note: "Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN.",
+                         note: OcbarClient.shared.lookupNote.isEmpty
+                             ? "Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN."
+                             : OcbarClient.shared.lookupNote,
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         }
     }

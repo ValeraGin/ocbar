@@ -1,4 +1,5 @@
 import Foundation
+import Carbon.HIToolbox
 
 // `ocbar-app --selftest` — проверка того, что можно проверить без человека:
 // разбор и запись профиля, правила проверки, чтение состояния. Последний шаг
@@ -131,6 +132,23 @@ enum SelfTest {
         broken.zones = [ZoneLine(zone: "плохая зона", resolver: "не-адрес", port: "")]
         check("плохая зона — ошибка",
               ProfileCheck.check(broken).contains { $0.level == .error })
+
+        // --- глобальная горячая клавиша ---
+        // Сочетание системное: занятое другой программой не регистрируется.
+        // Берём заведомо редкое, чтобы проверка не зависела от того, что
+        // сейчас запущено, и снимаем за собой.
+        let rare = UInt32(kVK_F19)
+        let first = GlobalHotkeys.shared.register("проверка", keyCode: rare,
+                                                  modifiers: HotkeyCode.cmdOption) {}
+        check("горячая клавиша регистрируется", first)
+        check("занятое сочетание не регистрируется дважды",
+              !GlobalHotkeys.shared.register("вторая", keyCode: rare,
+                                             modifiers: HotkeyCode.cmdOption) {})
+        GlobalHotkeys.shared.unregisterAll()
+        let reRegistered = GlobalHotkeys.shared.register("проверка", keyCode: rare,
+                                                         modifiers: HotkeyCode.cmdOption) {}
+        check("после снятия регистрируется снова", reRegistered)
+        GlobalHotkeys.shared.unregisterAll()
 
         // --- разбор состояния ---
         let status = Status.parse("""

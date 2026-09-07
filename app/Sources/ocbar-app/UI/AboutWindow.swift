@@ -15,8 +15,13 @@ struct AboutView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 30)).foregroundStyle(Palette.accent)
+                // Иконка приложения, если бандл собран с ней; иначе символ.
+                if let icon = NSImage(named: NSImage.applicationIconName), icon.size.width > 0 {
+                    Image(nsImage: icon).resizable().frame(width: 44, height: 44)
+                } else {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 30)).foregroundStyle(Palette.accent)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("ocbar").font(.system(size: 17, weight: .medium))
                     Text("Клиент OpenConnect для macOS: SSO, split DNS, split tunneling")
@@ -37,6 +42,11 @@ struct AboutView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Приложению права не нужны: всё привилегированное делает хелпер, разрешённый через sudoers.")
+                    .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(GlobalHotkeys.shared.isRegistered("pause")
+                     ? "Пауза и возобновление — ⌥⌘P из любой программы."
+                     : "Сочетание ⌥⌘P занято другой программой: пауза только из меню.")
                     .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
