@@ -1706,11 +1706,22 @@ cmd_app() {
             case "${2:-}" in
                 on)
                     [ -n "$a" ] || die "не найден ocbar.app"
+                    # В плист пишем путь, который переживает переустановку:
+                    # каталог opt Homebrew не меняется от версии к версии, а
+                    # путь внутри дерева проекта меняется вместе с деревом.
+                    local stable="$a" c
+                    for c in /opt/homebrew/opt/ocbar/ocbar.app /usr/local/opt/ocbar/ocbar.app; do
+                        [ -d "$c" ] && { stable="$c"; break; }
+                    done
+                    case "$stable" in
+                        */opt/ocbar/ocbar.app) ;;
+                        *) warn "автозапуск" "путь $stable из дерева проекта; после переустановки повторите ocbar app autostart on" ;;
+                    esac
                     mkdir -p "$HOME/Library/LaunchAgents"
-                    app_plist_body "$a" > "$APP_PLIST"
+                    app_plist_body "$stable" > "$APP_PLIST"
                     plutil -lint "$APP_PLIST" >/dev/null || die "плист не разобрался"
                     launchctl bootout "gui/$uid/$APP_LABEL" 2>/dev/null || true
-                    launchctl bootstrap "gui/$uid" "$APP_PLIST" && ok "автозапуск включён" "$a" ;;
+                    launchctl bootstrap "gui/$uid" "$APP_PLIST" && ok "автозапуск включён" "$stable" ;;
                 off)
                     launchctl bootout "gui/$uid/$APP_LABEL" 2>/dev/null || true
                     rm -f "$APP_PLIST"; ok "автозапуск выключен" ;;

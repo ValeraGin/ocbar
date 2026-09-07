@@ -263,6 +263,7 @@ dscacheutil -q host -a name <внутреннее имя>     # приватны
 ocbar app start                 # запустить сейчас
 ocbar app autostart on          # запускать при входе в систему
 ocbar app status                # где бандл, работает ли, включён ли автозапуск
+ocbar app stop && ocbar app start   # после brew upgrade — подхватить новую сборку
 ```
 
 Из репозитория, без Homebrew, приложение собирается отдельно:

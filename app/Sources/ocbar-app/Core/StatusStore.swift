@@ -9,8 +9,16 @@ final class StatusStore: ObservableObject {
     @Published private(set) var status = Status()
     @Published private(set) var samples: [TrafficSample] = []
     @Published private(set) var busy: String?          // что сейчас выполняется
-    @Published private(set) var lastError: String?
-    @Published private(set) var lastAction: String?    // короткий итог действия
+    @Published private(set) var lastError: String?     // беда, о которой сказал сам ocbar status
+    // Итог последнего действия живёт отдельно от ошибки состояния: раньше
+    // ответ ocbar затирался ближайшим опросом через пару секунд, и человек
+    // просто не успевал его прочитать.
+    @Published private(set) var actionNote: String?
+    @Published private(set) var actionFailed = false
+    // Переключатель должен щёлкать сразу, а не через опрос: пока действие
+    // идёт, показываем то, что человек попросил.
+    @Published private(set) var pendingRoutes: [String: Bool] = [:]
+    @Published private(set) var pendingZones: [String: Bool] = [:]
     @Published var menuOpen = false { didSet { retune() } }
     @Published var detailsOpen = false
     @Published private(set) var latency: String?
@@ -33,6 +41,7 @@ final class StatusStore: ObservableObject {
     private var trafficTimer: Timer?
     private var previous: Traffic?
     private var isPreview = false
+    private var latencyAt = Date.distantPast
     private var totals: (rx: UInt64, tx: UInt64) = (0, 0)
 
     var totalRx: UInt64 { totals.rx }
@@ -47,10 +56,13 @@ final class StatusStore: ObservableObject {
     }
 
     // Витрина (--stage): состояние подставлено, ничего не опрашивается.
-    init(preview: Status, samples: [TrafficSample] = [], latency: String? = nil) {
+    init(preview: Status, samples: [TrafficSample] = [], latency: String? = nil,
+         busy: String? = nil, actionNote: String? = nil) {
         self.status = preview
         self.samples = samples
         self.latency = latency
+        self.busy = busy
+        self.actionNote = actionNote
         self.totals = (7_632_631_260, 169_171_632)
         self.isPreview = true
     }
@@ -73,7 +85,10 @@ final class StatusStore: ObservableObject {
     func refresh() {
         guard !isPreview else { return }
         let client = self.client
-        let wantLatency = detailsOpen
+        // Пинговать шлюз при каждом опросе (раз в две секунды) незачем:
+        // цифра меняется медленнее, чем обновляется меню.
+        let wantLatency = detailsOpen && Date().timeIntervalSince(latencyAt) > 10
+        if wantLatency { latencyAt = Date() }
         let gateway = status.gateway
         queue.async { [weak self] in
             let s = client.status()
@@ -122,28 +137,48 @@ final class StatusStore: ObservableObject {
 
     // --- действия --------------------------------------------------------
 
+    private var noteTimer: Timer?
+
     func perform(_ title: String, _ body: @escaping @Sendable () -> OcbarClient.ActionResult) {
         guard busy == nil, !isPreview else { return }
         busy = title
-        lastAction = nil
+        actionNote = nil
+        actionFailed = false
         queue.async { [weak self] in
             let result = body()
             let fresh = OcbarClient.shared.status()
             Task { @MainActor in
                 guard let self else { return }
                 self.busy = nil
+                self.apply(fresh)
+                self.pendingRoutes.removeAll()
+                self.pendingZones.removeAll()
                 switch result {
                 case .ok:
-                    self.lastError = nil
+                    break
                 case .needsLogin:
-                    self.lastAction = "Нужен вход: молча войти не удалось"
+                    self.note("Молча войти не удалось — нужен вход", failed: true)
                 case .failed(_, let message):
-                    self.lastError = message
+                    self.note(message.isEmpty ? "не получилось" : message, failed: true)
                 }
-                self.apply(fresh)
-                if case .failed = result { self.lastError = self.lastError ?? "не получилось" }
             }
         }
+    }
+
+    // Сообщение об итоге держится на экране заметное время и уходит само:
+    // строка, исчезающая через два секунды вместе с опросом, бесполезна.
+    private func note(_ text: String, failed: Bool) {
+        actionNote = text
+        actionFailed = failed
+        noteTimer?.invalidate()
+        noteTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.actionNote = nil }
+        }
+    }
+
+    func dismissNote() {
+        noteTimer?.invalidate()
+        actionNote = nil
     }
 
     func connect(profile: String? = nil) {
@@ -152,12 +187,19 @@ final class StatusStore: ObservableObject {
     func disconnect() { perform("Отключаю…") { OcbarClient.shared.disconnect() } }
     func pause() { perform("Ставлю на паузу…") { OcbarClient.shared.pause() } }
     func resume() { perform("Возобновляю…") { OcbarClient.shared.resume() } }
-    func toggleRoute(_ net: String) {
+    func toggleRoute(_ net: String, to newValue: Bool) {
+        guard busy == nil else { return }
+        pendingRoutes[net] = newValue
         perform("Переключаю \(net)…") { OcbarClient.shared.toggleRoute(net) }
     }
-    func toggleZone(_ zone: String) {
+    func toggleZone(_ zone: String, to newValue: Bool) {
+        guard busy == nil else { return }
+        pendingZones[zone] = newValue
         perform("Переключаю \(zone)…") { OcbarClient.shared.toggleZone(zone) }
     }
+
+    func routeIsOn(_ r: RouteEntry) -> Bool { pendingRoutes[r.net] ?? r.enabled }
+    func zoneIsOn(_ z: ZoneEntry) -> Bool { pendingZones[z.zone] ?? z.enabled }
     func cleanup() { perform("Убираю следы…") { OcbarClient.shared.cleanup() } }
 }
 
