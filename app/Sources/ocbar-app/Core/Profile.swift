@@ -30,6 +30,12 @@ struct ProfileDoc {
     var keychainService = ""
     var idpHosts = ""
     var health = ""
+    // Как пускать трафик. Ключ разбирается и клиентом (bin/ocbar), но сам
+    // прокси-режим ещё не реализован: профиль с Mode = proxy подключаться
+    // откажется — намеренно, чтобы интерфейс не обещал того, чего нет.
+    var mode = "tunnel"
+    var proxyPort = "11080"
+    var systemProxy = false
 
     static let defaultUserAgent = "AnyConnect Windows 4.10.06079"
 
@@ -73,6 +79,7 @@ struct ProfileDoc {
                 case "useragent": d.userAgent = value
                 case "csdwrapper": d.csdWrapper = value
                 case "auth": d.auth = value
+                case "mode": d.mode = value.isEmpty ? "tunnel" : value
                 default: break
                 }
             case "routes":
@@ -91,6 +98,12 @@ struct ProfileDoc {
                 case "keepasskeychain": d.keepassKeychain = value
                 case "keychainservice": d.keychainService = value
                 case "idphosts": d.idpHosts = value
+                default: break
+                }
+            case "proxy":
+                switch key {
+                case "port": d.proxyPort = value
+                case "systemproxy": d.systemProxy = ["on", "1", "yes", "true"].contains(value.lowercased())
                 default: break
                 }
             case "health":
@@ -118,6 +131,7 @@ struct ProfileDoc {
         out += kv("UserAgent", 11, userAgent.isEmpty ? Self.defaultUserAgent : userAgent)
         if !csdWrapper.isEmpty { out += kv("CsdWrapper", 11, csdWrapper) }
         if !auth.isEmpty && auth != "sso" { out += kv("Auth", 11, auth) }
+        if mode != "tunnel" { out += kv("Mode", 11, mode) }
 
         out += "\n[Routes]\n"
         for r in routes where !r.trimmed.isEmpty { out += r.trimmed + "\n" }
@@ -139,6 +153,11 @@ struct ProfileDoc {
         if !keychainService.isEmpty { out += kv("KeychainService", 15, keychainService) }
         if !idpHosts.isEmpty { out += kv("IdpHosts", 15, idpHosts) }
 
+        if mode != "tunnel" || systemProxy {
+            out += "\n[Proxy]\n"
+            out += kv("Port", 12, proxyPort.isEmpty ? "11080" : proxyPort)
+            out += kv("SystemProxy", 12, systemProxy ? "on" : "off")
+        }
         if !health.isEmpty { out += "\n[Health]\nCheck = \(health)\n" }
         return out
     }
@@ -256,6 +275,24 @@ enum ProfileCheck {
         case "keepassxc" where d.keepassEntry.trimmed.isEmpty:
             err("Totp = keepassxc, но не указана запись KeepassEntry")
         default: break
+        }
+        if d.mode != "tunnel" && d.mode != "proxy" {
+            err("режим «\(d.mode)» — бывает tunnel или proxy")
+        }
+        if d.mode == "proxy" {
+            warn("прокси-режим ещё не реализован в клиенте: таким профилем подключиться не получится (docs/09-proxy-mode.md)")
+        }
+        let port = d.proxyPort.trimmed
+        if !port.isEmpty {
+            if let n = Int(port), port.allSatisfy(\.isNumber) {
+                if n < 1024 || n > 65535 { err("порт SOCKS \(n) вне диапазона 1024-65535") }
+                if n == 10808 { warn("порт 10808 занят сторонним SOCKS на этой машине — возьмите другой") }
+            } else {
+                err("порт SOCKS «\(port)» — не число")
+            }
+        }
+        if d.systemProxy && d.mode != "proxy" {
+            warn("системный SOCKS имеет смысл только в прокси-режиме")
         }
         if !d.csdWrapper.isEmpty, d.csdWrapper.contains(" ") {
             warn("путь CsdWrapper с пробелом — хелпер берёт только имя файла из своего каталога")

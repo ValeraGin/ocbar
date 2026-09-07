@@ -61,6 +61,9 @@ struct Status {
     var supervisor = false
     var iface = ""
     var mtu = ""
+    var profileMode = "tunnel"     // tunnel | proxy — режим выбранного профиля
+    var proxyPort = ""
+    var systemProxy = false
     var linkLostSince: Date?      // ставит супервизор, когда проба не проходит
     var routes: [RouteEntry] = []
     var zones: [ZoneEntry] = []
@@ -109,6 +112,9 @@ struct Status {
             case "url":         s.url = value
             case "mode":        s.mode = value
             case "mtu":         s.mtu = value
+            case "profile_mode": s.profileMode = value.isEmpty ? "tunnel" : value
+            case "proxy_port":  s.proxyPort = value
+            case "system_proxy": s.systemProxy = value == "on"
             case "foreign":     s.foreign = value == "1"
             case "supervisor":  s.supervisor = value == "1"
             case "iface":       s.iface = value

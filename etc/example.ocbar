@@ -14,6 +14,9 @@ Url         = vpn.example.com/employees
 User        = alice
 UserAgent   = AnyConnect Windows 4.10.06079
 # CsdWrapper = ~/vpn/csd-post.sh      # заглушка проверки соответствия, если шлюз просит
+# Mode      = tunnel                  # tunnel (по умолчанию) | proxy — локальный SOCKS
+#                                     # через ocproxy. Прокси-режим ещё не реализован:
+#                                     # профиль с ним подключаться откажется.
 
 [Routes]
 # Что уходит в туннель. Список ваш, а не шлюза: то, что присылает шлюз,
@@ -41,6 +44,12 @@ KeepassKeychain = имя-сервиса-в-связке-ключей
 #
 # KeychainService = ru.ocbar.client   # где лежит пароль (и секрет, если Totp = keychain)
 # IdpHosts = idp.example.com          # где разрешено автозаполнять форму входа
+
+# [Proxy]
+# Настройки прокси-режима. Пишутся и читаются, но кода за ними пока нет —
+# см. docs/09-proxy-mode.md.
+# Port        = 11080                 # локальный SOCKS; 10808 бывает занят чужим
+# SystemProxy = off                   # ставить ли SOCKS всей системе при подключении
 
 [Health]
 # Что проверить после подключения: URL, «хост:порт» или имя.
