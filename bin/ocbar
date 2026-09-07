@@ -56,6 +56,8 @@ OC_LOG="$STATE_DIR/openconnect.log"
 RESOLVER_DIR="/etc/resolver"
 AGENT_LABEL="ru.ocbar.supervisor"
 AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
+APP_LABEL="ru.ocbar.app"                 # приложение меню-бара, запуск при входе
+APP_PLIST="$HOME/Library/LaunchAgents/$APP_LABEL.plist"
 
 DRY_RUN=0
 NOTIFY_ENABLED=1     # ключ notifications = off в profiles.conf выключает
@@ -1497,6 +1499,75 @@ cmd_uninstall() {
     [ "$DRY_RUN" = 1 ] || info "состояние в $STATE_DIR оставлено; ocbar cleanup перед удалением"
 }
 
+# --------------------------------------------------------- приложение ----
+# Приложение меню-бара — обычный бандл без привилегий. Оно ставится вместе
+# с остальным, но запускать и заводить в автозапуск его должен человек:
+# значок в меню-баре появляется молча, а решение «пусть будет всегда» — не
+# наше.
+app_path() {
+    local c
+    for c in "${OCBAR_APP:-}" "$SELF_DIR/../ocbar.app" "$SELF_DIR/../app/.build/ocbar.app" \
+             /opt/homebrew/opt/ocbar/ocbar.app /usr/local/opt/ocbar/ocbar.app \
+             /Applications/ocbar.app; do
+        [ -n "$c" ] && [ -d "$c" ] && { printf '%s' "$(cd "$c" && pwd)"; return 0; }
+    done
+    return 1
+}
+app_pid() { pgrep -f 'ocbar\.app/Contents/MacOS/ocbar-app' 2>/dev/null | head -1 || true; }
+
+app_plist_body() { # путь к бандлу
+    cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$APP_LABEL</string>
+  <key>ProgramArguments</key><array><string>$1/Contents/MacOS/ocbar-app</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+</dict></plist>
+PLIST
+}
+
+cmd_app() {
+    local uid; uid=$(id -u)
+    local a; a=$(app_path) || true
+    case "${1:-start}" in
+        start)
+            [ -n "$a" ] || die "не найден ocbar.app (соберите: app/make-app.sh, или brew install)"
+            [ -n "$(app_pid)" ] && { info "уже работает (pid $(app_pid))"; return 0; }
+            open "$a" && ok "запущено" "$a" ;;
+        stop)
+            local p; p=$(app_pid)
+            [ -n "$p" ] || { info "не работает"; return 0; }
+            kill "$p" && ok "остановлено" "pid $p" ;;
+        status)
+            [ -n "$a" ] && ok "Бандл" "$a" || bad "Бандл" "не найден"
+            local p; p=$(app_pid)
+            [ -n "$p" ] && ok "Процесс" "pid $p" || skip "Процесс" "не запущено"
+            if [ -f "$APP_PLIST" ]; then
+                launchctl print "gui/$uid/$APP_LABEL" >/dev/null 2>&1 \
+                    && ok "Автозапуск" "включён" || warn "Автозапуск" "plist есть, но агент не загружен"
+            else
+                skip "Автозапуск" "выключен (ocbar app autostart on)"
+            fi ;;
+        autostart)
+            case "${2:-}" in
+                on)
+                    [ -n "$a" ] || die "не найден ocbar.app"
+                    mkdir -p "$HOME/Library/LaunchAgents"
+                    app_plist_body "$a" > "$APP_PLIST"
+                    plutil -lint "$APP_PLIST" >/dev/null || die "плист не разобрался"
+                    launchctl bootout "gui/$uid/$APP_LABEL" 2>/dev/null || true
+                    launchctl bootstrap "gui/$uid" "$APP_PLIST" && ok "автозапуск включён" "$a" ;;
+                off)
+                    launchctl bootout "gui/$uid/$APP_LABEL" 2>/dev/null || true
+                    rm -f "$APP_PLIST"; ok "автозапуск выключен" ;;
+                *) die "app autostart on|off" ;;
+            esac ;;
+        *) die "app: start | stop | status | autostart on|off" ;;
+    esac
+}
+
 # ---------------------------------------------------------------- версии ----
 # `version --all` — машинный вид для приложения: что установлено, какой
 # версии и где лежит. Поиск бинарников живёт здесь, чтобы приложению не
@@ -1511,6 +1582,7 @@ cmd_version() {
             "$(helper_nopasswd && echo 1 || echo 0)"
     fi
     a=$(auth_path) && printf 'auth_path=%s\n' "$a"
+    a=$(app_path) && printf 'app_path=%s\n' "$a"
     if oc=$(openconnect_bin); then
         printf 'openconnect=%s\nopenconnect_path=%s\n' \
             "$("$oc" --version 2>&1 | head -1 | awk '{print $3}')" "$oc"
@@ -1544,6 +1616,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
+  ocbar app [start|stop|status]       приложение меню-бара; autostart on|off
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
   ocbar doctor                        диагностика, ничего не меняет
@@ -1575,6 +1648,7 @@ case "${1:-}" in
     resume)     cmd_resume ;;
     toggle)     cmd_toggle_pause ;;
     ui-lab)     shift; cmd_ui_lab "$@" ;;
+    app)        shift; cmd_app "$@" ;;
     import)     shift; cmd_import "$@" ;;
     export)     shift; cmd_export "$@" ;;
     supervisor) shift; cmd_supervisor "$@" ;;
