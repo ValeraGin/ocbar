@@ -279,7 +279,16 @@ ocbar app stop && ocbar app start   # после brew upgrade — подхват
 режим работы и «о программе».
 
 Привилегий приложению не нужно: оно читает `ocbar status --short` и зовёт
-`ocbar`, а всё, что требует root, по-прежнему делает хелпер.
+`ocbar`, а всё, что требует root, по-прежнему делает хелпер. Пункт
+«Диагностика…» показывает `ocbar doctor` и умеет уборку следов прошлой
+сессии — то же, что `ocbar cleanup`.
+
+Профилю с `Mode = proxy` нужен `ocproxy` — он не входит в формулу, потому
+что нужен только этому режиму:
+
+```bash
+brew install ocproxy
+```
 
 ### Плагин SwiftBar (запасной вариант)
 
@@ -332,7 +341,7 @@ sudo ./bin/ocbar install
 
 ```bash
 ./bin/ocbar disconnect
-sudo ./bin/ocbar uninstall     # агент, sudoers, хелпер, /usr/local/libexec/ocbar
+sudo ./bin/ocbar uninstall     # приложение и его автозапуск, агент, sudoers, хелпер, /usr/local/libexec/ocbar
 sudo rm -rf /usr/local/var/ocbar                      # состояние: uninstall его оставляет
 rm -rf ~/.config/ocbar ~/Library/Logs/ocbar
 rm -rf "$HOME/Library/Application Support/ocbar"      # выбранный профиль, тумблеры меню

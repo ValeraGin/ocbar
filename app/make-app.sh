@@ -24,13 +24,18 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/ocbar-app" "$APP/Contents/MacOS/ocbar-app"
 
-# Иконка рисуется кодом (make-icon.swift) и собирается в .icns. Если не
-# получилось — приложение всё равно соберётся, просто с системной иконкой.
+# Иконка рисуется кодом (make-icon.swift) и собирается в .icns. Интерпретатор
+# swift внутри песочницы brew может не собрать её (кэш модулей), поэтому
+# готовая копия лежит в Resources/ и идёт в бандл, когда генерация не
+# удалась: у установленного через brew приложения иконка должна быть всегда.
 ICON_OK=0
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 if swift "$(dirname "$0")/make-icon.swift" "$ICONSET" >/dev/null 2>&1 \
    && iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" 2>/dev/null; then
     ICON_OK=1
+elif [ -f Resources/AppIcon.icns ]; then
+    cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"; ICON_OK=1
+    echo "иконка не собралась — взята готовая из Resources/"
 else
     echo "иконка не собралась — приложение будет с системной"
 fi
