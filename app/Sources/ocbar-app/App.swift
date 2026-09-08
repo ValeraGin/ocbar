@@ -119,27 +119,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
-// Значок состояния. Цвета те же, что у плагина SwiftBar, чтобы переход
-// с него не сбивал с толку.
+// Значок в строке состояния: монограмма «oc», чтобы значок читался как ocbar,
+// а не как «какая-то зелёная фигура». Состояние — цветом букв (те же цвета,
+// что в меню): зелёный подключено, оранжевый связь восстанавливается или
+// запуск, жёлтый пауза, красный нужен вход или клиента нет, серый отключено.
+// Пауза дополнительно помечена двумя штрихами вместо точки над буквами —
+// цвет один не всем различим.
 enum MenuBarIcon {
     static func image(for status: Status) -> NSImage {
-        let (symbol, color): (String, NSColor)
+        let color: NSColor
+        var paused = false
         switch status.presentation {
-        case .connected:  (symbol, color) = ("lock.shield.fill", .systemGreen)
-        case .lost:       (symbol, color) = ("lock.shield.fill", .systemOrange)
-        case .paused:     (symbol, color) = ("pause.circle.fill", .systemYellow)
-        case .starting:   (symbol, color) = ("lock.shield", .systemOrange)
-        case .needsLogin: (symbol, color) = ("lock.trianglebadge.exclamationmark.fill", .systemRed)
-        case .foreign:    (symbol, color) = ("lock.shield", .systemGray)
-        case .down:       (symbol, color) = ("lock.open", .systemGray)
-        case .missing:    (symbol, color) = ("exclamationmark.triangle", .systemRed)
+        case .connected:  color = .systemGreen
+        case .lost:       color = .systemOrange
+        case .paused:     color = .systemYellow; paused = true
+        case .starting:   color = .systemOrange
+        case .needsLogin: color = .systemRed
+        case .foreign:    color = .systemGray
+        case .down:       color = .systemGray
+        case .missing:    color = .systemRed
         }
-        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "ocbar")?
-            .withSymbolConfiguration(config)
-            ?? NSImage(systemSymbolName: "lock", accessibilityDescription: "ocbar")!
+        let dim = status.presentation == .down || status.presentation == .foreign
+        let size = NSSize(width: 26, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let base = NSFont.systemFont(ofSize: 15.5, weight: .heavy)
+            let font = base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: 15.5) } ?? base
+            let text = NSAttributedString(string: "oc", attributes: [
+                .font: font, .foregroundColor: color.withAlphaComponent(dim ? 0.75 : 1), .kern: -0.8,
+            ])
+            let s = text.size()
+            text.draw(at: NSPoint(x: (rect.width - s.width) / 2, y: (rect.height - s.height) / 2 - 0.5))
+            if paused {
+                color.set()
+                for x in [rect.width / 2 - 3.5, rect.width / 2 + 0.5] {
+                    NSBezierPath(roundedRect: NSRect(x: x, y: rect.height - 3.5, width: 3, height: 3), xRadius: 0.8, yRadius: 0.8).fill()
+                }
+            }
+            return true
+        }
         image.isTemplate = false
+        image.accessibilityDescription = "ocbar"
         return image
     }
 }

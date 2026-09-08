@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
 //
-// Иконка приложения: щит с замком на синем поле — тот же знак, что в
+// Иконка приложения: монограмма «oc» на синем поле — тот же знак, что в
 // меню-баре, чтобы приложение узнавалось и в Finder, и в переключателе.
 // Рисуется кодом, а не лежит картинкой в репозитории: бинарники в git
 // стареют молча, а здесь видно, из чего иконка сделана.
@@ -35,19 +35,14 @@ func icon(_ px: Int) -> Data? {
     ])
     gradient?.draw(in: shape, angle: -90)
 
-    // Знак: тот же символ, что у значка в меню-баре.
-    let config = NSImage.SymbolConfiguration(pointSize: side * 0.52, weight: .medium)
-    guard let symbol = NSImage(systemSymbolName: "lock.shield.fill", accessibilityDescription: nil)?
-        .withSymbolConfiguration(config) else { return nil }
-    let size = symbol.size
-    let origin = NSPoint(x: (side - size.width) / 2, y: (side - size.height) / 2)
-    let tinted = NSImage(size: size)
-    tinted.lockFocus()
-    symbol.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1)
-    NSColor.white.set()
-    NSRect(origin: .zero, size: size).fill(using: .sourceAtop)
-    tinted.unlockFocus()
-    tinted.draw(at: origin, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1)
+    // Знак: та же монограмма «oc», что в строке состояния.
+    let base = NSFont.systemFont(ofSize: side * 0.58, weight: .heavy)
+    let font = base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: side * 0.58) } ?? base
+    let text = NSAttributedString(string: "oc", attributes: [
+        .font: font, .foregroundColor: NSColor.white, .kern: -side * 0.03,
+    ])
+    let size = text.size()
+    text.draw(at: NSPoint(x: (side - size.width) / 2, y: (side - size.height) / 2 - side * 0.02))
 
     guard let rep = NSBitmapImageRep(focusedViewRect: NSRect(x: 0, y: 0, width: side, height: side))
     else { return nil }
