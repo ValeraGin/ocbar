@@ -1186,7 +1186,10 @@ cmd_connect() {
 }
 
 cmd_disconnect() {
-    rm -f "$DESIRED" "$LINK_LOST" 2>/dev/null || true
+    # «Не подключаться» в ответ на «нужен вход» — тоже решение человека:
+    # флаг ожидания снимаем, иначе значок остаётся красным при опущенном
+    # туннеле и без желания его поднимать.
+    rm -f "$DESIRED" "$LINK_LOST" "$NEEDS_LOGIN" 2>/dev/null || true
     local did=0
     if proxy_alive; then proxy_stop; did=1; fi
     if tunnel_alive || [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; then

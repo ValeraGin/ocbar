@@ -40,7 +40,8 @@ ocbar supervise (LaunchAgent)             от пользователя, раз 
 
 ```bash
 brew tap ValeraGin/ocbar
-brew install --HEAD ocbar             # собирает из исходников у вас
+brew trust ValeraGin/ocbar            # tap не из homebrew-core: без этого brew откажется грузить формулу
+brew install ocbar                    # собирает из исходников у вас; --HEAD — с main
 sudo ocbar install                    # один раз: хелпер, sudoers, агент
 
 mkdir -p ~/.config/ocbar              # без профиля не работает ни одна команда
