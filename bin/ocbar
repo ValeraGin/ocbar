@@ -42,8 +42,13 @@ NEEDS_LOGIN="$USER_STATE/needs-login"    # автоподключение упё
 LINK_LOST="$USER_STATE/link-lost"        # отметка времени: с какого момента проба не проходит
 ROUTES_OFF="$USER_STATE/routes.disabled" # сети из networks.conf, выключенные из меню
 ZONES_OFF="$USER_STATE/zones.disabled"
+# Прокси-режим (docs/09-proxy-mode.md): openconnect работает от пользователя,
+# хелпер не участвует, поэтому и состояние живёт в пользовательском каталоге.
+PROXY_ENV="$USER_STATE/proxy.env"        # STATE, PID, PORT, URL, SINCE, IP4…
+PROXY_PID="$USER_STATE/proxy.pid"        # пишет сам openconnect (--pid-file)
 LOG_DIR="$HOME/Library/Logs/ocbar"
 SUP_LOG="$LOG_DIR/supervisor.log"
+PROXY_LOG="$LOG_DIR/openconnect-proxy.log"
 
 PREFIX="/usr/local"
 HELPER_INSTALLED="$PREFIX/libexec/ocbar-helper"
@@ -54,6 +59,7 @@ PIDFILE="$STATE_DIR/openconnect.pid"
 MANIFEST="$STATE_DIR/zones.state"
 PAUSED_FLAG="$STATE_DIR/paused"
 ROUTES_STATE="$STATE_DIR/routes.state"
+SOCKS_STATE="$STATE_DIR/socks.state"     # системный SOCKS, который поставили мы: "<сервис> <порт>"
 OC_LOG="$STATE_DIR/openconnect.log"
 RESOLVER_DIR="/etc/resolver"
 AGENT_LABEL="ru.ocbar.supervisor"
@@ -140,6 +146,15 @@ auth_path() {
 openconnect_bin() {
     local c
     for c in /opt/homebrew/bin/openconnect /usr/local/bin/openconnect; do [ -x "$c" ] && { printf '%s' "$c"; return 0; }; done
+    return 1
+}
+# ocproxy нужен только прокси-режиму, поэтому это проверка при запуске и
+# строка в doctor, а не зависимость формулы (D40).
+ocproxy_bin() {
+    local c
+    for c in "${OCBAR_OCPROXY:-}" /opt/homebrew/bin/ocproxy /usr/local/bin/ocproxy; do
+        [ -n "$c" ] && [ -x "$c" ] && { printf '%s' "$c"; return 0; }
+    done
     return 1
 }
 
@@ -485,11 +500,38 @@ tunnel_alive() {
 is_paused() { [ -f "$PAUSED_FLAG" ]; }
 # paused — это подсостояние connected: процесс жив, сессия цела, но трафик
 # идёт мимо туннеля. Отдельное имя нужно, чтобы супервизор не «чинил» это.
-tunnel_state() {
+# Только туннель (хелпер, utun): для маршрутов, зон и паузы прокси-сессия
+# не считается — там нечего применять.
+tun_state() {
     if tunnel_alive && [ "$(env_get STATE)" = connected ]; then
         is_paused && echo paused || echo connected
     elif tunnel_alive; then echo starting
     else echo down; fi
+}
+# Состояние сессии любого рода: прокси-режим, если его процесс жив, иначе
+# туннель. Обе сразу не бывают — connect останавливает одну перед другой.
+tunnel_state() {
+    if proxy_alive; then proxy_state; else tun_state; fi
+}
+session_kind() { proxy_alive && echo proxy || echo tunnel; }
+
+# --- прокси-режим: свой openconnect от пользователя, состояние в proxy.env ---
+penv_get() { [ -f "$PROXY_ENV" ] && sed -n "s/^$1=//p" "$PROXY_ENV" | head -1 || true; }
+proxy_pid() { [ -f "$PROXY_PID" ] && grep -E '^[0-9]+$' "$PROXY_PID" 2>/dev/null || true; }
+# Та же сверка имени, что и у туннеля: номер процесса переживает перезагрузку.
+proxy_alive() {
+    local p; p=$(proxy_pid); [ -n "$p" ] || return 1
+    case "$(ps -p "$p" -o comm= 2>/dev/null)" in *openconnect) return 0 ;; *) return 1 ;; esac
+}
+port_open() { nc -z -G 1 127.0.0.1 "$1" >/dev/null 2>&1; }
+proxy_port() { local p; p=$(penv_get PORT); printf '%s' "${p:-${P_PROXY_PORT:-11080}}"; }
+proxy_port_open() { port_open "$(proxy_port)"; }
+# connected — процесс жив и туннель поднят; отвечает ли SOCKS, проверяет
+# проба супервизора: ocproxy может умереть отдельно, и тогда нужен перезапуск,
+# а не другое состояние.
+proxy_state() {
+    proxy_alive || { echo down; return 0; }
+    [ "$(penv_get STATE)" = connected ] && echo connected || echo starting
 }
 
 # utun туннеля: из tunnel.env, иначе (чужая сессия) — по маршруту первой сети.
@@ -825,23 +867,35 @@ build_spec() { # cookie → stdin для tunnel-start
 }
 
 do_connect() { # профиль уже загружен
-    if [ "${P_KIND:-tunnel}" = proxy ]; then
-        die "профиль [$P_NAME] просит прокси-режим (Mode = proxy), а он ещё не реализован: нужна вторая ветка запуска — openconnect --script-tun и ocproxy (docs/09-proxy-mode.md). Уберите ключ, чтобы подключаться туннелем."
-    fi
     if [ "$P_AUTH" = password ]; then
         die "профиль [$P_NAME] — парольная группа (auth = password): шлюз ждёт логин/пароль и OTP из SMS, ocbar этого не автоматизирует. Подключайся голым openconnect (см. README)."
     fi
+    # Тем же профилем — уже подключён, делать нечего. Другим — переключение:
+    # отключить и подключить заново, с записью в журнал. Раньше здесь было
+    # «уже подключён» и код 0, и меню молчало, когда человек выбирал другой
+    # профиль. Вход идёт ДО отключения: если он не удастся или его отменят,
+    # живая сессия останется на месте.
+    local cur switch=0; cur=$(cat "$DESIRED" 2>/dev/null || true)
     case "$(tunnel_state)" in
-        connected) info "уже подключён (pid $(tunnel_pid), $(env_get TUNDEV))"; return 0 ;;
-        starting)  die "openconnect уже запускается (pid $(tunnel_pid)) — подожди или ocbar disconnect" ;;
+        connected|paused)
+            if [ -z "$cur" ] || [ "$cur" = "$P_NAME" ]; then
+                if proxy_alive; then info "уже подключён (прокси, pid $(proxy_pid), SOCKS 127.0.0.1:$(proxy_port))"
+                else info "уже подключён (pid $(tunnel_pid), $(env_get TUNDEV))"; fi
+                return 0
+            fi
+            switch=1 ;;
+        starting)  die "openconnect уже запускается — подожди или ocbar disconnect" ;;
     esac
+    [ "${P_KIND:-tunnel}" = proxy ] && proxy_precheck
     # Хвосты от прошлой сессии — убрать до подключения.
-    if [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; then
+    if [ "$switch" = 0 ] && { [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; }; then
         info "остались следы прошлой сессии — убираю"
         priv cleanup
     fi
     if [ "$DRY_RUN" = 1 ]; then
         info "[dry-run] аутентификация пропущена; подключение выглядело бы так:"
+        [ "$switch" = 1 ] && info "    (сначала отключение профиля [$cur])"
+        if [ "${P_KIND:-tunnel}" = proxy ]; then proxy_start "$P_URL" "0000000000000000000000000000000000000000" COOKIE; return 0; fi
         build_spec "COOKIE" | sed 's/^cookie=.*/cookie=***/' | sed 's/^/    /'
         build_spec "COOKIE" | priv tunnel-start "$P_URL" "0000000000000000000000000000000000000000" "$P_MODE" "$P_USER" "$P_UA" "${P_CSD:+$(basename "$P_CSD")}"
         return 0
@@ -860,15 +914,29 @@ do_connect() { # профиль уже загружен
     # ответит 401 «cookie не моя». Поэтому туннель — на post_url.
     local connect_url="${post_url:-$P_URL}"
     [ "$connect_url" = "$P_URL" ] || info "балансировщик увёл на $connect_url — туннель туда же"
+    if [ "$switch" = 1 ]; then
+        info "подключён профиль [$cur] — отключаю, чтобы подключить [$P_NAME]"
+        log "смена профиля: $cur → $P_NAME"
+        session_stop
+    fi
+    if [ "${P_KIND:-tunnel}" = proxy ]; then
+        proxy_start "$connect_url" "$hash" "$token"
+        mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
+        rm -f "$NEEDS_LOGIN" "$LINK_LOST" 2>/dev/null || true
+        log "подключён (прокси): $P_NAME → SOCKS 127.0.0.1:$(proxy_port), адрес $(penv_get IP4)"
+        notify "ocbar: подключено (прокси)" "$P_TITLE · SOCKS 127.0.0.1:$(proxy_port)"
+        report_health || true
+        return 0
+    fi
     info "сессия получена, поднимаю туннель ($P_MODE)…"
     build_spec "$token" | priv tunnel-start "$connect_url" "$hash" "$P_MODE" "$P_USER" "$P_UA" "${P_CSD:+$(basename "$P_CSD")}"
     local i=0
     while [ $i -lt 40 ]; do
-        [ "$(tunnel_state)" = connected ] && break
+        [ "$(tun_state)" = connected ] && break
         tunnel_alive || { [ $i -gt 3 ] && die "openconnect умер при старте — хвост $OC_LOG:"$'\n'"$(tail -5 "$OC_LOG" 2>/dev/null)"; }
         sleep 1; i=$((i+1))
     done
-    [ "$(tunnel_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
+    [ "$(tun_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
     mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
     rm -f "$NEEDS_LOGIN" "$LINK_LOST" 2>/dev/null || true
@@ -876,11 +944,217 @@ do_connect() { # профиль уже загружен
     report_health || true
 }
 
+# Остановить сессию любого рода. Прокси — свой процесс, туннель — хелпер.
+session_stop() {
+    proxy_alive && proxy_stop
+    if tunnel_alive || [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; then
+        priv tunnel-stop
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------- прокси-режим ----
+# openconnect --script-tun отдаёт пакеты не ядру, а программе: ocproxy
+# поднимает на них локальный SOCKS (docs/09-proxy-mode.md). Ни интерфейса,
+# ни маршрутов, ни /etc/resolver — поэтому хелпер не участвует, всё идёт от
+# пользователя, а openconnect берётся из Homebrew.
+proxy_precheck() {
+    if ! ocproxy_bin >/dev/null; then
+        [ "$DRY_RUN" = 1 ] && { warn "ocproxy" "не найден — brew install ocproxy" >&2; return 0; }
+        die "прокси-режим: нет ocproxy — brew install ocproxy (в формулу он не входит: нужен только этому режиму)"
+    fi
+    openconnect_bin >/dev/null || die "нет openconnect — brew install openconnect"
+    if port_open "$P_PROXY_PORT"; then
+        die "порт 127.0.0.1:$P_PROXY_PORT уже занят (чужой SOCKS? ocbar doctor покажет) — укажите другой в профиле, [Proxy] Port"
+    fi
+}
+
+proxy_start() { # url servercert cookie
+    local url="$1" hash="$2" cookie="$3" oc ocp
+    oc=$(openconnect_bin) || die "нет openconnect"
+    ocp=$(ocproxy_bin) || ocp=ocproxy
+    mkdir -p "$USER_STATE" "$LOG_DIR"
+    # Ротация до запуска: дальше файл держит openconnect, и переименование
+    # его не переключит (D28).
+    rotate_log "$PROXY_LOG" "${OCBAR_LOG_MAX:-1048576}" 2
+    # Программа туннеля — мы сами (_proxy-tun): записать адрес и DNS от шлюза
+    # в proxy.env и уступить место ocproxy через exec, дескриптор VPNFD
+    # наследуется. openconnect запускает её через sh -c, отсюда кавычки.
+    local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$P_USER"
+                  --script-tun --script "'$SELF' _proxy-tun"
+                  --pid-file "$PROXY_PID" -b --os=mac-intel
+                  --reconnect-timeout="${OCBAR_RECONNECT_TIMEOUT:-90}")
+    [ -z "$P_UA" ] || cmd+=(--useragent "$P_UA")
+    [ -n "${P_CSD:-}" ] && [ -x "$P_CSD" ] && cmd+=(--csd-wrapper "$P_CSD")
+    case "$url" in https://*) cmd+=("$url") ;; *) cmd+=("https://$url") ;; esac
+    if [ "$DRY_RUN" = 1 ]; then
+        printf '  %s$ printf "%%s" "$COOKIE" | %s%s\n' "$c_dim" "${cmd[*]}" "$c_off"
+        printf '  %s  → ocproxy -D %s (SOCKS 127.0.0.1:%s), состояние в %s%s\n' "$c_dim" "$P_PROXY_PORT" "$P_PROXY_PORT" "$PROXY_ENV" "$c_off"
+        return 0
+    fi
+    rm -f "$PROXY_PID" "$PROXY_ENV.socks-refused"
+    printf 'STATE=starting\nPORT=%s\nURL=%s\nSTARTED=%s\nPROFILE=%s\nSYS_PROXY=%s\n' \
+        "$P_PROXY_PORT" "$url" "$(date +%s)" "$P_NAME" "${P_SYS_PROXY:-off}" > "$PROXY_ENV"
+    info "сессия получена, поднимаю прокси (SOCKS 127.0.0.1:$P_PROXY_PORT)…"
+    log "прокси: запускаю openconnect --script-tun → $url, SOCKS 127.0.0.1:$P_PROXY_PORT"
+    # setsid по той же причине, что и в хелпере: иначе процесс остаётся в
+    # задаче launchd супервизора и умирает вместе с ним. Cookie — через stdin.
+    printf '%s' "$cookie" \
+        | OCBAR_PROXY_ENV="$PROXY_ENV" OCBAR_PROXY_PORT="$P_PROXY_PORT" OCBAR_OCPROXY="$ocp" \
+          /usr/bin/perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' -- "${cmd[@]}" >> "$PROXY_LOG" 2>&1 || {
+        local rc=$?
+        printf 'STATE=failed\nRC=%s\n' "$rc" >> "$PROXY_ENV"
+        die "openconnect завершился с кодом $rc — хвост $PROXY_LOG:"$'\n'"$(tail -5 "$PROXY_LOG" 2>/dev/null)"
+    }
+    local i=0
+    while [ $i -lt 40 ]; do
+        [ "$(penv_get STATE)" = connected ] && proxy_alive && proxy_port_open && break
+        proxy_alive || { [ $i -gt 3 ] && die "openconnect умер при старте — хвост $PROXY_LOG:"$'\n'"$(tail -5 "$PROXY_LOG" 2>/dev/null)"; }
+        sleep 1; i=$((i+1))
+    done
+    if [ "$(penv_get STATE)" != connected ] || ! proxy_port_open; then
+        proxy_stop >/dev/null 2>&1 || true
+        die "прокси не поднялся за 40 с (STATE=$(penv_get STATE), порт $P_PROXY_PORT $(port_open "$P_PROXY_PORT" && echo отвечает || echo молчит)), см. $PROXY_LOG"
+    fi
+    printf 'PID=%s\n' "$(proxy_pid)" >> "$PROXY_ENV"
+    socks_apply
+}
+
+# Нас позвал openconnect как программу туннеля: в окружении адрес, DNS и MTU
+# от шлюза, в VPNFD — дескриптор потока пакетов. Записываем, что узнали, и
+# передаём поток ocproxy.
+cmd_proxy_tun() {
+    local envf="${OCBAR_PROXY_ENV:-$PROXY_ENV}" port="${OCBAR_PROXY_PORT:-11080}" ocp="${OCBAR_OCPROXY:-}"
+    [ -n "${VPNFD:-}" ] || die "_proxy-tun зовёт только openconnect --script-tun (нет VPNFD)"
+    { [ -n "$ocp" ] && [ -x "$ocp" ]; } || ocp=$(ocproxy_bin) || die "нет ocproxy"
+    {
+        printf 'STATE=connected\nIP4=%s\nDNS=%s\nGATEWAY=%s\nMTU=%s\nDEF_DOMAIN=%s\nSINCE=%s\n' \
+            "${INTERNAL_IP4_ADDRESS:-}" "${INTERNAL_IP4_DNS:-}" "${VPNGATEWAY:-}" \
+            "${INTERNAL_IP4_MTU:-}" "${CISCO_DEF_DOMAIN:-}" "$(date +%s)"
+        [ -f "$envf" ] && grep -E '^(PORT|URL|STARTED|PROFILE|SYS_PROXY)=' "$envf" || true
+    } > "$envf.tmp" && mv "$envf.tmp" "$envf"
+    exec "$ocp" -D "$port"
+}
+
+proxy_stop() {
+    local p port; p=$(proxy_pid); port=$(proxy_port)
+    # Сначала снять системный SOCKS: иначе между остановкой и снятием система
+    # смотрит в мёртвый порт.
+    socks_clear_all
+    if proxy_alive; then
+        info "останавливаю openconnect прокси-режима (pid $p)"
+        kill -INT "$p" 2>/dev/null || true
+        local i=0
+        while ps -p "$p" >/dev/null 2>&1 && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
+        if ps -p "$p" >/dev/null 2>&1; then info "не вышел за 10 с — SIGKILL"; kill -KILL "$p" 2>/dev/null || true; fi
+    fi
+    # ocproxy — дочерний процесс openconnect и по закрытию VPNFD выходит сам.
+    # Если не вышел — это наш SOCKS на нашем порту, гасим.
+    local o; o=$(pgrep -f "ocproxy -D $port\$" 2>/dev/null | head -1 || true)
+    if [ -n "$o" ]; then sleep 1; pgrep -f "ocproxy -D $port\$" >/dev/null 2>&1 && { kill "$o" 2>/dev/null || true; }; fi
+    rm -f "$PROXY_PID" 2>/dev/null || true
+    if [ -f "$PROXY_ENV" ]; then
+        { printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)"; grep -E '^(PORT|URL|STARTED|PROFILE|SYS_PROXY)=' "$PROXY_ENV" || true; } > "$PROXY_ENV.tmp"
+        mv "$PROXY_ENV.tmp" "$PROXY_ENV"
+    fi
+    log "прокси остановлен"
+}
+
+# ------------------------------------------------------- системный SOCKS ----
+# Галочка SystemProxy в профиле: SOCKS не одной программе, а всей системе —
+# networksetup -setsocksfirewallproxy на активном сетевом сервисе. Запись
+# требует прав администратора, поэтому через хелпер (socks-set/socks-clear),
+# со своим манифестом socks.state по образцу zones.state: снимаем только то,
+# что ставили сами, чужой SOCKS хелпер не перезаписывает (D40).
+socks_state_services() { [ -f "$SOCKS_STATE" ] && awk 'NF { $NF = ""; sub(/ $/, ""); print }' "$SOCKS_STATE" || true; }
+# Сервисы, где SOCKS включён не нами.
+services_with_foreign_socks() {
+    local svc ours; ours=$(socks_state_services)
+    networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | while IFS= read -r svc; do
+        case "$svc" in ''|\**) continue ;; esac
+        printf '%s\n' "$ours" | grep -Fxq -- "$svc" && continue
+        networksetup -getsocksfirewallproxy "$svc" 2>/dev/null | grep -q '^Enabled: Yes' && printf '%s\n' "$svc"
+    done
+    return 0
+}
+helper_supports_socks() {
+    local h v; h=$(helper_path) || return 1
+    v=$("$h" version 2>/dev/null | awk '{print $2}')
+    case "$v" in ''|0.[0-6].*) return 1 ;; *) return 0 ;; esac
+}
+# Поставить на активный сервис, если ещё не стоит. Отказ хелпера (чужой
+# SOCKS) — не ошибка подключения: прокси работает, просто система его не
+# видит; об этом говорим и записываем причину для меню.
+socks_apply() {
+    [ "$(penv_get SYS_PROXY)" = on ] || return 0
+    helper_supports_socks || { warn "Системный SOCKS" "хелпер старее CLI и не умеет socks-set — sudo $SELF_ENTRY install"; return 0; }
+    local svc; svc=$(active_service "$(active_iface)" 2>/dev/null || true)
+    [ -n "$svc" ] || { warn "Системный SOCKS" "не нашёл активный сетевой сервис"; return 0; }
+    socks_state_services | grep -Fxq -- "$svc" && return 0
+    local err; err=$(mktemp "${TMPDIR:-/tmp}/ocbar-socks.XXXXXX")
+    if priv socks-set "$svc" "$(proxy_port)" 2>"$err"; then
+        rm -f "$PROXY_ENV.socks-refused" 2>/dev/null || true
+        log "системный SOCKS включён: $svc → 127.0.0.1:$(proxy_port)"
+        ok "Системный SOCKS" "включён на «${svc}»"
+    else
+        local why; why=$(sed 's/^ocbar-helper: //' "$err" | head -1)
+        printf '%s\n' "$why" > "$PROXY_ENV.socks-refused"
+        log "системный SOCKS не включён: $why"
+        warn "Системный SOCKS" "$why"
+        notify "ocbar: системный SOCKS не включён" "$why"
+    fi
+    rm -f "$err"
+    return 0
+}
+# Снять всё своё: при disconnect, в cleanup и когда прокси умер.
+socks_clear_all() {
+    local svc
+    while IFS= read -r svc; do
+        [ -n "$svc" ] || continue
+        priv socks-clear "$svc" && log "системный SOCKS снят: $svc"
+    done <<< "$(socks_state_services)"
+    rm -f "$PROXY_ENV.socks-refused" 2>/dev/null || true
+    return 0
+}
+# Настройка есть, а прокси за ней мёртв — мак без сети. Снять.
+socks_cleanup() {
+    [ -n "$(socks_state_services)" ] || return 0
+    { proxy_alive && proxy_port_open; } && return 0
+    info "системный SOCKS включён, а прокси не отвечает — снимаю"
+    socks_clear_all
+}
+# Супервизор: смена активного сервиса (кабель → Wi-Fi) — поставить на новый.
+socks_ensure() { [ "$(penv_get SYS_PROXY)" = on ] && socks_apply >/dev/null || true; }
+
+# Следы прокси-сессии без живого процесса: файл состояния, осиротевший ocproxy.
+proxy_cleanup() {
+    proxy_alive && return 0
+    local did=0 port; port=$(proxy_port)
+    if [ -n "$(proxy_pid)" ] || [ "$(penv_get STATE)" = connected ] || [ "$(penv_get STATE)" = starting ]; then
+        info "прокси: процесса нет, а состояние говорит $(penv_get STATE) — помечаю отключённым"
+        proxy_stop >/dev/null; did=1
+    fi
+    local o; o=$(pgrep -f "ocproxy -D $port\$" 2>/dev/null | head -1 || true)
+    [ -n "$o" ] && { info "осиротевший ocproxy на порту $port (pid $o) — гашу"; kill "$o" 2>/dev/null || true; did=1; }
+    return 0
+}
+
 # Проверка после подключения: поднятый интерфейс и работающий доступ — разные
 # вещи. Формат в профиле: URL, «хост:порт» или просто имя (тогда проверяется,
 # что оно резолвится через наши зоны).
 healthcheck() {
     [ -n "${P_HEALTH:-}" ] || return 0
+    # В прокси-режиме доступ есть только через SOCKS — проверяем через него,
+    # имя резолвит ocproxy (socks5h). Голое имя проверяется как хост:443.
+    if proxy_alive; then
+        local socks="127.0.0.1:$(proxy_port)"
+        case "$P_HEALTH" in
+            http://*|https://*) curl -s -o /dev/null --max-time 8 --socks5-hostname "$socks" "$P_HEALTH" ;;
+            *:[0-9]*)           nc -z -w 5 -X 5 -x "$socks" "${P_HEALTH%:*}" "${P_HEALTH##*:}" >/dev/null 2>&1 ;;
+            *)                  nc -z -w 5 -X 5 -x "$socks" "$P_HEALTH" 443 >/dev/null 2>&1 ;;
+        esac
+        return
+    fi
     case "$P_HEALTH" in
         http://*|https://*) curl -s -o /dev/null --max-time 8 "$P_HEALTH" ;;
         *:[0-9]*)           nc -z -w 5 "${P_HEALTH%:*}" "${P_HEALTH##*:}" >/dev/null 2>&1 ;;
@@ -913,10 +1187,12 @@ cmd_connect() {
 
 cmd_disconnect() {
     rm -f "$DESIRED" "$LINK_LOST" 2>/dev/null || true
-    if ! tunnel_alive && [ "$(env_get STATE)" != connected ] && [ ! -s "$ROUTES_STATE" ] && [ "$(manifest_zones | grep -c .)" = 0 ]; then
-        info "не подключён"; return 0
+    local did=0
+    if proxy_alive; then proxy_stop; did=1; fi
+    if tunnel_alive || [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; then
+        priv tunnel-stop; did=1
     fi
-    priv tunnel-stop
+    [ "$did" = 1 ] || { info "не подключён"; return 0; }
     log "отключён"
     info "отключён"
 }
@@ -930,11 +1206,21 @@ cmd_status() {
     # осталось имя удалённого профиля, показ состояния из-за этого страдать
     # не должен.
     load_current_profile
-    local st; st=$(tunnel_state)
+    local st kind; st=$(tunnel_state); kind=$(session_kind)
     local prof; prof=$(cat "$DESIRED" 2>/dev/null || true)
     local dev ip since gw dns url mode
-    dev=$(env_get TUNDEV); ip=$(env_get IP4); since=$(env_get CONNECTED); gw=$(env_get GATEWAY); dns=$(env_get DNS); url=$(env_get URL); mode=$(env_get MODE)
+    if [ "$kind" = proxy ]; then
+        # Прокси-сессия: интерфейса нет, адрес и DNS — из proxy.env.
+        dev=""; ip=$(penv_get IP4); since=$(penv_get SINCE); gw=$(penv_get GATEWAY); dns=$(penv_get DNS); url=$(penv_get URL); mode=proxy
+    else
+        dev=$(env_get TUNDEV); ip=$(env_get IP4); since=$(env_get CONNECTED); gw=$(env_get GATEWAY); dns=$(env_get DNS); url=$(env_get URL); mode=$(env_get MODE)
+    fi
     local foreign=""; if [ "$st" = down ] && pgrep -x openconnect >/dev/null 2>&1; then foreign=1; fi
+    # Мак просыпался после подключения — повод проверить туннель. Сравнение
+    # здесь, а не в приложении: kern.waketime знает только эта сторона.
+    local woke=""; if [ "$st" = connected ] && [ -n "$since" ]; then
+        local wk; wk=$(wake_ts); [ -n "$wk" ] && [ "$wk" -gt "$since" ] 2>/dev/null && woke="$wk"
+    fi
 
     if [ "$short" = 1 ]; then
         printf 'paused=%s\nneeds_login=%s\n' "$(is_paused && echo 1 || echo 0)" "$([ -f "$NEEDS_LOGIN" ] && echo 1 || echo 0)"
@@ -944,8 +1230,16 @@ cmd_status() {
         if [ "$st" = connected ] && [ -f "$LINK_LOST" ] && sup_alive; then
             printf 'link_lost=%s\n' "$(cat "$LINK_LOST" 2>/dev/null)"
         fi
+        [ -n "$woke" ] && printf 'woke_after_connect=%s\n' "$woke"
         printf 'state=%s\nprofile=%s\ntundev=%s\nip=%s\nsince=%s\ngateway=%s\ndns=%s\nurl=%s\nmode=%s\nforeign=%s\nsupervisor=%s\niface=%s\n' \
             "$st" "$prof" "$dev" "$ip" "$since" "$gw" "$dns" "$url" "$mode" "$foreign" "$(sup_alive && echo 1 || echo 0)" "$(active_iface)"
+        if [ "$kind" = proxy ]; then
+            # Маршрутов и зон в этом режиме нет — не показываем вовсе, а не
+            # рисуем серыми: они не «выключены», а бессмысленны.
+            printf 'socks=127.0.0.1:%s\nsocks_up=%s\n' "$(proxy_port)" "$(proxy_port_open && echo 1 || echo 0)"
+            printf 'system_socks=%s\n' "$(socks_state_services | tr '\n' ',' | sed 's/,$//')"
+            [ -f "$PROXY_ENV.socks-refused" ] && printf 'system_socks_refused=%s\n' "$(head -1 "$PROXY_ENV.socks-refused")"
+        else
         local n z
         while read -r n; do
             [ -n "$n" ] || continue
@@ -955,6 +1249,7 @@ cmd_status() {
                 | sed 's/  / - /'
         done <<< "$(read_networks)"
         while read -r z d p; do [ -n "$z" ] || continue; printf 'zone=%s %s %s %s\n' "$z" "$d" "$(manifest_zones | grep -Fxq "$z" && echo applied || echo -)" "$(is_off "$z" "$ZONES_OFF" && echo off || echo on)"; done <<< "$(read_zones)"
+        fi
         # Режим выбранного профиля: приложение показывает его в меню и не даёт
         # подключиться профилем, который просит нереализованный режим.
         printf 'profile_mode=%s\nproxy_port=%s\nsystem_proxy=%s\n' \
@@ -964,15 +1259,29 @@ cmd_status() {
         return 0
     fi
 
+    if [ "$kind" = proxy ]; then
+        case "$st" in
+            connected)
+                if proxy_port_open; then ok "Прокси" "SOCKS 127.0.0.1:$(proxy_port) · адрес $ip · $(human_since "$since") · pid $(proxy_pid)"
+                else warn "Прокси" "openconnect жив (pid $(proxy_pid)), но SOCKS 127.0.0.1:$(proxy_port) не отвечает — супервизор перезапустит"; fi ;;
+            starting) warn "Прокси" "openconnect запускается (pid $(proxy_pid))" ;;
+        esac
+    else
     case "$st" in
         connected) ok "Туннель" "$dev · $ip · $(human_since "$since") · $mode" ;;
         paused)    warn "Туннель" "на паузе: поднят ($dev, $(human_since "$since")), но маршруты и зоны сняты — ocbar resume" ;;
         starting)  warn "Туннель" "openconnect запускается (pid $(tunnel_pid))" ;;
         down)      if [ -n "$foreign" ]; then warn "Туннель" "не наш: работает чужой openconnect (pid $(pgrep -x openconnect | head -1))"; else skip "Туннель" "не поднят"; fi ;;
     esac
+    fi
     [ -n "$prof" ] && ok "Профиль" "$prof$( [ -n "$url" ] && printf ' (%s)' "$url")" || skip "Профиль" "не выбран"
     [ -n "$gw" ] && ok "Шлюз" "$gw · DNS от шлюза: ${dns:-нет}"
     ok "Сеть" "$(active_service "$(active_iface)" 2>/dev/null || echo ?) ($(active_iface))"
+    if [ "$kind" = proxy ]; then
+        skip "Маршруты и зоны" "в прокси-режиме не используются: curl --socks5-hostname 127.0.0.1:$(proxy_port) …"
+        local ss; ss=$(socks_state_services | tr '\n' ' ')
+        [ -n "$ss" ] && ok "Системный SOCKS" "включён на: $ss" || skip "Системный SOCKS" "не включён (SystemProxy = off)"
+    else
     local n via line=""
     while read -r n; do
         [ -n "$n" ] || continue
@@ -985,10 +1294,12 @@ cmd_status() {
     [ -n "$line" ] && ok "Маршруты" "$line" || skip "Маршруты" "networks.conf пуст"
     local zc; zc=$(manifest_zones | grep -c . || true)
     [ "$zc" -gt 0 ] && ok "Зоны /etc/resolver" "$zc наших: $(manifest_zones | tr '\n' ' ')" || skip "Зоны /etc/resolver" "наших нет"
+    fi
     sup_alive && ok "Супервизор" "работает (pid $(cat "$SUP_PID"))" || skip "Супервизор" "не запущен"
     if [ "$st" = connected ] && [ -f "$LINK_LOST" ] && sup_alive; then
         warn "Связь" "не отвечает $(( $(date +%s) - $(cat "$LINK_LOST") )) с — openconnect восстанавливает сессию сам"
     fi
+    [ -n "$woke" ] && warn "Сон" "мак просыпался после подключения ($(date -r "$woke" '+%H:%M')) — $(sup_alive && echo 'супервизор проверит туннель сам' || echo 'супервизор не работает, проверьте доступ')"
     [ -f "$NEEDS_LOGIN" ] && warn "Автоподключение" "остановлено: нужен вход — ocbar connect"
 }
 
@@ -1004,14 +1315,14 @@ cmd_routes() {
         add|on)
             valid_cidr "${2:-}" || die "routes add <CIDR>"
             mkdir -p "$USER_STATE"; [ -f "$ROUTES_OFF" ] && { grep -vx "$2" "$ROUTES_OFF" > "$ROUTES_OFF.tmp" || true; mv "$ROUTES_OFF.tmp" "$ROUTES_OFF"; }
-            case "$(tunnel_state)" in
+            case "$(tun_state)" in
                 connected|paused) priv route-add "$2" ;;
-                *) info "$2 включена; применится при подключении" ;;
+                *) info "$2 включена; применится при подключении туннелем" ;;
             esac ;;
         del|off)
             valid_cidr "${2:-}" || die "routes del <CIDR>"
             mkdir -p "$USER_STATE"; read_networks | grep -Fxq "$2" && { is_off "$2" "$ROUTES_OFF" || printf '%s\n' "$2" >> "$ROUTES_OFF"; }
-            case "$(tunnel_state)" in
+            case "$(tun_state)" in
                 connected|paused) priv route-del "$2" ;;
                 *) info "$2 выключена" ;;
             esac ;;
@@ -1019,7 +1330,7 @@ cmd_routes() {
             valid_cidr "${2:-}" || die "routes toggle <CIDR>"
             if is_off "$2" "$ROUTES_OFF"; then cmd_routes add "$2"; else cmd_routes del "$2"; fi ;;
         apply)
-            [ "$(tunnel_state)" = connected ] || die "туннель не поднят"
+            [ "$(tun_state)" = connected ] || die "туннель не поднят"
             while read -r n; do [ -n "$n" ] && priv route-add "$n"; done <<< "$(active_networks)" ;;
         clear)
             while read -r n; do [ -n "$n" ] && priv route-del "$n"; done <<< "$(read_networks)" ;;
@@ -1075,15 +1386,15 @@ cmd_dns() {
             mkdir -p "$USER_STATE"
             [ -f "$ZONES_OFF" ] && { grep -Fvx "$2" "$ZONES_OFF" > "$ZONES_OFF.tmp" || true; mv "$ZONES_OFF.tmp" "$ZONES_OFF"; }
             local zl; zl=$(read_zones | awk -v z="$2" '$1==z {print $2, $3; exit}')
-            case "$(tunnel_state)" in
+            case "$(tun_state)" in
                 connected|paused) priv zone-add "$2" ${zl:-vpn 53} ;;
-                *) info "$2 включена; применится при подключении" ;;
+                *) info "$2 включена; применится при подключении туннелем" ;;
             esac ;;
         off|del)
             valid_zone "${2:-}" || die "dns off <зона>"
             mkdir -p "$USER_STATE"
             is_off "$2" "$ZONES_OFF" || printf '%s\n' "$2" >> "$ZONES_OFF"
-            case "$(tunnel_state)" in
+            case "$(tun_state)" in
                 connected|paused) priv zone-del "$2" ;;
                 *) info "$2 выключена" ;;
             esac ;;
@@ -1298,6 +1609,28 @@ cmd_doctor() {
     if [ "$(manifest_zones | grep -c .)" -gt 0 ] && ! tunnel_alive; then bad "наши зоны /etc/resolver есть, а туннель не поднят"; issues=$((issues+1)); fi
     if [ -s "$ROUTES_STATE" ] && ! tunnel_alive; then bad "маршруты без живого туннеля: $(wc -l < "$ROUTES_STATE" | tr -d ' ')"; issues=$((issues+1)); else ok "Маршруты" "чисто"; fi
     if [ "$(env_get STATE)" = connected ] && ! tunnel_alive; then bad "tunnel.env говорит connected, а openconnect мёртв"; issues=$((issues+1)); fi
+    info "----------------------------------------"; info "Прокси-режим (Mode = proxy)"
+    local ocp pport; pport=$(proxy_port)
+    if ocp=$(ocproxy_bin); then ok "ocproxy" "$ocp"; else skip "ocproxy" "нет — нужен только прокси-режиму: brew install ocproxy"; fi
+    if proxy_alive; then
+        if proxy_port_open; then ok "Прокси" "работает: SOCKS 127.0.0.1:$pport, pid $(proxy_pid)"
+        else bad "Прокси" "openconnect жив (pid $(proxy_pid)), а SOCKS 127.0.0.1:$pport не отвечает"; issues=$((issues+1)); fi
+    elif port_open "$pport"; then
+        warn "Порт $pport" "занят кем-то другим — профиль с Mode = proxy не подключится; чужой SOCKS? (networksetup -getsocksfirewallproxy)"
+    else
+        ok "Порт $pport" "свободен"
+    fi
+    case "$(penv_get STATE)" in
+        connected|starting) proxy_alive || { bad "proxy.env говорит $(penv_get STATE), а процесса нет"; issues=$((issues+1)); } ;;
+    esac
+    local ss; ss=$(socks_state_services | tr '\n' ' ')
+    if [ -n "$ss" ] && ! { proxy_alive && proxy_port_open; }; then
+        bad "Системный SOCKS" "включён на $ss, а за 127.0.0.1:$pport никто не отвечает — мак без сети"; issues=$((issues+1))
+    elif [ -n "$ss" ]; then ok "Системный SOCKS" "наш, на $ss"
+    else
+        local foreign_socks; foreign_socks=$(services_with_foreign_socks | tr '\n' ' ')
+        [ -n "$foreign_socks" ] && skip "Системный SOCKS" "чужой, не трогаем: $foreign_socks" || ok "Системный SOCKS" "не включён"
+    fi
     info "----------------------------------------"
     [ "$issues" = 0 ] && info "Проблем не найдено." || info "Проблем: $issues. Починить — ocbar cleanup"
     return 0
@@ -1317,9 +1650,17 @@ require_fresh_helper() {
     die "установленный хелпер старее CLI и не умеет паузу — обновите: sudo $SELF_ENTRY install"
 }
 
+# В прокси-режиме паузы нет: снаружи туннеля ничего не изменено — ни
+# маршрутов, ни зон, — снимать нечего. Убрать SOCKS с дороги — disconnect.
+no_pause_in_proxy() {
+    proxy_alive || return 0
+    die "в прокси-режиме паузы нет: маршрутов и зон не ставилось, снимать нечего. Программы, которым указан SOCKS 127.0.0.1:$(proxy_port), перестанут ходить только после ocbar disconnect"
+}
+
 cmd_pause() {
+    no_pause_in_proxy
     require_fresh_helper
-    case "$(tunnel_state)" in
+    case "$(tun_state)" in
         paused)    info "уже на паузе"; return 0 ;;
         connected) ;;
         *) die "туннель не поднят — паузить нечего" ;;
@@ -1329,8 +1670,9 @@ cmd_pause() {
 }
 
 cmd_resume() {
+    no_pause_in_proxy
     require_fresh_helper
-    case "$(tunnel_state)" in
+    case "$(tun_state)" in
         paused) ;;
         connected) info "паузы нет, всё уже на месте"; return 0 ;;
         *) die "туннель не поднят — возобновлять нечего" ;;
@@ -1343,7 +1685,7 @@ cmd_toggle_pause() {
     if is_paused; then cmd_resume; else cmd_pause; fi
 }
 
-cmd_cleanup() { priv cleanup; }
+cmd_cleanup() { proxy_cleanup; socks_cleanup; priv cleanup; }
 
 # ------------------------------------------------------------ supervise ----
 # Цикл: держать туннель профиля из $DESIRED. Опрос раз в 5 с (DECISIONS D9).
@@ -1399,6 +1741,7 @@ cmd_supervise() {
         log "при старте найдены следы прошлой сессии без туннеля — убираю"
         priv cleanup >>"$SUP_LOG" 2>&1 || true
     fi
+    socks_cleanup >>"$SUP_LOG" 2>&1 || true
     while :; do
         n=$((n+1)); now=$(date +%s)
         if [ "$(stat -f %m "$SELF" 2>/dev/null || echo 0)" != "$self_mtime" ]; then
@@ -1418,10 +1761,11 @@ cmd_supervise() {
             last_iface="$iface"; probe_bad_since=0; next_try=0; backoff=5
             # Восстановиться по старому локальному адресу openconnect не сможет
             # («Can't assign requested address» в логе), поэтому ждать смысла
-            # нет: сразу закрываем сессию и заходим заново.
+            # нет: сразу закрываем сессию и заходим заново. Прокси-режим — тот
+            # же openconnect, та же беда, перезапуск процесса целиком.
             if [ "$st" = connected ] && [ -n "$desired" ]; then
                 log "смена интерфейса — восстановление по старому адресу невозможно, переподключаюсь"
-                priv tunnel-stop || true
+                session_stop >>"$SUP_LOG" 2>&1 || true
                 st=down; next_try=0
             fi
         fi
@@ -1436,6 +1780,25 @@ cmd_supervise() {
                 # На паузе DNS шлюза недостижим по определению — проверять
                 # туннель его опросом нельзя, живость процесса и есть критерий.
                 backoff=5
+            elif [ "$st" = connected ] && [ "$(session_kind)" = proxy ]; then
+                # Проба прокси — порт, а не DNS через туннель: интерфейса нет.
+                # Живой openconnect с мёртвым SOCKS сам не выправится (ocproxy
+                # умер отдельно), а внутри --script-tun восстанавливать нечего —
+                # перезапуск процесса целиком.
+                if proxy_port_open; then
+                    if [ "$probe_bad_since" != 0 ]; then log "прокси: SOCKS снова отвечает"; fi
+                    probe_bad_since=0; backoff=5; rm -f "$LINK_LOST" 2>/dev/null || true
+                    socks_ensure >>"$SUP_LOG" 2>&1 || true
+                else
+                    [ "$probe_bad_since" = 0 ] && { probe_bad_since=$now; printf '%s\n' "$now" > "$LINK_LOST"; }
+                    if [ $((now - probe_bad_since)) -ge "${OCBAR_PROXY_GRACE:-10}" ]; then
+                        log "прокси: SOCKS 127.0.0.1:$(proxy_port) не отвечает при живом openconnect — перезапускаю целиком"
+                        notify "ocbar: прокси перезапускается" "SOCKS перестал отвечать, поднимаю заново"
+                        proxy_stop >>"$SUP_LOG" 2>&1 || true
+                        probe_bad_since=0; rm -f "$LINK_LOST" 2>/dev/null || true
+                        next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
+                    fi
+                fi
             elif [ "$st" = connected ]; then
                 if tunnel_probe; then
                     backoff=5
@@ -1518,9 +1881,11 @@ cmd_supervise() {
                 fi
             fi
         else
-            if [ "$st" != down ] && [ "$(env_get MODE)" != "" ]; then
-                log "профиль снят, а туннель жив — отключаю"; priv tunnel-stop || true
+            if [ "$st" != down ]; then
+                log "профиль снят, а сессия жива — отключаю"; session_stop >>"$SUP_LOG" 2>&1 || true
             fi
+            # Настройка системного SOCKS без живого прокси — мак без сети.
+            socks_cleanup >>"$SUP_LOG" 2>&1 || true
         fi
 
         [ $((n % 60)) = 0 ] && rotate_log "$SUP_LOG" "${OCBAR_LOG_MAX:-1048576}" 2
@@ -1648,11 +2013,11 @@ cmd_selftest() {
     run() { OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" "$SELF" "$@" 2>&1; }
     has()  { # имя, что искать, где
         total=$((total+1))
-        if printf '%s' "$3" | grep -Fq "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «$2»"; fi
+        if printf '%s' "$3" | grep -Fq -- "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «$2»"; fi
     }
     hasnt() {
         total=$((total+1))
-        if printf '%s' "$3" | grep -Fq "$2"; then fails=$((fails+1)); bad "$1" "нашлось «$2», а не должно"; else ok "$1"; fi
+        if printf '%s' "$3" | grep -Fq -- "$2"; then fails=$((fails+1)); bad "$1" "нашлось «$2», а не должно"; else ok "$1"; fi
     }
     # Через регулярное выражение: интерфейс в строке маршрута зависит от
     # таблицы маршрутизации машины, и сравнивать её целиком нельзя.
@@ -1730,6 +2095,29 @@ PROFILE
     make_bad "$(printf '\n[Auth]\nPassword = ask\nTotp = off')"
     has "пароль от человека виден в secret status" "вводит человек" "$(run secret status bad 2>&1)"
     rm -f "$tmp/profiles/bad.ocbar"
+
+    # Прокси-режим: без сети и без ocproxy проверяется всё, кроме самого
+    # openconnect — команда запуска, программа туннеля, состояние, уборка.
+    printf '[Connection]\nName = Прокси\nUrl = vpn.example.test/g\nUser = tester\nMode = proxy\n\n[Proxy]\nPort = 11080\nSystemProxy = on\n\n[Auth]\nTotp = off\n' > "$tmp/profiles/px.ocbar"
+    printf 'px\n' > "$tmp/state/desired"      # выбранный профиль — как после connect
+    out=$(run status --short 2>&1)
+    has "режим прокси в status" "profile_mode=proxy" "$out"
+    has "галочка системного SOCKS в status" "system_proxy=on" "$out"
+    out=$(run connect --dry-run px 2>&1)
+    has "прокси: openconnect со --script-tun" "--script-tun" "$out"
+    has "прокси: программа туннеля — ocbar" "_proxy-tun" "$out"
+    hasnt "прокси: хелпер не зовётся" "tunnel-start" "$out"
+    has "прокси: ocproxy на порту профиля" "ocproxy -D 11080" "$out"
+    out=$(VPNFD=3 INTERNAL_IP4_ADDRESS=10.9.8.7 INTERNAL_IP4_DNS=10.0.0.1 OCBAR_OCPROXY=/usr/bin/true \
+          OCBAR_PROXY_PORT=11080 run _proxy-tun 2>&1; cat "$tmp/state/proxy.env" 2>/dev/null)
+    has "программа туннеля пишет адрес" "IP4=10.9.8.7" "$out"
+    has "программа туннеля пишет DNS шлюза" "DNS=10.0.0.1" "$out"
+    has "программа туннеля отмечает connected" "STATE=connected" "$out"
+    has "программа туннеля без openconnect отказывает" "нет VPNFD" "$(run _proxy-tun 2>&1)"
+    out=$(run cleanup --dry-run 2>&1; cat "$tmp/state/proxy.env")
+    has "уборка: состояние без процесса помечено отключённым" "STATE=disconnected" "$out"
+    has "пауза без сессии отказывает" "паузить нечего" "$(run pause 2>&1)"
+    rm -f "$tmp/profiles/px.ocbar" "$tmp/state/proxy.env" "$tmp/state/desired"
 
     rm -rf "$tmp"
     info "----------------------------------------"
@@ -1868,8 +2256,9 @@ cmd_version() {
             "$("$oc" --version 2>&1 | head -1 | awk '{print $3}')" "$oc"
     fi
     [ -x "$LIBDIR/openconnect" ] && printf 'openconnect_root=%s\n' "$LIBDIR/openconnect"
-    printf 'config_dir=%s\nprofile_dir=%s\nstate_dir=%s\nsupervisor_log=%s\nopenconnect_log=%s\n' \
-        "$CONFIG_DIR" "$PROFILE_DIR" "$STATE_DIR" "$SUP_LOG" "$OC_LOG"
+    oc=$(ocproxy_bin) && printf 'ocproxy_path=%s\n' "$oc"
+    printf 'config_dir=%s\nprofile_dir=%s\nstate_dir=%s\nsupervisor_log=%s\nopenconnect_log=%s\nproxy_log=%s\n' \
+        "$CONFIG_DIR" "$PROFILE_DIR" "$STATE_DIR" "$SUP_LOG" "$OC_LOG" "$PROXY_LOG"
     printf 'supervisor=%s\n' "$(sup_alive && echo 1 || echo 0)"
     return 0
 }
@@ -1940,6 +2329,7 @@ case "${1:-}" in
     doctor)     cmd_doctor ;;
     cleanup)    cmd_cleanup ;;
     supervise)  shift; cmd_supervise "$@" ;;
+    _proxy-tun) cmd_proxy_tun ;;
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
     version)    shift; cmd_version "${1:-}" ;;
