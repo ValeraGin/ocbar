@@ -27,6 +27,9 @@
 #   zone-add <зона> <dns|vpn> [порт]   добавить зону в список и применить
 #   zone-del <зона>      убрать зону из списка и снять
 #   dns-clear            снять только свои зоны
+#   socks-set <сервис> <порт>   системный SOCKS 127.0.0.1:<порт> на сетевом сервисе
+#                        (адрес не аргумент; чужой SOCKS не перезаписывается)
+#   socks-clear <сервис> снять системный SOCKS, если ставили мы (socks.state)
 #   cleanup              мусор от прошлых сессий
 #   flush-dns
 #   trust                пересобрать манифест доверия к копии openconnect
@@ -40,7 +43,7 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.6.0"
+VERSION="0.7.0"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
 TRUST="$PREFIX/etc/ocbar/trust.sha256"
@@ -71,6 +74,7 @@ ROUTES_STATE="$STATE_DIR/routes.state"     # что реально добави�
 ZONES_WANTED="$STATE_DIR/zones.wanted"     # "<зона> <dns|vpn> <порт>"
 GW_ROUTE="$STATE_DIR/gateway.route"        # host-route до шлюза, чтобы снять при disconnect
 PAUSED="$STATE_DIR/paused"                 # «как будто выключен»: туннель жив, маршрутов и зон нет
+SOCKS_STATE="$STATE_DIR/socks.state"       # системный SOCKS, который поставили мы: "<сервис> <порт>"
 LOG="$STATE_DIR/openconnect.log"
 
 # ------------------------------------------------------------------ вывод ----
@@ -117,6 +121,15 @@ valid_hash()  { printf '%s' "$1" | grep -qE '^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64}|(
 valid_ua()    { printf '%s' "$1" | grep -qE '^[A-Za-z0-9 ._()/;:,-]{1,120}$'; }
 valid_name()  { printf '%s' "$1" | grep -qE '^[A-Za-z0-9._-]{1,64}$'; }
 valid_mode()  { [ "$1" = split ] || [ "$1" = full ]; }   # full принимается ради старых вызовов
+# Имя сетевого сервиса — только точное совпадение со списком системы: это
+# аргумент networksetup, подстановка чего попало туда недопустима.
+valid_service() {
+    local want="$1"
+    [ -n "$want" ] || return 1
+    printf '%s' "$want" | grep -qE '^[A-Za-z0-9 ._()/-]{1,64}$' || return 1
+    networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | sed 's/^\*//' | grep -Fxq -- "$want"
+}
+valid_user_port() { valid_port "$1" && [ "$1" -ge 1024 ]; }
 
 # ------------------------------------------------------------- состояние ----
 tunnel_pid() { [ -f "$PIDFILE" ] && cat "$PIDFILE" 2>/dev/null | grep -E '^[0-9]+$' || true; }
@@ -519,6 +532,62 @@ cmd_resume() {
     say "возобновлено: маршруты и зоны на месте"
 }
 
+# ------------------------------------------------------- системный SOCKS ----
+# networksetup -setsocksfirewallproxy: SOCKS всей системе. Правила, без
+# которых это опасно (docs/09-proxy-mode.md): адрес всегда 127.0.0.1 и не
+# аргумент; имя сервиса сверяется со списком системы; чужой включённый SOCKS
+# не перезаписывается — вернуть его было бы некому, если ocbar умрёт;
+# свои изменения помнятся манифестом, снимается только своё.
+socks_current() { # сервис → "enabled server port"
+    networksetup -getsocksfirewallproxy "$1" 2>/dev/null \
+        | awk -F': ' '/^Enabled:/{e=$2} /^Server:/{s=$2} /^Port:/{p=$2} END{print e, s, p}'
+}
+socks_manifest_port() { # сервис → порт, если ставили мы
+    [ -f "$SOCKS_STATE" ] || return 0
+    awk -v s="$1" 'substr($0, 1, length(s) + 1) == s " " { print $NF; exit }' "$SOCKS_STATE"
+}
+socks_manifest_without() { # сервис → манифест без него
+    [ -f "$SOCKS_STATE" ] || return 0
+    awk -v s="$1" 'substr($0, 1, length(s) + 1) != s " "' "$SOCKS_STATE"
+}
+write_socks_manifest() { # содержимое
+    if [ "$DRY_RUN" = 1 ] && [ "$(id -u)" != 0 ] && [ ! -w "$STATE_DIR" ]; then
+        printf '  $ socks.state ← %s\n' "$(printf '%s' "$1" | tr '\n' ';')"
+    elif [ -n "$1" ]; then printf '%s\n' "$1" > "$SOCKS_STATE"
+    else rm -f "$SOCKS_STATE"; fi
+}
+
+cmd_socks_set() {
+    local svc="${1:-}" port="${2:-}"
+    valid_service "$svc" || die "неизвестный сетевой сервис: '$svc' (см. networksetup -listallnetworkservices)"
+    valid_user_port "$port" || die "порт 1024–65535, а не '$port'"
+    ensure_state_dir
+    local en srv prt; read -r en srv prt <<< "$(socks_current "$svc")"
+    if [ "$en" = Yes ] && [ -z "$(socks_manifest_port "$svc")" ] \
+       && ! { [ "$srv" = 127.0.0.1 ] && [ "$prt" = "$port" ]; }; then
+        die "на «${svc}» уже включён чужой SOCKS ${srv:-?}:${prt:-?} — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле"
+    fi
+    run networksetup -setsocksfirewallproxy "$svc" 127.0.0.1 "$port"
+    run networksetup -setsocksfirewallproxystate "$svc" on
+    write_socks_manifest "$(socks_manifest_without "$svc"; printf '%s %s\n' "$svc" "$port")"
+    say "системный SOCKS: $svc → 127.0.0.1:$port"
+}
+
+cmd_socks_clear() {
+    local svc="${1:-}"
+    valid_service "$svc" || die "неизвестный сетевой сервис: '$svc'"
+    local ours; ours=$(socks_manifest_port "$svc")
+    [ -n "$ours" ] || { say "на «${svc}» мы SOCKS не ставили — не трогаю"; return 0; }
+    local en srv prt; read -r en srv prt <<< "$(socks_current "$svc")"
+    if [ "$en" = Yes ] && ! { [ "$srv" = 127.0.0.1 ] && [ "$prt" = "$ours" ]; }; then
+        say "на «${svc}» теперь стоит ${srv:-?}:${prt:-?}, не наш — оставляю, из манифеста убираю"
+    else
+        run networksetup -setsocksfirewallproxystate "$svc" off
+        say "системный SOCKS снят: $svc"
+    fi
+    write_socks_manifest "$(socks_manifest_without "$svc")"
+}
+
 # --------------------------------------------------------------- cleanup ----
 # lsof без root не видит чужие сокеты, поэтому просто стучимся в порт.
 port53_busy() { nc -z -G 1 127.0.0.1 53 >/dev/null 2>&1; }
@@ -608,6 +677,8 @@ case "$cmd" in
         apply_wanted_zones ;;
     dns-apply)    apply_zones ;;
     dns-clear)    clear_zones ;;
+    socks-set)    cmd_socks_set "$@" ;;
+    socks-clear)  cmd_socks_clear "$@" ;;
     cleanup)      cmd_cleanup ;;
     flush-dns)    flush_dns ;;
     trust)        cmd_trust ;;
