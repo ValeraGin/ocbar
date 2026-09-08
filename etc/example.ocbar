@@ -15,8 +15,7 @@ User        = alice
 UserAgent   = AnyConnect Windows 4.10.06079
 # CsdWrapper = ~/vpn/csd-post.sh      # заглушка проверки соответствия, если шлюз просит
 # Mode      = tunnel                  # tunnel (по умолчанию) | proxy — локальный SOCKS
-#                                     # через ocproxy. Прокси-режим ещё не реализован:
-#                                     # профиль с ним подключаться откажется.
+#                                     # через ocproxy (brew install ocproxy), без root
 
 [Routes]
 # Что уходит в туннель. Список ваш, а не шлюза: то, что присылает шлюз,
@@ -51,10 +50,25 @@ KeepassKeychain = имя-сервиса-в-связке-ключей
 #
 # KeychainService = ru.ocbar.client   # где лежит пароль (и секрет, если Totp = keychain)
 # IdpHosts = idp.example.com          # где разрешено автозаполнять форму входа
+# Rules    = ~/.config/ocbar/autofill.rules   # общий файл правил на несколько профилей;
+#                                     # при заполненной секции [Autofill] не читается
+
+# [Autofill]
+# Правила заполнения формы входа вашего портала — в самом профиле, чтобы
+# файл, отданный коллеге, входил так же. Пишутся сами: ocbar learn <профиль>
+# (или «Разметить портал…» в приложении). Пусто — встроенные правила
+# (Keycloak, Microsoft) или общий файл autofill.rules, если он есть.
+#   stop   <селектор>                  форма показала ошибку — не заполнять повторно
+#   fill   username|password|totp <селектор>
+#   click  <селектор>                  нажать, только если что-то заполнили
+#   click! <селектор>                  нажать безусловно («другой способ входа»)
+# stop  div.alert-error
+# fill  username input[name=username]
+# fill  password input[name=password]
+# click button[type=submit]
 
 # [Proxy]
-# Настройки прокси-режима. Пишутся и читаются, но кода за ними пока нет —
-# см. docs/09-proxy-mode.md.
+# Настройки прокси-режима — см. docs/09-proxy-mode.md.
 # Port        = 11080                 # локальный SOCKS; 10808 бывает занят чужим
 # SystemProxy = off                   # ставить ли SOCKS всей системе при подключении
 

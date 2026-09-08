@@ -49,6 +49,11 @@ enum SelfTest {
         [Health]
         Check = wiki.example.com:443
 
+        [Autofill]
+        stop  div.alert-error
+        fill username input[name=username]
+        click button[type=submit]
+
         [Connection]
         Notifications = off
 
@@ -79,6 +84,13 @@ enum SelfTest {
         check("значение незнакомого ключа на месте",
               ProfileDoc.parse(rendered, fileName: "s").extras.contains { $0.key == "Ключ" && $0.value == "значение" })
         check("проверка доступа", doc.health == "wiki.example.com:443")
+        check("три правила автозаполнения", doc.autofill.count == 3, "\(doc.autofill)")
+        check("селектор с «=» цел", doc.autofill[1] == "fill username input[name=username]")
+        check("правила переживают запись", ProfileDoc.parse(doc.render(), fileName: "s").autofill == doc.autofill)
+        var badRule = doc
+        badRule.autofill = ["fill nothing x"]
+        check("непонятное правило — ошибка", ProfileCheck.check(badRule).contains { $0.level == .error && $0.text.contains("правило") })
+        check("правила приняты как есть", ProfileCheck.check(doc).allSatisfy { !$0.text.contains("правило") })
         check("режим по умолчанию — туннель", doc.mode == "tunnel")
         check("порт SOCKS", doc.proxyPort == "11080")
         check("галочка системного прокси", doc.systemProxy)

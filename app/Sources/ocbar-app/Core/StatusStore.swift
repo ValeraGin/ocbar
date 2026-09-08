@@ -183,8 +183,10 @@ final class StatusStore: ObservableObject {
                 self.pendingRoutes.removeAll()
                 self.pendingZones.removeAll()
                 switch result {
-                case .ok:
-                    break
+                case .ok(let text):
+                    // Итог разметки стоит показать: правила лежат в файле, и
+                    // без этой строки не понять, состоялась ли она.
+                    if title.hasPrefix("Идёт разметка") { self.note(text, failed: false) }
                 case .needsLogin:
                     self.note("Молча войти не удалось — нужен вход", failed: true)
                     AppLog.write("действие «\(title)»: нужен вход (код 5)")
@@ -229,6 +231,17 @@ final class StatusStore: ObservableObject {
         perform("Переключаю \(zone)…") { OcbarClient.shared.toggleZone(zone) }
     }
 
+    // Разметка формы входа: окно ocbar-auth живёт, пока человек не нажмёт
+    // «Готово», поэтому ждём долго; правила ложатся в сам профиль.
+    func learn(profile: String) {
+        perform("Идёт разметка формы…") {
+            let r = OcbarClient.shared.action(["learn", profile], timeout: 1800)
+            if case .ok(let text) = r {
+                return .ok(text.contains("отменена") ? "разметка отменена — профиль не тронут" : "правила записаны в профиль «\(profile)»")
+            }
+            return r
+        }
+    }
     func routeIsOn(_ r: RouteEntry) -> Bool { pendingRoutes[r.net] ?? r.enabled }
     func zoneIsOn(_ z: ZoneEntry) -> Bool { pendingZones[z.zone] ?? z.enabled }
     func cleanup() { perform("Убираю следы…") { OcbarClient.shared.cleanup() } }
