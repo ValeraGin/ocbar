@@ -4,8 +4,8 @@ class Ocbar < Formula
   # Репозиторий приватный: tarball с GitHub без авторизации не скачать, а git
   # по тегу работает с теми же учётными данными, что и --HEAD. Поэтому
   # стабильная версия — тег и коммит, а не url + sha256 (D47).
-  url "https://github.com/ValeraGin/ocbar.git", tag: "v0.2.0", revision: "9767d3bc6df6c19ce7097693047618799385a685"
-  version "0.2.0"
+  url "https://github.com/ValeraGin/ocbar.git", tag: "v0.2.1", revision: "REVISION_V0_2_1"
+  version "0.2.1"
   head "https://github.com/ValeraGin/ocbar.git", branch: "main"
   license "MIT"
 
