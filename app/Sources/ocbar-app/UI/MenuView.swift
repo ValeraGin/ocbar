@@ -457,6 +457,17 @@ struct MenuView: View {
                 Text("режим: " + (s.profileMode == "proxy" ? "прокси" : "туннель"))
                     .font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
             }
+            // Разметка формы входа — для профиля, который сейчас выбран (или
+            // по умолчанию). Правила лягут в сам профиль, секция [Autofill].
+            if let target = learnTarget {
+                MenuRow(enabled: store.busy == nil, action: { store.learn(profile: target) }) {
+                    Text("Разметить форму входа…")
+                    Spacer()
+                    Text(s.profiles.first { $0.name == target }?.display ?? target)
+                        .font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+            }
             MenuRow(action: { open(WindowID.diagnostics) }) { Text("Диагностика…") }
             MenuRow(action: { open(WindowID.logs) }) { Text("Журналы…") }
             MenuRow(action: { NSApplication.shared.terminate(nil) }) {
@@ -471,6 +482,12 @@ struct MenuView: View {
 // Окна открываются поверх: приложение живёт значком в меню-баре, и без
 // явной активации окно уходит за чужие.
 extension MenuView {
+    private var learnTarget: String? {
+        let name = s.profile.isEmpty ? s.defaultProfile : s.profile
+        guard !name.isEmpty, s.available else { return nil }
+        guard let p = s.profiles.first(where: { $0.name == name }), !p.isPassword else { return nil }
+        return name
+    }
     func open(_ id: String) {
         openWindow(id: id)
         NSApp.activate(ignoringOtherApps: true)

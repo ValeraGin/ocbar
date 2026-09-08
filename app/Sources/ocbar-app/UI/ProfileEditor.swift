@@ -142,30 +142,40 @@ struct ProfileEditorView: View {
 
     // Разметка формы: встроенные правила покрывают типовые порталы
     // (Keycloak, Microsoft), а чужую форму человек показывает мышью сам.
+    // Результат живёт в самом профиле (секция [Autofill]) и правится здесь же.
     private var learnBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            field("Файл правил", $doc.rulesFile,
-                  hint: rulesPath.isEmpty ? "по умолчанию ~/.config/ocbar/autofill.rules" : rulesPath)
             HStack(spacing: 8) {
                 Button(learning ? "Идёт разметка…" : "Разметить портал…") { learn() }
                     .disabled(learning || dirty || doc.fileName.trimmed.isEmpty || !fileExists)
                 if learning { ProgressView().controlSize(.small).scaleEffect(0.6) }
-                Button("Показать файл правил") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: rulesPath)])
-                }
-                .disabled(!FileManager.default.fileExists(atPath: rulesPath))
                 Spacer()
+                Text(doc.autofill.isEmpty
+                     ? (doc.rulesFile.trimmed.isEmpty
+                        ? (FileManager.default.fileExists(atPath: rulesPath) ? "действует общий файл autofill.rules" : "действуют встроенные правила")
+                        : "действует файл из Rules")
+                     : "\(doc.autofill.count) правил в профиле")
+                    .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
             }
             Text(learnHint)
                 .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: Binding(
+                get: { doc.autofill.joined(separator: "\n") },
+                set: { doc.autofill = $0.split(separator: "\n", omittingEmptySubsequences: false).map(String.init); touched() }))
+                .font(.system(size: 11, design: .monospaced))
+                .frame(minHeight: 72, maxHeight: 160)
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Palette.line))
+            Text("Правила профиля, по строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Пусто — действует общий файл или встроенные.")
+                .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            field("Общий файл правил", $doc.rulesFile,
+                  hint: "необязательно: путь к файлу на несколько профилей; при заполненной секции выше не читается")
             if let learnResult {
                 Text(learnResult)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 11)).foregroundStyle(learnResult.hasPrefix("не получилось") ? Palette.bad : Palette.ok)
                     .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -174,7 +184,7 @@ struct ProfileEditorView: View {
         if doc.fileName.trimmed.isEmpty { return "Сначала сохраните профиль — размечать нужно его форму входа." }
         if !fileExists { return "Профиль ещё не записан на диск: сохраните, потом размечайте." }
         if dirty { return "Есть несохранённые правки — сохраните, чтобы разметка шла по актуальному адресу." }
-        return "Откроется форма входа вашего портала. Отмечайте мышью поле логина, поле пароля, поле кода и кнопку — правила запишутся сами. Прошлые останутся рядом с суффиксом .bak."
+        return "Откроется форма входа вашего портала. Отмечайте мышью поле логина, поле пароля, поле кода и кнопку — правила запишутся в этот профиль сами. Прошлая версия профиля останется рядом с суффиксом .bak."
     }
 
     private var fileExists: Bool {
@@ -192,16 +202,20 @@ struct ProfileEditorView: View {
         learning = true
         learnResult = nil
         let name = doc.fileName
-        let path = rulesPath
         DispatchQueue.global(qos: .userInitiated).async {
             // Окно разметки живёт, пока человек не нажмёт «Готово»: ждём долго.
             let result = OcbarClient.shared.action(["learn", name], timeout: 1800)
-            let rules = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
             DispatchQueue.main.async {
                 learning = false
                 switch result {
-                case .ok:
-                    learnResult = rules.isEmpty ? "разметка отменена — файл не тронут" : rules
+                case .ok(let text):
+                    // Правила легли в файл профиля — перечитать его, чтобы
+                    // редактор показывал то, что на диске.
+                    if let fresh = ProfileStore.load(name) {
+                        doc = fresh; issues = ProfileCheck.check(doc); dirty = false
+                    }
+                    learnResult = text.contains("отменена") ? "разметка отменена — профиль не тронут"
+                        : "правила записаны в профиль: \(doc.autofill.count) строк"
                 case .needsLogin:
                     learnResult = "разметка не завершена"
                 case .failed(_, let text):

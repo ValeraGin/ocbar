@@ -15,7 +15,7 @@ set -euo pipefail
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 
-VERSION="0.2.1"
+VERSION="0.2.2"
 # SELF_ENTRY — как нас позвали (например, /opt/homebrew/bin/ocbar: этот путь
 # переживает brew upgrade, его кладём в plist). SELF — реальный файл после
 # симлинков (Cellar), рядом с ним лежат libexec/ocbar-helper и ocbar-auth.
@@ -238,6 +238,36 @@ pf_section() { # файл секция
     ' "$1"
 }
 
+# Строки секции как есть, без комментариев и пустых. Для [Autofill]: правила
+# вроде «fill username input[name=username]» содержат «=», и разбор на пары
+# «ключ значение» их ломает.
+pf_section_raw() { # файл секция
+    [ -f "$1" ] || return 0
+    awk -v want="$2" '
+        function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
+        /^[ \t]*[#;]/ { next }
+        { line = trim($0); if (line != "" && tolower(sec) == tolower(want)) print line }
+    ' "$1"
+}
+
+# Заменить секцию файла целиком: старая секция (с комментариями) убирается,
+# новая дописывается в конец. Остальные секции не трогаются.
+pf_replace_section() { # файл секция содержимое(stdin)
+    local f="$1" sec="$2" body; body=$(cat)
+    local tmp="$f.tmp"
+    awk -v want="$sec" '
+        function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        /^[ \t]*\[/ { s = trim($0); gsub(/^\[|\]$/, "", s); skip = (tolower(s) == tolower(want)); if (skip) next }
+        !skip { print }
+    ' "$f" | awk 'NR==1 || !(prev == "" && $0 == "") { print } { prev = $0 }' > "$tmp"
+    if [ -n "$body" ]; then
+        { [ -s "$tmp" ] && [ -n "$(tail -c1 "$tmp")" ] && printf '\n'; printf '\n[%s]\n%s\n' "$sec" "$body"; } >> "$tmp"
+    fi
+    cp -f "$f" "$f.bak" 2>/dev/null || true
+    mv "$tmp" "$f"; chmod 600 "$f" 2>/dev/null || true
+}
+
 profile_files() { [ -d "$PROFILE_DIR" ] && ls "$PROFILE_DIR"/*.ocbar 2>/dev/null | while read -r f; do basename "$f" .ocbar; done || true; }
 
 # Глобальные ключи из шапки profiles.conf (до первой секции).
@@ -333,6 +363,7 @@ load_profile() {
     esac
     P_RULES=$(profile_get "$p" rules); P_RULES="${P_RULES/#\~/$HOME}"
     [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
+    P_RULES_SRC=file; [ -n "$P_RULES" ] || P_RULES_SRC=builtin
     case "$P_MODE" in
         split) ;;
         full)  die "профиль [$p]: режим full убран (он не работал). Полный туннель — двумя строками в networks.conf: 0.0.0.0/1 и 128.0.0.0/1. Учтите, что шлюз может не выпускать наружу" ;;
@@ -398,8 +429,16 @@ load_profile_file() { # файл имя
     P_KP_DB=$(pf_get "$f" Auth KeepassDb); P_KP_DB="${P_KP_DB/#\~/$HOME}"
     P_KP_SVC=$(pf_get "$f" Auth KeepassKeychain)
     P_FILL_HOSTS=$(pf_get "$f" Auth IdpHosts)
+    # Правила автозаполнения живут в самом профиле (секция [Autofill]):
+    # форма портала — свойство подключения, и файл, отданный коллеге, должен
+    # входить так же. Ключ Rules остаётся для тех, кто держит общий файл.
     P_RULES=$(pf_get "$f" Auth Rules); P_RULES="${P_RULES/#\~/$HOME}"
-    [ -n "$P_RULES" ] || { [ -f "$RULES_FILE" ] && P_RULES="$RULES_FILE" || P_RULES=""; }
+    P_RULES_SRC=file
+    if [ -n "$(pf_section_raw "$f" Autofill)" ]; then
+        P_RULES_SRC=inline; P_RULES=""
+    elif [ -z "$P_RULES" ]; then
+        if [ -f "$RULES_FILE" ]; then P_RULES="$RULES_FILE"; else P_RULES=""; P_RULES_SRC=builtin; fi
+    fi
     if [ "$P_TOTP" = auto ]; then
         if [ -n "$P_TOTP_CMD" ]; then P_TOTP=command
         elif [ -n "$P_KP_ENTRY" ]; then P_TOTP=keepassxc
@@ -829,6 +868,14 @@ authenticate() { # печатает "token hash post_url"
     # принимает человек.
     [ "${OCBAR_SILENT:-}" = 1 ] && args+=(--no-window --timeout "${OCBAR_SILENT_TIMEOUT:-25}")
     [ -n "$P_RULES" ] && [ -f "$P_RULES" ] && args+=(--rules "$P_RULES")
+    # Правила из профиля: ocbar-auth читает файл, поэтому кладём их рядом
+    # с состоянием — заново при каждом входе, чтобы правка профиля
+    # действовала сразу.
+    if [ "${P_RULES_SRC:-}" = inline ]; then
+        mkdir -p "$USER_STATE/rules"
+        { printf '# правила из профиля %s, секция [Autofill]; править там\n' "$P_NAME"; pf_section_raw "$P_FILE" Autofill; } > "$USER_STATE/rules/$P_NAME.rules"
+        args+=(--rules "$USER_STATE/rules/$P_NAME.rules")
+    fi
     [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
     [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
     [ "${OCBAR_VERBOSE:-}" = 1 ] && args+=(--verbose)
@@ -1257,6 +1304,7 @@ cmd_status() {
         # подключиться профилем, который просит нереализованный режим.
         printf 'profile_mode=%s\nproxy_port=%s\nsystem_proxy=%s\n' \
             "${P_KIND:-tunnel}" "${P_PROXY_PORT:-11080}" "${P_SYS_PROXY:-off}"
+        printf 'autofill=%s\n' "$(rules_source_label)"
         profiles_summary | while IFS= read -r line; do [ -n "$line" ] && printf 'profile_list=%s\n' "$line"; done
         printf 'default=%s\n' "$(profile_default)"
         return 0
@@ -1545,6 +1593,10 @@ cmd_export() {
         if [ -n "${P_KP_SVC:-}" ];     then printf 'KeepassKeychain = %s\n' "$P_KP_SVC"; fi
         if [ -n "${P_SVC:-}" ];        then printf 'KeychainService = %s\n' "$P_SVC"; fi
         if [ -n "${P_FILL_HOSTS:-}" ]; then printf 'IdpHosts        = %s\n' "$P_FILL_HOSTS"; fi
+        # Правила формы уезжают вместе с профилем: без них коллега получит
+        # портал, который клиент не умеет заполнять.
+        local rules_body; rules_body=$(effective_rules_body)
+        if [ -n "$rules_body" ]; then printf '\n[Autofill]\n%s\n' "$rules_body"; fi
         if [ -n "${P_HEALTH:-}" ]; then printf '\n[Health]\nCheck = %s\n' "$P_HEALTH"; fi
         true
     )
@@ -2126,10 +2178,91 @@ PROFILE
     has "пауза без сессии отказывает" "паузить нечего" "$(run pause 2>&1)"
     rm -f "$tmp/profiles/px.ocbar" "$tmp/state/proxy.env" "$tmp/state/desired"
 
+    # Правила автозаполнения в самом профиле: селектор с «=» должен пережить
+    # разбор, импорт — заменить секцию и не тронуть остальное, экспорт —
+    # унести правила с собой.
+    has "без правил — встроенные" "autofill=builtin" "$(run status --short)"
+    printf '\n[Autofill]\nstop div.alert-error\nfill username input[name=username]\nclick button[type=submit]\n' >> "$tmp/profiles/t.ocbar"
+    out=$(run rules show t 2>&1)
+    has "правила из профиля" "inline" "$out"
+    has "селектор с «=» цел" "fill username input[name=username]" "$out"
+    has "источник правил в status" "autofill=inline" "$(run status --short)"
+    printf 'fill password input[type=password]\nclick! a.other-way\n' > "$tmp/new.rules"
+    run rules import "$tmp/new.rules" t >/dev/null
+    out=$(cat "$tmp/profiles/t.ocbar")
+    has "импорт: новое правило на месте" "click! a.other-way" "$out"
+    hasnt "импорт: старое правило убрано" "input[name=username]" "$out"
+    has "импорт: остальные секции целы" "wiki.example.test:443" "$out"
+    has "импорт: резервная копия" "input[name=username]" "$(cat "$tmp/profiles/t.ocbar.bak")"
+    printf 'fill nothing x\n' > "$tmp/bad.rules"
+    has "непонятное правило отвергнуто" "не приняты" "$(run rules import "$tmp/bad.rules" t 2>&1)"
+    has "экспорт уносит правила" "[Autofill]" "$(run export t 2>&1)"
+    run rules clear t >/dev/null
+    hasnt "секция убирается" "[Autofill]" "$(cat "$tmp/profiles/t.ocbar")"
+
     rm -rf "$tmp"
     info "----------------------------------------"
     if [ "$fails" = 0 ]; then info "selftest: всё OK ($total проверок)"; return 0; fi
     info "selftest: провалов $fails из $total"; return 1
+}
+
+# ------------------------------------------------------------ правила ----
+# Откуда берутся правила автозаполнения у загруженного профиля.
+rules_source_label() {
+    case "${P_RULES_SRC:-}" in
+        inline) printf 'inline' ;;
+        builtin) printf 'builtin' ;;
+        *) if [ -n "${P_RULES:-}" ] && [ -f "$P_RULES" ]; then printf 'file:%s' "$P_RULES"; else printf 'builtin'; fi ;;
+    esac
+}
+# Действующие правила без комментариев — для экспорта и показа.
+effective_rules_body() {
+    if [ "${P_RULES_SRC:-}" = inline ]; then pf_section_raw "$P_FILE" Autofill
+    elif [ -n "${P_RULES:-}" ] && [ -f "$P_RULES" ]; then
+        awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$P_RULES"
+    fi
+}
+# Правило: stop <селектор> | fill username|password|totp <селектор> | click[!] <селектор>
+valid_rule() {
+    local kind field sel
+    read -r kind field sel <<< "$1"
+    case "$kind" in
+        stop|click|click!) [ -n "$field" ] && [ -z "$sel" ] ;;
+        fill) case "$field" in username|password|totp) [ -n "$sel" ] ;; *) return 1 ;; esac ;;
+        *) return 1 ;;
+    esac
+}
+
+cmd_rules() {
+    local sub="${1:-show}"
+    case "$sub" in
+        show|'')
+            load_profile "${2:-}"
+            info "Правила автозаполнения для [$P_NAME]: $(rules_source_label)"
+            local body; body=$(effective_rules_body)
+            if [ -n "$body" ]; then printf '%s\n' "$body" | sed 's/^/  /'
+            else info "  (встроенные — Keycloak, Microsoft; свои — ocbar learn $P_NAME)"; fi ;;
+        import)
+            # Положить правила из файла в секцию [Autofill] профиля.
+            local src="${2:-}"; [ -n "$src" ] && [ -f "$src" ] || die "rules import <файл> [профиль]"
+            load_profile "${3:-}"
+            [ -n "$P_FILE" ] || die "профиль [$P_NAME] — старого формата (profiles.conf); правила в него не кладутся, используйте Rules = <файл>"
+            local body bad=0 line
+            body=$(awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$src")
+            while IFS= read -r line; do
+                [ -n "$line" ] || continue
+                valid_rule "$line" || { bad=1; warn "непонятное правило" "$line"; }
+            done <<< "$body"
+            [ "$bad" = 0 ] || die "правила не приняты — формат: stop <сел> | fill username|password|totp <сел> | click[!] <сел>"
+            printf '%s\n' "$body" | pf_replace_section "$P_FILE" Autofill
+            ok "правила в профиле [$P_NAME]" "$(printf '%s\n' "$body" | grep -c .) строк, прошлая версия — $(basename "$P_FILE").bak" ;;
+        clear)
+            load_profile "${2:-}"
+            [ -n "$P_FILE" ] || die "профиль [$P_NAME] старого формата"
+            printf '' | pf_replace_section "$P_FILE" Autofill
+            ok "секция [Autofill] убрана из [$P_NAME]" "действуют $( [ -f "$RULES_FILE" ] && echo "правила из $RULES_FILE" || echo "встроенные правила")" ;;
+        *) die "rules: show [профиль] | import <файл> [профиль] | clear [профиль]" ;;
+    esac
 }
 
 # --------------------------------------------------------- разметка ----
@@ -2147,19 +2280,32 @@ cmd_learn() {
     done
     load_profile "$p"
     local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
-    local target="$out"
-    [ -n "$target" ] || target="${P_RULES:-$RULES_FILE}"
+    # Куда класть: явный --out; иначе профилю-файлу — в его секцию [Autofill]
+    # (если он не указывает общий файл ключом Rules); старому формату — в файл.
+    local target="$out" into_profile=0
+    if [ -z "$target" ]; then
+        if [ -n "$P_FILE" ] && [ -z "$(pf_get "$P_FILE" Auth Rules)" ]; then
+            into_profile=1; target=$(mktemp "${TMPDIR:-/tmp}/ocbar-learn.XXXXXX")
+        else
+            target="${P_RULES:-$RULES_FILE}"
+        fi
+    fi
     info "Разметка формы входа: профиль [$P_NAME], $P_URL"
     info "  открою форму; отмечайте поля и кнопку мышью, потом «Готово»"
-    info "  правила лягут в $target (прошлые — туда же с суффиксом .bak)"
+    if [ "$into_profile" = 1 ]; then info "  правила лягут в сам профиль ($P_FILE, секция [Autofill]; прошлая версия — рядом с суффиксом .bak)"
+    else info "  правила лягут в $target (прошлые — туда же с суффиксом .bak)"; fi
     local rc=0
     "$auth" --learn --url "$P_URL" --useragent "$P_UA" --out "$target" >/dev/null || rc=$?
     case "$rc" in
-        0)  ok "правила записаны" "$target"
-            info "что получилось:"; sed 's/^/    /' "$target"
+        0)  if [ "$into_profile" = 1 ]; then
+                cmd_rules import "$target" "$P_NAME"; rm -f "$target"
+            else
+                ok "правила записаны" "$target"
+                info "что получилось:"; sed 's/^/    /' "$target"
+            fi
             info "проверить на живом входе: ocbar connect --show" ;;
-        3)  info "разметка отменена — файл не тронут" ;;
-        *)  die "разметка не удалась (код $rc)" ;;
+        3)  [ "$into_profile" = 1 ] && rm -f "$target"; info "разметка отменена — профиль не тронут" ;;
+        *)  [ "$into_profile" = 1 ] && rm -f "$target"; die "разметка не удалась (код $rc)" ;;
     esac
 }
 
@@ -2295,7 +2441,9 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
   ocbar learn [профиль] [--out файл]  разметить форму входа мышью: правила
-                                      автозаполнения для своего портала
+                                      автозаполнения для своего портала —
+                                      в секцию [Autofill] самого профиля
+  ocbar rules show|import|clear       правила автозаполнения профиля
   ocbar app [start|stop|status]       приложение меню-бара; autostart on|off
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
@@ -2331,6 +2479,7 @@ case "${1:-}" in
     ui-lab)     shift; cmd_ui_lab "$@" ;;
     app)        shift; cmd_app "$@" ;;
     learn)      shift; cmd_learn "$@" ;;
+    rules)      shift; cmd_rules "$@" ;;
     selftest)   cmd_selftest ;;
     import)     shift; cmd_import "$@" ;;
     export)     shift; cmd_export "$@" ;;

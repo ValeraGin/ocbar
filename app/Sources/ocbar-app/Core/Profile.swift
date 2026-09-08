@@ -38,7 +38,11 @@ struct ProfileDoc {
     var mode = "tunnel"
     var proxyPort = "11080"
     var systemProxy = false
-    var rulesFile = ""            // [Auth] Rules — правила автозаполнения формы
+    var rulesFile = ""            // [Auth] Rules — общий файл правил (для тех, кто держит один на всех)
+    // [Autofill] — правила автозаполнения формы входа в самом профиле:
+    // форма портала — свойство подключения, и файл, отданный коллеге,
+    // должен входить так же. Строки как есть: stop/fill/click <селектор>.
+    var autofill: [String] = []
     var notifications = ""        // [Connection] Notifications = off выключает уведомления
     // Ключи, которых редактор не знает. Хранятся и записываются обратно:
     // молча потерять строку из чужого профиля — худшее, что может сделать
@@ -97,6 +101,9 @@ struct ProfileDoc {
                 }
             case "routes":
                 if parts.count == 1 { d.routes.append(line) }
+            case "autofill":
+                // Селекторы содержат «=» (input[name=username]) — строка целиком.
+                d.autofill.append(line)
             case "dns":
                 guard parts.count > 1 else { continue }
                 let rhs = value.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
@@ -178,6 +185,9 @@ struct ProfileDoc {
         if !rulesFile.isEmpty { out += kv("Rules", 15, rulesFile) }
         out += extra("Auth", 15)
 
+        let rules = autofill.map(\.trimmed).filter { !$0.isEmpty }
+        if !rules.isEmpty { out += "\n[Autofill]\n" + rules.joined(separator: "\n") + "\n" }
+
         if mode != "tunnel" || systemProxy {
             out += "\n[Proxy]\n"
             out += kv("Port", 12, proxyPort.isEmpty ? "11080" : proxyPort)
@@ -186,7 +196,7 @@ struct ProfileDoc {
         }
         if !health.isEmpty { out += "\n[Health]\nCheck = \(health)\n" + extra("Health", 5) }
         // Секции, о которых редактор не знает вовсе, дописываются как есть.
-        let known = ["connection", "routes", "dns", "auth", "proxy", "health"]
+        let known = ["connection", "routes", "dns", "auth", "proxy", "health", "autofill"]
         for section in orderedExtraSections where !known.contains(section.lowercased()) {
             out += "\n[\(section)]\n" + extra(section, 12)
         }
@@ -352,11 +362,30 @@ enum ProfileCheck {
         if !d.csdWrapper.isEmpty, d.csdWrapper.contains(" ") {
             warn("путь CsdWrapper с пробелом — хелпер берёт только имя файла из своего каталога")
         }
+        for rule in d.autofill.map(\.trimmed) where !rule.isEmpty && !rule.hasPrefix("#") {
+            if !validRule(rule) { err("правило «\(rule)» — бывает stop <сел>, fill username|password|totp <сел>, click <сел>, click! <сел>") }
+        }
+        if !d.autofill.isEmpty, !d.rulesFile.trimmed.isEmpty {
+            warn("в профиле есть [Autofill] — файл из Rules при этом не читается")
+        }
         return issues
     }
 }
 
 // --- файлы профилей ------------------------------------------------------
+
+extension ProfileCheck {
+    // Та же грамматика, что у valid_rule в bin/ocbar и у ocbar-auth.
+    static func validRule(_ rule: String) -> Bool {
+        let f = rule.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard let kind = f.first else { return false }
+        switch kind {
+        case "stop", "click", "click!": return f.count == 2
+        case "fill": return f.count == 3 && ["username", "password", "totp"].contains(f[1])
+        default: return false
+        }
+    }
+}
 
 enum ProfileStore {
     static func list() -> [String] {

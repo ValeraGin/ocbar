@@ -95,10 +95,18 @@ KeepassEntry = Группа/Запись
 
 [Health]
 Check = wiki.example.com:443
+
+[Autofill]
+fill  username input[name=username]
+fill  password input[name=password]
+click button[type=submit]
 ```
 
 Секретов в файле нет и быть не должно — только ссылки на хранилище, поэтому
-такой профиль можно переслать коллеге:
+такой профиль можно переслать коллеге — вместе с правилами заполнения формы
+входа его портала (секция `[Autofill]`, пишется разметкой мышью: `ocbar
+learn` или «Разметить форму входа…» в меню; `ocbar rules show` покажет,
+какие действуют):
 
 ```bash
 ocbar import ~/Downloads/office.ocbar        # добавить
