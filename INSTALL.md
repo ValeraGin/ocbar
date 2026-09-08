@@ -50,7 +50,8 @@ cd ~/Projects/ocbar
 
 ```bash
 brew tap ValeraGin/ocbar
-brew install --HEAD ocbar
+brew trust ValeraGin/ocbar      # tap не из homebrew-core: с 2026 brew не грузит формулы из недоверенных tap
+brew install ocbar              # стабильная версия по тегу; --HEAD — с main
 ```
 
 Репозитории приватные, поэтому нужен доступ к ним: настроенный `gh auth` или
