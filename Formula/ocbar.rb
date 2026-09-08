@@ -1,10 +1,11 @@
 class Ocbar < Formula
   desc "OpenConnect client for macOS: SSO via WKWebView, split DNS, split tunneling, menu bar"
   homepage "https://github.com/ValeraGin/ocbar"
-  # Стабильная версия появится с первым тегом:
-  #   url "https://github.com/ValeraGin/ocbar/archive/refs/tags/v0.1.0.tar.gz"
-  #   sha256 "<brew fetch --build-from-source ocbar покажет>"
-  # До него формула head-only: brew install --HEAD ValeraGin/ocbar/ocbar
+  # Репозиторий приватный: tarball с GitHub без авторизации не скачать, а git
+  # по тегу работает с теми же учётными данными, что и --HEAD. Поэтому
+  # стабильная версия — тег и коммит, а не url + sha256 (D47).
+  url "https://github.com/ValeraGin/ocbar.git", tag: "v0.2.0", revision: "REVISION_V0_2_0"
+  version "0.2.0"
   head "https://github.com/ValeraGin/ocbar.git", branch: "main"
   license "MIT"
 
@@ -39,6 +40,10 @@ class Ocbar < Formula
         ocbar app start                 запустить сейчас
         ocbar app autostart on          запускать при входе в систему
         open #{prefix}/ocbar.app        то же самое руками
+
+      Прокси-режим (Mode = proxy в профиле) нуждается в ocproxy — он не
+      зависимость формулы, потому что нужен только этому режиму:
+        brew install ocproxy
 
       Плагин SwiftBar — символической ссылкой в каталог плагинов:
         ln -s #{pkgshare}/swiftbar/ocbar.5s.sh ~/Library/Application\\ Support/SwiftBar/Plugins/

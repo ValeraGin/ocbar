@@ -15,7 +15,7 @@ set -euo pipefail
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 # SELF_ENTRY — как нас позвали (например, /opt/homebrew/bin/ocbar: этот путь
 # переживает brew upgrade, его кладём в plist). SELF — реальный файл после
 # симлинков (Cellar), рядом с ним лежат libexec/ocbar-helper и ocbar-auth.
@@ -1994,7 +1994,11 @@ cmd_supervisor() {
 
 cmd_uninstall() {
     local me="${SUDO_USER:-$(id -un)}" uid; uid=$(id -u "$me")
-    local -a steps=("launchctl bootout gui/$uid/$AGENT_LABEL" "rm -f /Users/$me/Library/LaunchAgents/$AGENT_LABEL.plist"
+    # Приложение меню-бара — от пользователя: остановить и снять автозапуск,
+    # иначе после удаления оно продолжит показывать «ocbar не найден».
+    local -a steps=("sudo -u $me launchctl bootout gui/$uid/$APP_LABEL" "rm -f /Users/$me/Library/LaunchAgents/$APP_LABEL.plist"
+                    "pkill -f ocbar.app/Contents/MacOS/ocbar-app"
+                    "launchctl bootout gui/$uid/$AGENT_LABEL" "rm -f /Users/$me/Library/LaunchAgents/$AGENT_LABEL.plist"
                     "rm -f /etc/sudoers.d/ocbar" "rm -rf $LIBDIR $HELPER_INSTALLED $PREFIX/etc/ocbar")
     local s; for s in "${steps[@]}"; do printf '  %s$ %s%s\n' "$c_dim" "$s" "$c_off"; [ "$DRY_RUN" = 1 ] || bash -c "$s" || true; done
     [ "$DRY_RUN" = 1 ] || info "состояние в $STATE_DIR оставлено; ocbar cleanup перед удалением"
@@ -2268,7 +2272,9 @@ usage() {
     cat <<'USAGE'
 ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супервизор.
 
-  ocbar connect [профиль] [--show]   подключиться (окно SSO покажется при необходимости)
+  ocbar connect [профиль] [--show]   подключиться (окно SSO покажется при необходимости);
+                                      другим профилем при живой сессии — переключение;
+                                      Mode = proxy в профиле — SOCKS через ocproxy, без root
   ocbar disconnect                    отключиться
   ocbar pause                         «как будто выключен»: снять маршруты и зоны,
                                       туннель и вход оставить живыми
