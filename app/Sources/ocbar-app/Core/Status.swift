@@ -64,6 +64,13 @@ struct Status {
     var profileMode = "tunnel"     // tunnel | proxy — режим выбранного профиля
     var proxyPort = ""
     var systemProxy = false
+    // Живая прокси-сессия: mode=proxy, адрес SOCKS, отвечает ли он, на каких
+    // сетевых сервисах включён системный SOCKS и почему не включился.
+    var socks = ""                 // 127.0.0.1:11080
+    var socksUp = true
+    var systemSocksOn: [String] = []
+    var systemSocksRefused = ""
+    var wokeAfterConnect: Date?   // мак спал после подключения — повод проверить туннель
     var linkLostSince: Date?      // ставит супервизор, когда проба не проходит
     var routes: [RouteEntry] = []
     var zones: [ZoneEntry] = []
@@ -88,6 +95,8 @@ struct Status {
     var profileTitle: String {
         profiles.first { $0.name == profile }?.display ?? (profile.isEmpty ? "—" : profile)
     }
+    /// Сессия поднята в прокси-режиме: интерфейса, маршрутов и зон нет.
+    var isProxySession: Bool { mode == "proxy" && state != .down }
 
     var routesOn: [RouteEntry] { routes.filter { $0.enabled } }
     var zonesApplied: [ZoneEntry] { zones.filter { $0.applied } }
@@ -115,6 +124,11 @@ struct Status {
             case "profile_mode": s.profileMode = value.isEmpty ? "tunnel" : value
             case "proxy_port":  s.proxyPort = value
             case "system_proxy": s.systemProxy = value == "on"
+            case "socks":       s.socks = value
+            case "socks_up":    s.socksUp = value == "1"
+            case "system_socks": s.systemSocksOn = value.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+            case "system_socks_refused": s.systemSocksRefused = value
+            case "woke_after_connect": s.wokeAfterConnect = unixDate(value)
             case "foreign":     s.foreign = value == "1"
             case "supervisor":  s.supervisor = value == "1"
             case "iface":       s.iface = value

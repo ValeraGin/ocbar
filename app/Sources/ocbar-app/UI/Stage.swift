@@ -56,6 +56,37 @@ enum Fixture {
         return s
     }
 
+    // Прокси-сессия: интерфейса нет, маршрутов и зон нет, есть адрес SOCKS.
+    static func proxy(refused: Bool = false, socksUp: Bool = true) -> Status {
+        var s = status(.connected)
+        s.mode = "proxy"; s.profileMode = "proxy"; s.proxyPort = "11080"
+        s.tundev = ""; s.mtu = ""
+        s.routes = []; s.zones = []
+        s.socks = "127.0.0.1:11080"; s.socksUp = socksUp
+        s.systemProxy = true
+        s.systemSocksOn = refused || !socksUp ? [] : ["USB 10/100/1G/2.5G LAN"]
+        s.systemSocksRefused = refused ? "на «USB 10/100/1G/2.5G LAN» уже включён чужой SOCKS 127.0.0.1:10808 — не перезаписываю" : ""
+        if !socksUp { s.linkLostSince = Date().addingTimeInterval(-6) }
+        return s
+    }
+
+    static func woke() -> Status {
+        var s = status(.connected)
+        s.wokeAfterConnect = Date().addingTimeInterval(-600)
+        return s
+    }
+
+    // Много профилей: список должен прокручиваться, а не растягивать меню.
+    static func many() -> Status {
+        var s = status(.connected)
+        s.profiles = (1...9).map {
+            ProfileEntry(name: "p\($0)", title: "Профиль \($0)", auth: $0 == 9 ? "password" : "",
+                         descr: $0 % 2 == 0 ? "описание профиля номер \($0)" : "")
+        }
+        s.profile = "p1"
+        return s
+    }
+
     static func samples(active: Bool) -> [StatusStore.TrafficSample] {
         (0..<30).map { i in
             let base = active ? 1.2e6 : 0
@@ -148,6 +179,15 @@ struct StageView: View {
                 card("подключено · идёт действие", .connected, busy: "Переключаю 10.0.0.0/8…")
                 card("подключено · не получилось", .connected,
                      note: "ocbar: сеть 11.0.0.0/8 не включилась — хелпер вернул 1")
+                card("после сна", Fixture.woke())
+                Spacer()
+            }
+            HStack(alignment: .top, spacing: 18) {
+                card("прокси · подробности", Fixture.proxy(), expandDetails: true)
+                card("прокси · чужой системный SOCKS", Fixture.proxy(refused: true))
+                card("прокси · SOCKS не отвечает", Fixture.proxy(socksUp: false), expandDetails: true)
+                card("девять профилей · смена", Fixture.many(), expandProfiles: true,
+                     switchTo: ProfileEntry(name: "p4", title: "Профиль 4", auth: "", descr: ""))
                 Spacer()
             }
         }
@@ -166,12 +206,21 @@ struct StageView: View {
     private func card(_ name: String, _ presentation: Presentation,
                       expandDetails: Bool = false, expandProfiles: Bool = false,
                       busy: String? = nil, note: String? = nil) -> some View {
+        card(name, Fixture.status(presentation), expandDetails: expandDetails,
+             expandProfiles: expandProfiles, busy: busy, note: note,
+             active: presentation == .connected)
+    }
+
+    private func card(_ name: String, _ status: Status,
+                      expandDetails: Bool = false, expandProfiles: Bool = false,
+                      busy: String? = nil, note: String? = nil, active: Bool = true,
+                      switchTo: ProfileEntry? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(name).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-            MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles)
+            MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles, switchTo: switchTo)
                 .environmentObject(StatusStore(
-                    preview: Fixture.status(presentation),
-                    samples: Fixture.samples(active: presentation == .connected),
+                    preview: status,
+                    samples: Fixture.samples(active: active),
                     latency: "41 мс", busy: busy, actionNote: note))
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))

@@ -32,7 +32,7 @@ struct LogsView: View {
             Picker("", selection: $current) {
                 ForEach(sources) { s in Text(s.title).tag(s.id) }
             }
-            .pickerStyle(.segmented).labelsHidden().frame(width: 330)
+            .pickerStyle(.segmented).labelsHidden().frame(width: 400)
             .onChange(of: current) { _ in reload() }
 
             TextField("фильтр по подстроке", text: $filter)
@@ -107,6 +107,8 @@ struct LogsView: View {
                       path: v["supervisor_log"] ?? OcbarClient.shared.supervisorLog),
             LogSource(id: "openconnect", title: "openconnect",
                       path: v["openconnect_log"] ?? OcbarClient.shared.openconnectLog),
+            LogSource(id: "proxy", title: "прокси",
+                      path: v["proxy_log"] ?? OcbarClient.shared.proxyLog),
             LogSource(id: "app", title: "Приложение", path: AppLog.path),
         ]
     }

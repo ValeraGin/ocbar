@@ -58,6 +58,9 @@ final class OcbarClient: @unchecked Sendable {
         NSString(string: "~/Library/Logs/ocbar/supervisor.log").expandingTildeInPath
     }
     let openconnectLog = "/usr/local/var/ocbar/openconnect.log"
+    var proxyLog: String {
+        NSString(string: "~/Library/Logs/ocbar/openconnect-proxy.log").expandingTildeInPath
+    }
 
     // --- состояние -------------------------------------------------------
 
@@ -98,9 +101,13 @@ final class OcbarClient: @unchecked Sendable {
         return .failed(r.code, message.isEmpty ? "код возврата \(r.code)" : message)
     }
 
-    // Вход может занять минуту: SSO, туннель, проверка доступа.
-    func connect(profile: String?) -> ActionResult {
-        action(["connect"] + (profile.map { [$0] } ?? []), timeout: 180)
+    // Вход может занять минуты: у ocbar-auth своё ожидание человека — 300 с,
+    // и приложение не должно обрывать его раньше, иначе медленный вход
+    // заканчивается «не ответила за 180 с» посреди формы. Отсюда 360.
+    // --show: окно входа сразу, а не после пробы молчаливого прохода —
+    // когда человек сам нажал «Войти», ждать две секунды незачем.
+    func connect(profile: String?, show: Bool = false) -> ActionResult {
+        action(["connect"] + (profile.map { [$0] } ?? []) + (show ? ["--show"] : []), timeout: 360)
     }
     func disconnect() -> ActionResult { action(["disconnect"], timeout: 40) }
     func pause() -> ActionResult { action(["pause"], timeout: 40) }
@@ -108,6 +115,14 @@ final class OcbarClient: @unchecked Sendable {
     func toggleRoute(_ cidr: String) -> ActionResult { action(["routes", "toggle", cidr], timeout: 30) }
     func toggleZone(_ zone: String) -> ActionResult { action(["dns", "toggle", zone], timeout: 30) }
     func cleanup() -> ActionResult { action(["cleanup"], timeout: 60) }
+
+    // Диагностика: doctor ничего не меняет, поэтому вывод целиком, как есть.
+    func doctor() -> String {
+        guard let binary else { return "ocbar не найден" }
+        let r = Shell.run(binary, ["doctor"], timeout: 60)
+        let text = (r.out + (r.err.isEmpty ? "" : "\n" + r.err)).trimmed
+        return text.isEmpty ? "ocbar doctor ничего не напечатал (код \(r.code))" : text
+    }
 
     // --- версии для окна «о программе» -----------------------------------
 

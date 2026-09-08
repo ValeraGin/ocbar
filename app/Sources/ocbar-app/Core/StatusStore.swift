@@ -137,7 +137,9 @@ final class StatusStore: ObservableObject {
     }
 
     private func sampleTraffic() {
-        let dev = status.tundev
+        // В прокси-режиме интерфейса нет, а с ним и счётчиков — график не
+        // рисуется вовсе, а не показывает нули.
+        let dev = status.isProxySession ? "" : status.tundev
         guard !dev.isEmpty else {
             if !samples.isEmpty { samples.removeAll(); previous = nil }
             return
@@ -210,8 +212,8 @@ final class StatusStore: ObservableObject {
         actionNote = nil
     }
 
-    func connect(profile: String? = nil) {
-        perform("Подключаюсь…") { OcbarClient.shared.connect(profile: profile) }
+    func connect(profile: String? = nil, show: Bool = false) {
+        perform("Подключаюсь…") { OcbarClient.shared.connect(profile: profile, show: show) }
     }
     func disconnect() { perform("Отключаю…") { OcbarClient.shared.disconnect() } }
     func pause() { perform("Ставлю на паузу…") { OcbarClient.shared.pause() } }
