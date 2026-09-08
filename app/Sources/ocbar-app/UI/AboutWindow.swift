@@ -1,8 +1,13 @@
 import SwiftUI
 
 enum AppInfo {
-    // Версия приложения идёт вслед за версией клиента: они выпускаются вместе.
-    static let version = "0.1.0"
+    // Версия одна на всех — VERSION в bin/ocbar. make-app.sh кладёт её в
+    // Info.plist, отсюда она и читается; вторую константу в коде заводить
+    // незачем: они уже расходились.
+    static let version: String = {
+        let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return (v?.isEmpty == false) ? v! : "из исходников (без бандла)"
+    }()
 }
 
 // Окно «о программе»: версии всех частей и где что лежит. Полезно не из
@@ -62,6 +67,7 @@ struct AboutView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 link("Журналы", "Супервизор и openconnect") { openWindow(id: WindowID.logs) }
+                link("Диагностика", "ocbar doctor и уборка") { openWindow(id: WindowID.diagnostics) }
                 reveal("Каталог конфигурации", v["config_dir"] ?? OcbarClient.shared.configDir)
                 reveal("Приложение", v["app_path"] ?? (Bundle.main.bundlePath))
                 reveal("Журнал супервизора", v["supervisor_log"] ?? OcbarClient.shared.supervisorLog)
@@ -123,4 +129,5 @@ struct AboutView: View {
 enum WindowID {
     static let settings = "settings"
     static let logs = "logs"
+    static let diagnostics = "diagnostics"
 }

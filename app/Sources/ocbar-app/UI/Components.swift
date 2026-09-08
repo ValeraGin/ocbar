@@ -88,3 +88,52 @@ struct SectionHead: View {
         .padding(.bottom, 1)
     }
 }
+
+// Прокрутка с потолком: пока содержимое ниже потолка, занимает ровно
+// столько, сколько ему нужно; выше — прокручивается. Обычный ScrollView в
+// окне меню-бара либо растягивает меню до экрана, либо схлопывается.
+struct BoundedScroll<Content: View>: View {
+    let maxHeight: CGFloat
+    @ViewBuilder var content: () -> Content
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            content()
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: HeightKey.self, value: g.size.height)
+                })
+        }
+        .onPreferenceChange(HeightKey.self) { contentHeight = $0 }
+        .frame(height: min(max(contentHeight, 1), maxHeight))
+    }
+
+}
+
+private struct HeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+// «Скопировать» — маленькая кнопка рядом со значением; после нажатия на
+// секунду показывает галочку, чтобы было видно, что сработало.
+struct CopyButton: View {
+    let text: String
+    @State private var done = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            done = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { done = false }
+        } label: {
+            Image(systemName: done ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 10))
+                .foregroundStyle(done ? Palette.ok : Palette.tertiary)
+        }
+        .buttonStyle(.borderless)
+        .disabled(text.isEmpty)
+        .help("Скопировать")
+    }
+}

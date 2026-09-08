@@ -95,8 +95,8 @@ enum SelfTest {
         proxy.mode = "proxy"
         let proxyAgain = ProfileDoc.parse(proxy.render(), fileName: "sample")
         check("режим proxy переживает запись", proxyAgain.mode == "proxy")
-        check("прокси-режим предупреждает, что не реализован",
-              ProfileCheck.check(proxy).contains { $0.level == .warning && $0.text.contains("не реализован") })
+        check("прокси-режим напоминает про ocproxy и SOCKS",
+              ProfileCheck.check(proxy).contains { $0.level == .warning && $0.text.contains("ocproxy") })
         var pwCmd = doc
         pwCmd.password = "command"; pwCmd.passwordCommand = ""
         check("Password = command без команды — ошибка",
@@ -173,6 +173,34 @@ enum SelfTest {
         check("выключенный маршрут", status.routes.last?.enabled == false)
         check("два резолвера", status.dns.count == 2)
         check("название профиля из списка", status.profileTitle == "Основной")
+        check("туннельная сессия — не прокси", !status.isProxySession)
+
+        let px = Status.parse("""
+        paused=0
+        needs_login=0
+        woke_after_connect=1788723999
+        state=connected
+        profile=px
+        tundev=
+        ip=10.9.8.7
+        since=1788723116
+        mode=proxy
+        supervisor=1
+        socks=127.0.0.1:11080
+        socks_up=1
+        system_socks=Wi-Fi,Thunderbolt Bridge
+        system_socks_refused=на «Wi-Fi» уже включён чужой SOCKS
+        profile_mode=proxy
+        proxy_port=11080
+        system_proxy=on
+        """)
+        check("прокси-сессия распознаётся", px.isProxySession)
+        check("адрес SOCKS", px.socks == "127.0.0.1:11080")
+        check("SOCKS отвечает", px.socksUp)
+        check("системный SOCKS на двух сервисах", px.systemSocksOn == ["Wi-Fi", "Thunderbolt Bridge"])
+        check("причина отказа хелпера", px.systemSocksRefused.contains("чужой"))
+        check("пробуждение после подключения", px.wokeAfterConnect != nil)
+        check("прокси без маршрутов", px.routes.isEmpty && px.zones.isEmpty)
 
         // --- живой ocbar: запись профиля в отдельный каталог и его разбор ---
         if let binary = OcbarClient.shared.binary {

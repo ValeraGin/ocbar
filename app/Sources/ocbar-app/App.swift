@@ -26,6 +26,9 @@ struct OcbarApp: App {
 
         Window("Журналы ocbar", id: WindowID.logs) { LogsView() }
             .defaultSize(width: 880, height: 540)
+
+        Window("Диагностика ocbar", id: WindowID.diagnostics) { DiagnosticsView() }
+            .defaultSize(width: 760, height: 620)
     }
 }
 
@@ -71,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // все состояния сразу. Обычному запуску не мешает.
     private func openStage() {
         NSApp.setActivationPolicy(.regular)
-        let window = NSWindow(contentRect: NSRect(x: 60, y: 60, width: 1450, height: 1240),
+        let window = NSWindow(contentRect: NSRect(x: 60, y: 60, width: 1450, height: 1560),
                               styleMask: [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "ocbar — витрина состояний"

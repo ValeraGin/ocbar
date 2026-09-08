@@ -335,7 +335,7 @@ enum ProfileCheck {
             err("режим «\(d.mode)» — бывает tunnel или proxy")
         }
         if d.mode == "proxy" {
-            warn("прокси-режим ещё не реализован в клиенте: таким профилем подключиться не получится (docs/09-proxy-mode.md)")
+            warn("прокси-режим: нужен ocproxy (brew install ocproxy); маршруты и зоны из профиля не применяются, ходят только программы, которым указан SOCKS")
         }
         let port = d.proxyPort.trimmed
         if !port.isEmpty {
