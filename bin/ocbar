@@ -15,7 +15,7 @@ set -euo pipefail
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 
-VERSION="0.2.2"
+VERSION="0.2.3"
 # SELF_ENTRY — как нас позвали (например, /opt/homebrew/bin/ocbar: этот путь
 # переживает brew upgrade, его кладём в plist). SELF — реальный файл после
 # симлинков (Cellar), рядом с ним лежат libexec/ocbar-helper и ocbar-auth.
@@ -105,11 +105,19 @@ rotate_log() { # файл [предел байт] [сколько хранить
     log "лог превысил $((max/1024)) КБ — предыдущий сохранён как $(basename "$f").1"
 }
 
-# Уведомление системы. Текст передаётся аргументом, а не подстановкой в текст
-# скрипта: иначе кавычки в сообщении ломают osascript.
+# Уведомление системы. Если приложение меню-бара запущено — через него, по
+# URL-схеме ocbar://notify: тогда уведомление приходит с именем и иконкой
+# ocbar, а не от «Script Editor». Без приложения — osascript, как раньше.
+# Текст передаётся аргументом, а не подстановкой в текст скрипта: иначе
+# кавычки в сообщении ломают osascript.
 notify() { # заголовок, текст
     [ "${OCBAR_NOTIFY:-1}" = 1 ] || return 0
     [ "$NOTIFY_ENABLED" = 0 ] && return 0
+    if [ -n "$(app_pid)" ]; then
+        local url
+        url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2]}))' "$1" "$2" 2>/dev/null)
+        [ -n "$url" ] && open -g "$url" >/dev/null 2>&1 && return 0
+    fi
     osascript - "$1" "$2" >/dev/null 2>&1 <<'AS' || true
 on run argv
     display notification (item 2 of argv) with title (item 1 of argv)
