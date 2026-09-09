@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             exit(code)
         }
         OcbarClient.shared.preloadVersions()
+        if !CommandLine.arguments.contains("--stage") { Notifier.setup() }
         // Пауза и возобновление — единственное действие, которое стоит
         // глобальной клавиши: оно обратимо и не стоит второго фактора.
         // Витрина сочетание не занимает: иначе она отбирала бы его у живого
@@ -67,6 +68,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let i = CommandLine.arguments.firstIndex(of: "--shot"),
            i + 1 < CommandLine.arguments.count {
             shoot(to: CommandLine.arguments[i + 1])
+        }
+    }
+
+    // ocbar://notify?title=…&body=… — уведомление от клиента (см. Notifier).
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where !Notifier.handle(url) {
+            AppLog.write("неизвестный URL: \(url.absoluteString)")
         }
     }
 
