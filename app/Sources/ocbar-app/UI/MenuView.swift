@@ -159,21 +159,37 @@ struct MenuView: View {
 
     // --- действия --------------------------------------------------------
 
-    private var actions: some View {
-        actionRows
-            .opacity(store.busy == nil ? 1 : 0.4)
-            .allowsHitTesting(store.busy == nil)
+    // Пока идёт действие, строки недоступны — кроме отключения и отмены:
+    // вход и разметка ждут человека минутами, и «Отключить» в это время
+    // должно работать (store отменит текущее действие и отключится).
+    private var idle: Bool { store.busy == nil }
+
+    private var hasDisconnectRow: Bool {
+        switch s.presentation {
+        case .connected, .lost, .paused, .starting, .needsLogin: return true
+        default: return false
+        }
     }
+
+    private var actions: some View { actionRows }
 
     @ViewBuilder
     private var actionRows: some View {
         Group {
+            if let title = store.cancelTitle, !(store.cancelDisconnects && hasDisconnectRow) {
+                MenuRow(action: { store.cancelCurrent() }) {
+                    Text(title).fontWeight(.medium)
+                    Spacer()
+                    Text(store.busy ?? "").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+            }
             switch s.presentation {
             case .connected, .lost:
                 // В прокси-режиме паузы нет: снаружи туннеля ничего не
                 // изменено, снимать нечего — ocbar так и ответит.
                 if !s.isProxySession {
-                    MenuRow(action: { store.pause() }) {
+                    MenuRow(enabled: idle, action: { store.pause() }) {
                         Text("Приостановить")
                         Spacer()
                         if GlobalHotkeys.shared.isRegistered("pause") {
@@ -183,7 +199,7 @@ struct MenuView: View {
                 }
                 MenuRow(action: { store.disconnect() }) { Text("Отключить") }
             case .paused:
-                MenuRow(action: { store.resume() }) {
+                MenuRow(enabled: idle, action: { store.resume() }) {
                     Text("Возобновить").fontWeight(.medium)
                     Spacer()
                     if GlobalHotkeys.shared.isRegistered("pause") {
@@ -196,23 +212,23 @@ struct MenuView: View {
             case .needsLogin:
                 // Человек нажал сам — окно входа должно появиться сразу, а не
                 // после двухсекундной пробы молчаливого прохода.
-                MenuRow(action: { store.connect(profile: s.profile.isEmpty ? nil : s.profile, show: true) }) {
+                MenuRow(enabled: idle, action: { store.connect(profile: s.profile.isEmpty ? nil : s.profile, show: true) }) {
                     Text("Войти").fontWeight(.medium)
                 }
-                MenuRow(action: { store.connect(profile: s.profile.isEmpty ? nil : s.profile, teach: true) }) {
+                MenuRow(enabled: idle, action: { store.connect(profile: s.profile.isEmpty ? nil : s.profile, teach: true) }) {
                     Text("Войти и запомнить вход…")
                 }
                 MenuRow(action: { store.disconnect() }) { Text("Не подключаться") }
             case .down, .foreign:
                 let target = s.defaultProfile.isEmpty ? nil : s.defaultProfile
-                MenuRow(enabled: OcbarClient.shared.binary != nil, action: { store.connect(profile: target) }) {
+                MenuRow(enabled: idle && OcbarClient.shared.binary != nil, action: { store.connect(profile: target) }) {
                     Text(target.map { name in
                         "Подключить · " + (s.profiles.first { $0.name == name }?.display ?? name)
                     } ?? "Подключить")
                 }
                 // Первый вход: человек входит руками, ocbar запоминает форму и
                 // предлагает сохранить пароль и источник кода.
-                MenuRow(enabled: OcbarClient.shared.binary != nil, action: { store.connect(profile: target, teach: true) }) {
+                MenuRow(enabled: idle && OcbarClient.shared.binary != nil, action: { store.connect(profile: target, teach: true) }) {
                     Text("Подключить и запомнить вход…")
                 }
             case .missing:
@@ -268,7 +284,7 @@ struct MenuView: View {
                 BoundedScroll(maxHeight: 210) {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(s.profiles) { p in
-                            MenuRow(enabled: !p.isPassword, action: { choose(p) }) {
+                            MenuRow(enabled: idle && !p.isPassword, action: { choose(p) }) {
                                 Image(systemName: p.name == s.profile && s.state != .down ? "checkmark" : "")
                                     .font(.system(size: 10)).frame(width: 11)
                                 VStack(alignment: .leading, spacing: 1) {

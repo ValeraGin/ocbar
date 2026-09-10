@@ -190,12 +190,15 @@ enum SelfTest {
         GlobalHotkeys.shared.unregisterAll()
 
         // --- уведомления от клиента по URL ---
-        let n = Notifier.parse(URL(string: "ocbar://notify?title=ocbar%3A%20%D0%BF%D0%B0%D1%83%D0%B7%D0%B0&body=%D0%9C%D0%B0%D1%80%D1%88%D1%80%D1%83%D1%82%D1%8B%20%D1%81%D0%BD%D1%8F%D1%82%D1%8B")!)
+        let savedToken = Notifier.expectedToken
+        Notifier.expectedToken = "5e1f7e57"
+        defer { Notifier.expectedToken = savedToken }
+        let n = Notifier.parse(URL(string: "ocbar://notify?title=ocbar%3A%20%D0%BF%D0%B0%D1%83%D0%B7%D0%B0&body=%D0%9C%D0%B0%D1%80%D1%88%D1%80%D1%83%D1%82%D1%8B%20%D1%81%D0%BD%D1%8F%D1%82%D1%8B&token=5e1f7e57")!)
         check("уведомление разбирается", n != nil)
         check("приставка «ocbar:» убрана", n?.title == "пауза", n?.title ?? "")
         check("текст уведомления", n?.body == "Маршруты сняты")
         check("чужая схема отвергнута", Notifier.parse(URL(string: "http://notify?title=x")!) == nil)
-        check("пустое уведомление отвергнуто", Notifier.parse(URL(string: "ocbar://notify")!) == nil)
+        check("пустое уведомление отвергнуто", Notifier.parse(URL(string: "ocbar://notify?token=5e1f7e57")!) == nil)
 
         // --- разбор состояния ---
         let status = Status.parse("""

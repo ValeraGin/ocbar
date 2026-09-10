@@ -57,7 +57,14 @@ final class OcbarClient: @unchecked Sendable {
     var supervisorLog: String {
         NSString(string: "~/Library/Logs/ocbar/supervisor.log").expandingTildeInPath
     }
-    let openconnectLog = "/usr/local/var/ocbar/openconnect.log"
+    // Журнал openconnect пишет хелпер в своём каталоге состояния. Точный путь
+    // даёт `ocbar version --all` (openconnect_log); это — запасной, когда
+    // клиент не ответил: новый каталог хелпера, если он уже есть, иначе
+    // прежний.
+    var openconnectLog: String {
+        let current = "/var/db/ocbar/openconnect.log"
+        return FileManager.default.fileExists(atPath: current) ? current : "/usr/local/var/ocbar/openconnect.log"
+    }
     var proxyLog: String {
         NSString(string: "~/Library/Logs/ocbar/openconnect-proxy.log").expandingTildeInPath
     }
@@ -90,32 +97,39 @@ final class OcbarClient: @unchecked Sendable {
         case ok(String)
         case needsLogin          // код 5: решает человек, это не ошибка
         case failed(Int32, String)
+        case cancelled           // человек сам отменил действие
     }
 
-    func action(_ args: [String], timeout: TimeInterval = 60) -> ActionResult {
+    func action(_ args: [String], timeout: TimeInterval = 60, cancel: CancelToken? = nil) -> ActionResult {
         guard let binary else { return .failed(127, "ocbar не найден") }
-        let r = Shell.run(binary, args, timeout: timeout)
+        let r = Shell.run(binary, args, timeout: timeout, cancel: cancel)
+        if r.code == Shell.cancelledCode { return .cancelled }
         if r.code == 0 { return .ok(r.out.trimmed) }
         if r.code == 5 { return .needsLogin }
         let message = r.err.trimmed.isEmpty ? r.out.trimmed : r.err.trimmed
         return .failed(r.code, message.isEmpty ? "код возврата \(r.code)" : message)
     }
 
-    // Вход может занять минуты: у ocbar-auth своё ожидание человека — 300 с,
-    // и приложение не должно обрывать его раньше, иначе медленный вход
-    // заканчивается «не ответила за 180 с» посреди формы. Отсюда 360.
+    // Вход может занять минуты, и приложение не должно обрывать его раньше
+    // времени: по сроку гасится ocbar вместе с окном, где человек как раз
+    // выбирает, что сохранить. Обычное подключение — 660 с: вход до 300,
+    // окно «Запомнить для следующего входа?» до 180, подъём туннеля до 40 и
+    // запас. С запоминанием (--teach) — 900 с, разметка — 1800 с.
     // --show: окно входа сразу, а не после пробы молчаливого прохода —
     // когда человек сам нажал «Войти», ждать две секунды незачем.
     // teach: войти руками, а ocbar запомнит форму и после входа предложит
     // сохранить правила, пароль и источник кода (ocbar connect --teach).
-    // Тайм-аут шире: после входа ещё окно «что сохранить», до трёх минут.
-    func connect(profile: String?, show: Bool = false, teach: Bool = false) -> ActionResult {
+    func connect(profile: String?, show: Bool = false, teach: Bool = false, cancel: CancelToken? = nil) -> ActionResult {
         action(["connect"] + (profile.map { [$0] } ?? []) + (show ? ["--show"] : []) + (teach ? ["--teach"] : []),
-               timeout: Self.connectTimeout(teach: teach))
+               timeout: Self.connectTimeout(teach: teach), cancel: cancel)
     }
-    static func connectTimeout(teach: Bool) -> TimeInterval { teach ? 600 : 360 }
+    static func connectTimeout(teach: Bool) -> TimeInterval { teach ? 900 : 660 }
     static let learnTimeout: TimeInterval = 1800
-    func disconnect() -> ActionResult { action(["disconnect"], timeout: 40) }
+    // Разметка формы: окно ocbar-auth живёт, пока человек не нажмёт «Готово».
+    func learn(profile: String, cancel: CancelToken? = nil) -> ActionResult {
+        action(["learn", profile], timeout: Self.learnTimeout, cancel: cancel)
+    }
+    func disconnect(cancel: CancelToken? = nil) -> ActionResult { action(["disconnect"], timeout: 40, cancel: cancel) }
     func pause() -> ActionResult { action(["pause"], timeout: 40) }
     func resume() -> ActionResult { action(["resume"], timeout: 60) }
     func toggleRoute(_ cidr: String) -> ActionResult { action(["routes", "toggle", cidr], timeout: 30) }

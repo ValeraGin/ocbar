@@ -239,7 +239,7 @@ struct ProfileEditorView: View {
                     }
                     learnResult = text.contains("отменена") ? "разметка отменена — профиль не тронут"
                         : "правила записаны в профиль: \(doc.autofill.count) строк"
-                case .needsLogin:
+                case .needsLogin, .cancelled:
                     learnResult = "разметка не завершена"
                 case .failed(_, let text):
                     learnResult = "не получилось: " + text
@@ -443,7 +443,7 @@ struct ProfileEditorView: View {
             message = "профиль \(name) переведён в файл — теперь ocbar читает его оттуда"
             reloadList()
             selected = name
-        case .needsLogin:
+        case .needsLogin, .cancelled:
             message = nil
         case .failed(_, let text):
             issues = [Issue(level: .error, text: "перевод не удался: \(text)")]
