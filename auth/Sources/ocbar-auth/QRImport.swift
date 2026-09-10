@@ -37,21 +37,25 @@ enum QRImport {
     static func decode(file: String) throws -> [String] {
         let url = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)
         guard let ci = CIImage(contentsOf: url) else { throw ImportError.noImage(url.path) }
+        let found = payloads(in: ci)
+        if found.isEmpty { throw ImportError.noQR }
+        return found
+    }
 
+    /// Строки QR на картинке — из файла или из кадра камеры: путь один, и
+    /// проверка на кадре, собранном в памяти, проверяет ровно его.
+    static func payloads(in ci: CIImage) -> [String] {
         let request = VNDetectBarcodesRequest()
         request.symbologies = [.qr]
         let handler = VNImageRequestHandler(ciImage: ci, options: [:])
-        try handler.perform([request])
+        try? handler.perform([request])
         let payloads = (request.results ?? []).compactMap { $0.payloadStringValue }
         if !payloads.isEmpty { return payloads }
 
         // Vision иногда пасует на скриншотах с тёмной рамкой — пробуем CoreImage.
-        let ctx = CIContext()
-        let det = CIDetector(ofType: CIDetectorTypeQRCode, context: ctx,
+        let det = CIDetector(ofType: CIDetectorTypeQRCode, context: CIContext(),
                              options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
-        let found = (det?.features(in: ci) as? [CIQRCodeFeature])?.compactMap { $0.messageString } ?? []
-        if found.isEmpty { throw ImportError.noQR }
-        return found
+        return (det?.features(in: ci) as? [CIQRCodeFeature])?.compactMap { $0.messageString } ?? []
     }
 
     // MARK: - разбор otpauth

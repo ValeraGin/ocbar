@@ -41,6 +41,7 @@ struct Args {
     var learnProbe = false
     var teachOut: String?
     var teachDialogShot: String?
+    var cameraWindowShot: String?
     var teachOn = false
     var outFile: String?
     var help = false
@@ -128,6 +129,7 @@ func parseArgs() -> Args {
         case "--teach-out": a.teachOut = next(arg)
         case "--teach-on": a.teachOn = true
         case "--teach-dialog-shot": a.teachDialogShot = next(arg)
+        case "--camera-window-shot": a.cameraWindowShot = next(arg)
         case "--out": a.outFile = next(arg)
         case "--select": a.selectEntry = next(arg)
         case "--json": a.json = true
@@ -406,6 +408,18 @@ if let shotPath = args.teachDialogShot {
     app.setActivationPolicy(.accessory)
     DispatchQueue.main.async {
         let ok = TeachDialog.shot(to: shotPath)
+        out(ok ? "снимок: \(shotPath)" : "снимок не получился")
+        exit(ok ? 0 : 1)
+    }
+    app.run()
+}
+
+// Снимок окна камеры — вид без человека и без включения камеры.
+if let shotPath = args.cameraWindowShot {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.async {
+        let ok = QRCameraWindow.shot(to: shotPath)
         out(ok ? "снимок: \(shotPath)" : "снимок не получился")
         exit(ok ? 0 : 1)
     }

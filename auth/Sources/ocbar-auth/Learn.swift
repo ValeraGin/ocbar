@@ -1338,6 +1338,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
             else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
         }
         guard let rec = teach else { ok("запись входа установлена", false); then(); return }
+        checkCameraQR(ok)
 
         // Секрет TOTP принимается только по введённому коду.
         let rfc = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
@@ -1372,6 +1373,70 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.checkTeachCapture(rec, ok, then) }
             }
         }
+    }
+
+    /// QR с камеры — без камеры: кадр собирается в памяти так, как его отдала
+    /// бы камера (BGRA 1280×720, QR экспорта Google Authenticator на две
+    /// записи наклонён и смещён), и идёт тем же путём, что настоящие кадры.
+    private func checkCameraQR(_ ok: (String, Bool, String) -> Void) {
+        let ours = Data((0..<20).map { UInt8(truncatingIfNeeded: $0 &* 7 &+ 3) })
+        let other = Data((0..<20).map { UInt8(truncatingIfNeeded: $0 &* 13 &+ 1) })
+        let payload = Self.migrationPayload([(other, "someone@example.com", "Другое"), (ours, "alice", "VPN")])
+        let at = Date()
+        let code = TOTP.code(secretBase32: QRImport.base32Encode(ours), at: at) ?? ""
+        guard let frame = Self.cameraFrame(qr: payload) else { ok("камера: кадр собран", false, ""); return }
+        let found = QRCameraScanner.payloads(pixelBuffer: frame)
+        ok("камера: QR найден на кадре 1280×720, наклонён и смещён", found == [payload], "строк: \(found.count)")
+        let entries = found.flatMap { (try? QRImport.parse($0)) ?? [] }
+        ok("камера: экспорт Google Authenticator разобран, записей две", entries.count == 2, "\(entries.count)")
+        let fit = entries.filter { QRCameraWindow.fits($0, code: code, at: at) }
+        ok("камера: нужная запись выбрана по введённому коду", fit.count == 1 && fit.first?.name == "alice",
+           fit.map(\.name).joined(separator: ", "))
+        let empty = Self.cameraFrame(qr: nil).map { QRCameraScanner.payloads(pixelBuffer: $0) } ?? ["?"]
+        ok("камера: кадр без QR — пусто", empty.isEmpty, "\(empty)")
+    }
+
+    /// Экспорт Google Authenticator: otpauth-migration с protobuf внутри —
+    /// ровно то, что показывает «Перенос аккаунтов → Экспорт».
+    static func migrationPayload(_ items: [(Data, String, String)]) -> String {
+        func varint(_ value: Int) -> Data {
+            var v = value, d = Data()
+            repeat { var b = UInt8(v & 0x7f); v >>= 7; if v != 0 { b |= 0x80 }; d.append(b) } while v != 0
+            return d
+        }
+        func bytes(_ n: Int, _ b: Data) -> Data { varint(n << 3 | 2) + varint(b.count) + b }
+        func number(_ n: Int, _ v: Int) -> Data { varint(n << 3) + varint(v) }
+        var payload = Data()
+        for (secret, name, issuer) in items {
+            let p = bytes(1, secret) + bytes(2, Data(name.utf8)) + bytes(3, Data(issuer.utf8))
+                + number(4, 1) + number(5, 1) + number(6, 2)
+            payload += bytes(1, p)
+        }
+        payload += number(2, 1) + number(3, 1) + number(4, 0) + number(5, 0)
+        let b64 = payload.base64EncodedString()
+        return "otpauth-migration://offline?data=" + (b64.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? b64)
+    }
+
+    /// Кадр, как его отдаёт камера: BGRA 1280×720, серый фон, QR в белой
+    /// рамке, как на экране телефона, наклонён и не по центру.
+    static func cameraFrame(qr payload: String?) -> CVPixelBuffer? {
+        var pb: CVPixelBuffer?
+        let attrs = [kCVPixelBufferCGImageCompatibilityKey: true, kCVPixelBufferCGBitmapContextCompatibilityKey: true] as CFDictionary
+        guard CVPixelBufferCreate(nil, 1280, 720, kCVPixelFormatType_32BGRA, attrs, &pb) == kCVReturnSuccess,
+              let buf = pb else { return nil }
+        var img = CIImage(color: CIColor(red: 0.35, green: 0.37, blue: 0.40)).cropped(to: CGRect(x: 0, y: 0, width: 1280, height: 720))
+        if let payload, let f = CIFilter(name: "CIQRCodeGenerator") {
+            f.setValue(Data(payload.utf8), forKey: "inputMessage")
+            f.setValue("M", forKey: "inputCorrectionLevel")
+            if var q = f.outputImage {
+                q = q.samplingNearest().transformed(by: CGAffineTransform(scaleX: 320 / q.extent.width, y: 320 / q.extent.width))
+                q = q.composited(over: CIImage(color: .white).cropped(to: q.extent.insetBy(dx: -24, dy: -24)))
+                let r = q.transformed(by: CGAffineTransform(rotationAngle: 0.14))
+                img = r.transformed(by: CGAffineTransform(translationX: 760 - r.extent.minX, y: 150 - r.extent.minY)).composited(over: img)
+            }
+        }
+        CIContext().render(img, to: buf)
+        return buf
     }
 
     private func checkTeachCapture(_ rec: TeachRecorder, _ ok: @escaping (String, Bool, String) -> Void,

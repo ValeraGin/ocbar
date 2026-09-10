@@ -280,6 +280,8 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
     private var secretField: NSSecureTextField?
     private var secretRow: NSStackView?
     private var qrButton: NSButton?
+    private var cameraButton: NSButton?
+    private var cameraActive = false
     private var verifyLabel: NSTextField?
     private var secret: String?
     private var verified = false
@@ -384,15 +386,21 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             stack.addArrangedSubview(popup)
             codePopup = popup
 
-            let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 22))
+            let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 22))
             field.placeholderString = "секрет base32"
             field.delegate = self
-            field.widthAnchor.constraint(equalToConstant: 250).isActive = true
-            let qr = NSButton(title: "Выбрать QR…", target: self, action: #selector(pickQR))
+            field.widthAnchor.constraint(equalToConstant: 200).isActive = true
+            let qr = NSButton(title: "Файл QR…", target: self, action: #selector(pickQR))
             qr.bezelStyle = .rounded
+            // Экспорт Google Authenticator показывается на экране телефона, а
+            // снимок экрана телефон часто запрещает, — читаем камерой Mac.
+            let cam = NSButton(title: "Камерой…", target: self, action: #selector(scanCamera))
+            cam.bezelStyle = .rounded
+            cam.toolTip = "Прочитать QR экспорта Google Authenticator с экрана телефона камерой Mac. Кадры не сохраняются."
+            cameraButton = cam
             // Строка видна всегда, доступна — только при «из приложения»: окно
             // не растёт после показа, и появившаяся позже строка обрезалась бы.
-            let row = NSStackView(views: [field, qr])
+            let row = NSStackView(views: [field, qr, cam])
             row.orientation = .horizontal
             row.spacing = 6
             stack.addArrangedSubview(row)
@@ -438,7 +446,13 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         // Не ответили за три минуты — ничего не сохраняем: туннель ждёт.
-        let t = Timer(timeInterval: timeout, repeats: false) { _ in NSApp.abortModal() }
+        let t = Timer(timeInterval: timeout, repeats: false) { [weak self] _ in
+            // Если открыто окно камеры, первый abortModal закроет его, второй —
+            // само окно сохранения.
+            let nested = self?.cameraActive == true
+            NSApp.abortModal()
+            if nested { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.abortModal() } }
+        }
         RunLoop.main.add(t, forMode: .modalPanel)
         let response = alert.runModal()
         t.invalidate()
@@ -463,6 +477,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
     private func setSecretEnabled(_ on: Bool) {
         secretField?.isEnabled = on
         qrButton?.isEnabled = on
+        cameraButton?.isEnabled = on
         verifyLabel?.textColor = on ? .secondaryLabelColor : .tertiaryLabelColor
     }
 
@@ -492,11 +507,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
                     && TeachDialog.secretMatches($0.secretBase32, code: code, at: at)
             }
             if let e = fit.first {
-                secret = TeachDialog.normalize(e.secretBase32)
-                verified = true
-                secretField?.stringValue = ""
-                let who = [e.issuer, e.name].filter { !$0.isEmpty }.joined(separator: " · ")
-                verifyLabel?.stringValue = "✓ из QR: \(who.isEmpty ? "запись" : who) — даёт введённый вами код"
+                accept(e, source: "из QR")
             } else {
                 verified = false
                 verifyLabel?.stringValue = entries.isEmpty ? "в QR нет записей TOTP"
@@ -505,6 +516,27 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         } catch {
             verified = false
             verifyLabel?.stringValue = "\(error)"
+        }
+        refresh()
+    }
+
+    private func accept(_ e: QRImport.Entry, source: String) {
+        secret = TeachDialog.normalize(e.secretBase32)
+        verified = true
+        secretField?.stringValue = ""
+        let who = [e.issuer, e.name].filter { !$0.isEmpty }.joined(separator: " · ")
+        verifyLabel?.stringValue = "✓ \(source): \(who.isEmpty ? "запись" : who) — даёт введённый вами код"
+    }
+
+    @objc private func scanCamera() {
+        guard let code = input.code, let at = input.codeAt else { return }
+        cameraActive = true
+        let r = QRCameraWindow(code: code, at: at).run()
+        cameraActive = false
+        if let e = r.entry {
+            accept(e, source: "с камеры")
+        } else {
+            verifyLabel?.stringValue = r.note
         }
         refresh()
     }
