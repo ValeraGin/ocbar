@@ -95,7 +95,9 @@ enum Autofill {
             let sel = jsString(r.selector)
             switch r.action {
             case .stop:
-                body += "  { var e = document.querySelector(\(sel)); if (visible(e)) return {stopped: (e.innerText||'').trim().slice(0,200)}; }\n"
+                // filled — и здесь: stop может стоять после fill, и подставленное
+                // до него должно попасть в счётчики (AutofillGate).
+                body += "  { var e = document.querySelector(\(sel)); if (visible(e)) return {stopped: (e.innerText||'').trim().slice(0,200), filled: filled}; }\n"
             case .fill(let what):
                 let value: String?
                 switch what {
@@ -174,4 +176,136 @@ extension Autofill {
     click input[id=idSIButton9]
     click input[id=idSubmit_SAOTCC_Continue]
     """)
+}
+
+/// Решения цикла автозаполнения — без WebKit, чтобы проверять их напрямую
+/// (`ocbar-auth --selftest`). Окно входа только спрашивает: можно ли
+/// запускать скрипт, что ему дать и что делать с результатом.
+///
+/// Лимиты:
+///  - код одноразовый — подставляется РОВНО один раз за вход: несколько
+///    неверных кодов подряд блокируют учётную запись;
+///  - пароль — не больше двух раз. Два, а не один: Microsoft прячет на
+///    странице логина второе поле пароля для менеджеров паролей. Третий раз —
+///    это уже неверный пароль по кругу, а порталы блокируют учётку после
+///    трёх-пяти попыток;
+///  - нажатий — не больше пяти за вход: у Microsoft с кодом и «Остаться в
+///    системе?» выходит четыре;
+///  - на неизменившейся странице после нажатия скрипт не повторяется —
+///    иначе «Войти» жмётся в цикле на форме с ошибкой;
+///  - на одной странице — не больше двенадцати попыток.
+///
+/// Счётчики пароля и кода считаются ДО любого раннего выхода. Раньше ветка
+/// «ждём человека» (видно пустое поле `fill manual`) выходила раньше них, и
+/// портал с капчей, перерисовывающий форму, получал пароль снова и снова.
+struct AutofillGate {
+    let maxClicks = 5
+    let maxPasswordFills = 2
+    let maxAttemptsPerPage = 12
+    private(set) var clicks = 0
+    private(set) var passwordFills = 0
+    private(set) var totpFills = 0
+    private(set) var attempts = 0
+    private(set) var lastClickSignature: String?
+    private(set) var stopped: String?
+
+    /// Что можно дать скрипту в этой попытке.
+    struct Offer: Equatable { var password: Bool; var code: Bool }
+
+    /// Что вернул скрипт (Autofill.script).
+    struct Outcome {
+        var filled: [String] = []
+        var clicked: String? = nil
+        var waiting: String? = nil
+        var stopped: String? = nil
+        var inputs: [String] = []
+        var offHost: String? = nil
+
+        init(filled: [String] = [], clicked: String? = nil, waiting: String? = nil,
+             stopped: String? = nil, inputs: [String] = [], offHost: String? = nil) {
+            self.filled = filled; self.clicked = clicked; self.waiting = waiting
+            self.stopped = stopped; self.inputs = inputs; self.offHost = offHost
+        }
+
+        init(_ dict: [String: Any]) {
+            filled = (dict["filled"] as? [String]) ?? []
+            clicked = dict["clicked"] as? String
+            waiting = dict["waiting"] as? String
+            stopped = dict["stopped"] as? String
+            inputs = (dict["inputs"] as? [String]) ?? []
+            offHost = dict["offHost"] as? String
+        }
+    }
+
+    enum Next: Equatable {
+        case keepGoing                 // ничего не случилось — следующая попытка по таймеру
+        case clicked(String)           // нажали — ждём новую страницу
+        case waitingHuman(String)      // видно пустое поле, заполнить нечем
+        case unknownForm([String])     // поля есть, ни одно не узнано
+        case offHost(String)           // страница не из разрешённых — заполняет человек
+        case formError(String)         // правило stop: форма показала ошибку
+        case clickLimit                // лимит нажатий — дальше только человек
+    }
+
+    struct Decision: Equatable {
+        var next: Next
+        var countedPassword = false
+        var countedCode = false
+        var passwordLimitReached = false
+    }
+
+    /// Новая страница: попытки и запрет повтора — заново, лимиты входа — нет.
+    mutating func newPage() { attempts = 0; lastClickSignature = nil }
+
+    /// Можно ли запускать скрипт на странице с такой сигнатурой.
+    func mayRun(signature: String) -> Bool {
+        stopped == nil && attempts < maxAttemptsPerPage && signature != lastClickSignature
+    }
+
+    /// Попытка началась: что ей можно дать.
+    mutating func begin() -> Offer {
+        attempts += 1
+        return Offer(password: passwordFills < maxPasswordFills, code: totpFills == 0)
+    }
+
+    /// Результат попытки. Первым делом — счётчики: что подставлено, то
+    /// подставлено, как бы ни закончилась попытка.
+    mutating func record(_ o: Outcome, signature: String) -> Decision {
+        var d = Decision(next: .keepGoing)
+        if o.filled.contains("password") {
+            passwordFills += 1
+            d.countedPassword = true
+            d.passwordLimitReached = passwordFills >= maxPasswordFills
+        }
+        if o.filled.contains("totp") {
+            totpFills += 1
+            d.countedCode = true
+        }
+        if let s = o.stopped {
+            stopped = s
+            d.next = .formError(s)
+            return d
+        }
+        if let h = o.offHost {
+            d.next = .offHost(h)
+            return d
+        }
+        if let c = o.clicked {
+            clicks += 1
+            lastClickSignature = signature
+            if clicks >= maxClicks {
+                stopped = "лимит автозаполнения"
+                d.next = .clickLimit
+            } else {
+                d.next = .clicked(c)
+            }
+            return d
+        }
+        if let w = o.waiting {
+            d.next = .waitingHuman(w)
+            return d
+        }
+        if o.filled.isEmpty && !o.inputs.isEmpty { d.next = .unknownForm(o.inputs) }
+        return d
+    }
 }

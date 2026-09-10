@@ -43,25 +43,14 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     private var showTimer: Timer?
     private var timeoutTimer: Timer?
     private var fillTimer: Timer?
-    private var lastClickSignature: String?
     private var lastFillURL: String?
-    private var fillAttempts = 0
-    private var clicks = 0
-    // Больше — это уже цикл, а не вход. Пять, а не три: у Microsoft с кодом и
-    // «Остаться в системе?» выходит четыре нажатия. Повторного нажатия на
-    // неизменившейся странице не бывает (lastClickSignature).
-    private let maxClicks = 5
-    private var totpFills = 0        // код одноразовый: подставляем РОВНО один раз
-    // Пароль — не больше двух раз за вход. Два, а не один: Microsoft прячет
-    // на странице логина второе поле пароля для менеджеров паролей. Третий
-    // раз — это уже неверный пароль по кругу, а порталы блокируют учётку
-    // после трёх-пяти попыток.
-    private var passwordFills = 0
-    private let maxPasswordFills = 2
+    // Лимиты кода, пароля и нажатий, запрет повтора на неизменившейся
+    // странице — в AutofillGate: там они проверяются без WebKit.
+    private var gate = AutofillGate()
+    private var offHostLogged: String?
     private(set) var recorder: TeachRecorder?
     private var teachBox: NSButton?
     private(set) var shownToHuman = false
-    private var stoppedReason: String?
 
     enum WebAuthError: Error, CustomStringConvertible {
         case cancelled, timeout, needsHuman(String), errorCookie(String), stopped(String), navigation(String)
@@ -253,7 +242,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         }
         checkCookies()
         // новая страница — новая попытка автозаполнения
-        if lastFillURL != u { lastFillURL = u; fillAttempts = 0; lastClickSignature = nil }
+        if lastFillURL != u { lastFillURL = u; gate.newPage() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.autofillTick() }
     }
 
@@ -306,33 +295,26 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     /// больше N раз, и никогда повторно после click на неизменившейся странице —
     /// иначе кнопка «Войти» нажимается в цикле на форме с ошибкой.
     private func autofillTick() {
-        guard !finished, opts.autofill, !opts.rules.isEmpty, stoppedReason == nil else { return }
-        guard fillAttempts < 12 else { return }
+        guard !finished, opts.autofill, !opts.rules.isEmpty, gate.stopped == nil else { return }
+        guard gate.attempts < gate.maxAttemptsPerPage else { return }
         // Правила — это просто селекторы, они совпадут на любой странице с
         // похожими полями. Без привязки к адресу логин с паролем ушли бы
         // туда, куда увёл бы шлюз.
         let host = webView.url?.host ?? ""
         if !opts.fillHosts.isEmpty && !opts.fillHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
-            if fillAttempts == 0 {
-                Log.info("страница \(host) не в списке разрешённых для автозаполнения — заполняет человек")
-                fillAttempts = 1
-                show()
-            }
+            offHost(host)
             return
         }
         let sigJS = "location.href + '|' + document.querySelectorAll('input').length + '|' + (document.body ? document.body.innerText.length : 0)"
         webView.evaluateJavaScript(sigJS) { [weak self] sig, _ in
-            guard let self = self, let sig = sig as? String else { return }
-            if sig == self.lastClickSignature { return }   // после клика ждём изменений
-            self.fillAttempts += 1
-            // Второй автоввод TOTP бессмысленен (тот же секрет) и опасен:
-            // несколько неверных кодов подряд блокируют учётную запись.
+            guard let self = self, !self.finished, let sig = sig as? String else { return }
+            guard self.gate.mayRun(signature: sig) else { return }   // после клика ждём изменений
+            let offer = self.gate.begin()
             // Код считается ЗДЕСЬ, а не при старте: между запуском и появлением
-            // поля проходят десятки секунд, а код живёт тридцать. Раньше
-            // подставлялся код, сгенерированный до открытия окна, и он вполне
-            // мог протухнуть — при том что вторая попытка запрещена намеренно.
+            // поля проходят десятки секунд, а код живёт тридцать. Второй
+            // автоввод не даёт AutofillGate: тот же секрет — тот же неверный код.
             var code: String? = nil
-            if self.totpFills == 0 {
+            if offer.code {
                 if let secret = self.opts.totpSecret, !secret.isEmpty {
                     code = TOTP.code(secretBase32: secret, params: self.opts.totpParams)
                 } else {
@@ -340,58 +322,63 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
                 }
             }
             var creds = self.opts.creds
-            if self.passwordFills >= self.maxPasswordFills { creds.password = nil }
+            if !offer.password { creds.password = nil }
             let js = Autofill.script(rules: self.opts.rules, creds: creds, totpCode: code)
             self.webView.evaluateJavaScript(js) { result, err in
                 if let err = err { Log.debug("autofill JS: \(err.localizedDescription)"); return }
                 guard let dict = result as? [String: Any] else { return }
-                if let stopped = dict["stopped"] as? String {
-                    Log.info("правило stop: \(stopped)")
-                    self.stoppedReason = stopped
-                    self.statusLabel.stringValue = "Форма сообщает: \(stopped)"
-                    self.show()
-                    return
-                }
-                let filled = (dict["filled"] as? [String]) ?? []
-                if !filled.isEmpty { Log.info("заполнено: \(filled.joined(separator: ", "))") }
-                // Кнопку не нажали, потому что видно пустое поле из правил и
-                // заполнить его нечем, — дальше решает человек.
-                if dict["clicked"] == nil, let waiting = dict["waiting"] as? String {
-                    if self.fillAttempts == 1 || !filled.isEmpty {
-                        Log.info("поле \(waiting) пустое, заполнить нечем — форму не отправляю, её увидит человек")
-                    }
-                    self.show()
-                    return
-                }
-                if filled.contains("password") {
-                    self.passwordFills += 1
-                    if self.passwordFills >= self.maxPasswordFills {
-                        Log.info("пароль подставлен \(self.passwordFills) раза — дальше вводит человек: неверный пароль не должен уходить по кругу")
-                    }
-                }
-                if filled.contains("totp") {
-                    self.recorder?.engineFilledCode = true
-                    self.totpFills += 1
-                    Log.info("код TOTP подставлен один раз — если форма спросит снова, вводит человек")
-                }
-                if let clicked = dict["clicked"] as? String {
-                    self.clicks += 1
-                    Log.info("нажато: \(clicked) (\(self.clicks)/\(self.maxClicks))")
-                    self.lastClickSignature = sig
-                    if self.clicks >= self.maxClicks {
-                        Log.info("лимит нажатий — дальше только человек")
-                        self.stoppedReason = "лимит автозаполнения"
-                        self.show()
-                    }
-                    return
-                }
-                // Ничего не заполнили и не нажали, а поля на странице есть —
-                // форму не распознали, человеку пора её увидеть.
-                if filled.isEmpty, let inputs = dict["inputs"] as? [String], !inputs.isEmpty {
-                    if self.fillAttempts == 1 { Log.info("форма не распознана, поля: \(inputs.joined(separator: " "))") }
-                    self.show()
-                }
+                self.handle(AutofillGate.Outcome(dict), signature: sig)
             }
         }
+    }
+
+    private func handle(_ o: AutofillGate.Outcome, signature: String) {
+        let first = gate.attempts == 1
+        let d = gate.record(o, signature: signature)
+        if !o.filled.isEmpty { Log.info("заполнено: \(o.filled.joined(separator: ", "))") }
+        if d.passwordLimitReached {
+            Log.info("пароль подставлен \(gate.passwordFills) раза — дальше вводит человек: неверный пароль не должен уходить по кругу")
+        }
+        if d.countedCode {
+            recorder?.engineFilledCode = true
+            Log.info("код TOTP подставлен один раз — если форма спросит снова, вводит человек")
+        }
+        switch d.next {
+        case .keepGoing:
+            break
+        case .formError(let s):
+            Log.info("правило stop: \(s)")
+            statusLabel.stringValue = "Форма сообщает: \(s)"
+            show()
+        case .offHost(let h):
+            offHost(h)
+        case .clicked(let c):
+            Log.info("нажато: \(c) (\(gate.clicks)/\(gate.maxClicks))")
+        case .clickLimit:
+            Log.info("нажато (\(gate.clicks)/\(gate.maxClicks)) — лимит нажатий, дальше только человек")
+            show()
+        case .waitingHuman(let w):
+            // Кнопку не нажали, потому что видно пустое поле из правил и
+            // заполнить его нечем, — дальше решает человек.
+            if first || !o.filled.isEmpty {
+                Log.info("поле \(w) пустое, заполнить нечем — форму не отправляю, её увидит человек")
+            }
+            show()
+        case .unknownForm(let inputs):
+            // Ничего не заполнили и не нажали, а поля на странице есть —
+            // форму не распознали, человеку пора её увидеть.
+            if first { Log.info("форма не распознана, поля: \(inputs.joined(separator: " "))") }
+            show()
+        }
+    }
+
+    /// Страница не из разрешённых: заполняет человек. Пишем в журнал один
+    /// раз на хост, окно показываем.
+    private func offHost(_ host: String) {
+        if offHostLogged != host {
+            offHostLogged = host
+            Log.info("страница \(host) не в списке разрешённых для автозаполнения — заполняет человек")
+        }
+        show()
     }
 }

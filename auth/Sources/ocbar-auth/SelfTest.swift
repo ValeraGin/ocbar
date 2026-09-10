@@ -1,0 +1,101 @@
+import Foundation
+
+/// Проверки без WebKit и без сети — часть `ocbar-auth --selftest`. Каждая
+/// ловит конкретную ошибку, найденную проверкой 2026-09-10: при её возврате
+/// проверка падает.
+enum AuthSelfTest {
+    private static var failures = 0
+
+    private static func ok(_ name: String, _ cond: Bool, _ detail: @autoclosure () -> String = "") {
+        if cond {
+            out("  [ OK ] \(name)")
+        } else {
+            let d = detail()
+            out("  [FAIL] \(name)\(d.isEmpty ? "" : " — " + d)")
+            failures += 1
+        }
+    }
+
+    /// Все проверки; возвращает число провалов.
+    static func run() -> Int {
+        failures = 0
+        gate()
+        return failures
+    }
+
+    // MARK: - цикл автозаполнения (AutofillGate)
+
+    static func gate() {
+        out("Цикл автозаполнения — лимиты:")
+        typealias O = AutofillGate.Outcome
+
+        // Окно с полем человека (капча, fill manual), которое портал
+        // перерисовывает: пароль подставляется, форма не уходит — ждём
+        // человека. Третьей попытке пароля не дают.
+        var g = AutofillGate()
+        var offers: [AutofillGate.Offer] = []
+        for i in 0..<4 {
+            g.newPage()                                   // форма перерисована
+            let offer = g.begin()
+            offers.append(offer)
+            let filled = offer.password ? ["username", "password"] : ["username"]
+            _ = g.record(O(filled: filled, waiting: "input[id=captcha]"), signature: "p\(i)")
+        }
+        ok("окно с полем человека: пароль не больше двух раз",
+           offers.map(\.password) == [true, true, false, false] && g.passwordFills == 2,
+           "пароль давали: \(offers.map(\.password)), подставлен \(g.passwordFills)")
+
+        // Код и поле человека на одном окне: код ушёл один раз.
+        var c = AutofillGate()
+        let c1 = c.begin()
+        let d1 = c.record(O(filled: ["totp"], waiting: "input[id=captcha]"), signature: "a")
+        c.newPage()
+        let c2 = c.begin()
+        ok("окно с полем человека: код подставляется один раз",
+           c1.code && d1.countedCode && !c2.code && c.totpFills == 1,
+           "первый \(c1.code), учтён \(d1.countedCode), второй \(c2.code)")
+        ok("окно с полем человека: решение — ждать человека",
+           d1.next == .waitingHuman("input[id=captcha]"), "\(d1.next)")
+
+        // Пароль, подставленный до правила stop, тоже считается.
+        var s = AutofillGate()
+        _ = s.begin()
+        let ds = s.record(O(filled: ["password"], stopped: "Неверный пароль"), signature: "s")
+        ok("stop после заполнения: пароль учтён, дальше — стоп",
+           s.passwordFills == 1 && ds.next == .formError("Неверный пароль") && !s.mayRun(signature: "x"),
+           "\(s.passwordFills) \(ds.next)")
+
+        // Нажатие на неизменившейся странице не повторяется.
+        var r = AutofillGate()
+        _ = r.begin()
+        _ = r.record(O(filled: ["username"], clicked: "button[id=next]"), signature: "A")
+        ok("после нажатия та же страница — скрипт не повторяется", !r.mayRun(signature: "A"))
+        ok("после нажатия страница изменилась — можно", r.mayRun(signature: "B"))
+        r.newPage()
+        ok("новая страница с той же сигнатурой — можно", r.mayRun(signature: "A"))
+
+        // Лимит нажатий — пять за вход.
+        var k = AutofillGate()
+        var nexts: [AutofillGate.Next] = []
+        for i in 0..<5 {
+            k.newPage()
+            _ = k.begin()
+            nexts.append(k.record(O(filled: [], clicked: "b"), signature: "k\(i)").next)
+        }
+        ok("пятое нажатие — лимит, дальше только человек",
+           nexts.last == .clickLimit && nexts.dropLast().allSatisfy { $0 == .clicked("b") } && !k.mayRun(signature: "z"),
+           "\(nexts)")
+
+        // Попыток на одной странице — не больше двенадцати.
+        var a = AutofillGate()
+        var runs = 0
+        while a.mayRun(signature: "same"), runs < 50 { _ = a.begin(); _ = a.record(O(), signature: "same"); runs += 1 }
+        ok("на одной странице не больше \(a.maxAttemptsPerPage) попыток", runs == a.maxAttemptsPerPage, "\(runs)")
+
+        // Нераспознанная форма — к человеку.
+        var u = AutofillGate()
+        _ = u.begin()
+        ok("поля есть, ни одно не узнано — показать человеку",
+           u.record(O(inputs: ["text:q"]), signature: "u").next == .unknownForm(["text:q"]))
+    }
+}
