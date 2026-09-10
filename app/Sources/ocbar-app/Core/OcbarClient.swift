@@ -137,6 +137,20 @@ final class OcbarClient: @unchecked Sendable {
     func cleanup() -> ActionResult { action(["cleanup"], timeout: 60) }
 
     // Диагностика: doctor ничего не меняет, поэтому вывод целиком, как есть.
+    /// `ocbar secret status <профиль> --short`: откуда пароль и код и есть ли
+    /// секрет в связке. Без KeePassXC и команд — окно профиля зовёт это при
+    /// каждом открытии.
+    func secretStatus(profile: String) -> [String: String] {
+        guard let binary else { return [:] }
+        let r = Shell.run(binary, ["secret", "status", profile, "--short"], timeout: 10)
+        var out: [String: String] = [:]
+        for line in r.out.split(separator: "\n") {
+            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
+            if parts.count == 2 { out[parts[0]] = parts[1] }
+        }
+        return out
+    }
+
     func doctor() -> String {
         guard let binary else { return "ocbar не найден" }
         let r = Shell.run(binary, ["doctor"], timeout: 60)

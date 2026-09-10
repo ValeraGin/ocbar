@@ -46,6 +46,13 @@ struct ProfileEditorView: View {
     @State private var message: String?
     @State private var showFile = false
     @State private var learnResult: String?
+    // Редкое свёрнуто: наверху то, что нужно для входа.
+    @State private var showNets = false
+    @State private var showMore = false
+    // Есть ли пароль и секрет кода в связке — `ocbar secret status --short`.
+    @State private var secrets: [String: String] = [:]
+    // Имя файла нового профиля подставляется из названия, пока его не правили руками.
+    @State private var autoFileName = ""
 
     private var errors: [Issue] { issues.filter { $0.level == .error } }
 
@@ -75,6 +82,14 @@ struct ProfileEditorView: View {
             }
         }
         .onChange(of: store.finishedActions) { _ in checkDisk() }
+        .onChange(of: loadedName) { _ in secrets = [:]; refreshSecrets() }
+        .onChange(of: savedText) { _ in refreshSecrets() }
+        .onChange(of: doc.name) { name in
+            guard loadedName == nil, doc.fileName.isEmpty || doc.fileName == autoFileName else { return }
+            let f = Self.slug(name)
+            doc.fileName = f
+            autoFileName = f
+        }
         .alert(alertTitle, isPresented: Binding(get: { alert != nil }, set: { if !$0 { alert = nil } }),
                presenting: alert) { a in
             alertButtons(a)
@@ -127,9 +142,15 @@ struct ProfileEditorView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             List(selection: $selected) {
-                Section("Файлы-профили") {
+                Section("Профили") {
                     ForEach(files, id: \.self) { name in
-                        Text(name).font(.system(size: 12)).tag(name)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(title(of: name)).font(.system(size: 12))
+                            Text(badge(of: name)).font(.system(size: 10)).foregroundStyle(Palette.tertiary)
+                                .lineLimit(1).truncationMode(.tail)
+                        }
+                        .padding(.vertical, 1)
+                        .tag(name)
                     }
                     if files.isEmpty {
                         Text("ни одного").font(.ocNote).foregroundStyle(Palette.tertiary)
@@ -180,22 +201,12 @@ struct ProfileEditorView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    group("Подключение") {
-                        field("Имя файла", $doc.fileName, hint: "профиль будет ~/.config/ocbar/profiles/\(doc.fileName.isEmpty ? "имя" : doc.fileName).ocbar")
-                        field("Название", $doc.name, hint: "как показывать в меню")
-                        field("Описание", $doc.descr)
+                    group("Основное") {
+                        field("Название", $doc.name,
+                              hint: loadedName == nil ? "как показывать в меню; имя файла подставится само" : "как показывать в меню")
                         field("Адрес", $doc.url, hint: "vpn.example.com/группа")
                         field("Пользователь", $doc.user)
-                        userAgentField
-                        field("CsdWrapper", $doc.csdWrapper, hint: "заглушка проверки соответствия, если шлюз просит")
-                    }
-                    group("Сети в туннеле") { routesEditor }
-                    group("Зоны DNS") { zonesEditor }
-                    group("Вход") {
-                        Picker("Пароль", selection: $doc.password) {
-                            ForEach(ProfileDoc.passwordSources, id: \.self) { Text($0).tag($0) }
-                        }
-                        .onChange(of: doc.password) { _ in touched() }
+                        sourceRow("Пароль", selection: $doc.password, options: ProfileDoc.passwordSources, status: passwordStatus)
                         if doc.password == "command" {
                             field("Команда для пароля", $doc.passwordCommand,
                                   hint: "печатает пароль первой строкой: op item get VPN --fields password")
@@ -203,27 +214,41 @@ struct ProfileEditorView: View {
                         if doc.password == "ask" {
                             Text("Пароль вводит человек — молчаливое переподключение работать не будет.")
                                 .font(.system(size: 10)).foregroundStyle(Palette.warn)
+                                .padding(.leading, 158)
                         }
-                        Picker("Одноразовый код", selection: $doc.totp) {
-                            ForEach(ProfileDoc.totpSources, id: \.self) { Text($0).tag($0) }
-                        }
-                        .onChange(of: doc.totp) { _ in touched() }
+                        sourceRow("Одноразовый код", selection: $doc.totp, options: ProfileDoc.totpSources, status: totpStatus)
                         if doc.totp == "command" { field("Команда", $doc.totpCommand, hint: "например: op item get VPN --otp") }
-                        if ["auto", "keychain"].contains(doc.totp) || doc.totpAlgorithm != "SHA1"
-                            || doc.totpDigits != "6" || doc.totpPeriod != "30" {
-                            totpParamsRow
-                        }
                         if doc.totp == "keepassxc" || doc.password == "keepassxc" || !doc.keepassEntry.isEmpty {
                             field("Запись KeePassXC", $doc.keepassEntry, hint: "Группа/Запись")
                             field("База KeePassXC", $doc.keepassDb)
                             field("Мастер-пароль в связке", $doc.keepassKeychain, hint: "имя сервиса в Keychain")
                         }
-                        field("Сервис в связке ключей", $doc.keychainService, hint: "по умолчанию ru.ocbar.client")
-                        field("Хосты провайдера входа", $doc.idpHosts, hint: "где разрешено автозаполнение")
                     }
-                    group("Форма входа на портале") { learnBlock }
-                    group("Проверка доступа") {
-                        field("Что проверять", $doc.health, hint: "URL, «хост:порт» или имя — поднятый туннель ещё не значит доступ")
+                    group("Форма входа") { learnBlock }
+                    disclosure("Сети и DNS", summary: netsSummary, isOn: $showNets) {
+                        Text("Сети в туннеле").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                        routesEditor
+                        Text("Зоны DNS").font(.system(size: 11)).foregroundStyle(Palette.tertiary).padding(.top, 4)
+                        zonesEditor
+                    }
+                    disclosure("Дополнительно",
+                               summary: "имя файла, User-Agent, CSD, параметры кода, хосты входа, правила, проверка доступа",
+                               isOn: $showMore) {
+                        field("Имя файла", $doc.fileName, hint: "профиль будет ~/.config/ocbar/profiles/\(doc.fileName.isEmpty ? "имя" : doc.fileName).ocbar")
+                        field("Описание", $doc.descr, hint: "вторая строка в списке профилей")
+                        userAgentField
+                        field("CsdWrapper", $doc.csdWrapper, hint: "заглушка проверки соответствия, если шлюз просит")
+                        if ["auto", "keychain"].contains(doc.totp) || doc.totpAlgorithm != "SHA1"
+                            || doc.totpDigits != "6" || doc.totpPeriod != "30" {
+                            totpParamsRow
+                        }
+                        field("Сервис в связке ключей", $doc.keychainService, hint: "по умолчанию ru.ocbar.client")
+                        field("Хосты провайдера входа", $doc.idpHosts,
+                              hint: "где разрешено автозаполнение; пусто — только цепочка входа от шлюза")
+                        rulesEditor
+                        field("Проверка доступа", $doc.health, hint: "URL, «хост:порт» или имя — поднятый туннель ещё не значит доступ")
+                        Toggle("показать файл, как он будет записан", isOn: $showFile)
+                            .toggleStyle(.checkbox).font(.system(size: 11)).padding(.leading, 158)
                     }
                     if showFile {
                         group("Файл, как он будет записан") {
@@ -250,40 +275,91 @@ struct ProfileEditorView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 let _ = { Self.probeLearnEnabled = !learnDisabled }()
-                Button(learning ? "Идёт разметка…" : "Разметить портал…") { learn() }
-                    .disabled(learnDisabled)
+                Text(rulesSummary).font(.system(size: 12)).foregroundStyle(Palette.text)
+                Spacer()
                 if learning {
                     ProgressView().controlSize(.small).scaleEffect(0.6)
                     Button("Отменить") { store.cancelCurrent() }.buttonStyle(.link).font(.system(size: 11))
                 }
-                Spacer()
-                Text(doc.autofill.isEmpty
-                     ? (doc.rulesFile.trimmed.isEmpty
-                        ? (FileManager.default.fileExists(atPath: rulesPath) ? "действует общий файл autofill.rules" : "действуют встроенные правила")
-                        : "действует файл из Rules")
-                     : "\(doc.autofill.filter { !$0.trimmed.isEmpty && !ProfileDoc.isComment($0.trimmed) }.count) правил в профиле")
-                    .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
+                Button(learning ? "Идёт разметка…" : "Разметить…") { learn() }
+                    .disabled(learnDisabled)
             }
             Text(learnHint)
                 .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
-            TextEditor(text: Binding(
-                get: { doc.autofill.joined(separator: "\n") },
-                set: { doc.autofill = $0.split(separator: "\n", omittingEmptySubsequences: false).map(String.init); touched() }))
-                .font(.system(size: 11, design: .monospaced))
-                .frame(minHeight: 72, maxHeight: 160)
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Palette.line))
-            Text("Правила профиля, по строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Строки «# шаг N — …» — заголовки окон формы, их пишет разметка; строки с «#» и «;» — комментарии. Пусто — действует общий файл или встроенные.")
-                .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-            field("Общий файл правил", $doc.rulesFile,
-                  hint: "необязательно: путь к файлу на несколько профилей; при заполненной секции выше не читается")
             if let learnResult {
                 Text(learnResult)
                     .font(.system(size: 11)).foregroundStyle(learnResult.hasPrefix("не получилось") ? Palette.bad : Palette.ok)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    // Сами правила — для тех, кто правит руками; обычно их пишет разметка.
+    private var rulesEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Правила формы").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            TextEditor(text: Binding(
+                get: { doc.autofill.joined(separator: "\n") },
+                set: { doc.autofill = $0.split(separator: "\n", omittingEmptySubsequences: false).map(String.init); touched() }))
+                .font(.system(size: 11, design: .monospaced))
+                .frame(minHeight: 72, maxHeight: 160)
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Palette.line))
+            Text("По строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Строки «# шаг N — …» — заголовки окон формы, их пишет разметка; строки с «#» и «;» — комментарии. Пусто — действует общий файл или встроенные.")
+                .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            field("Общий файл правил", $doc.rulesFile,
+                  hint: "необязательно: путь к файлу на несколько профилей; при заполненных правилах выше не читается")
+        }
+    }
+
+    /// Что делает форма входа, словами: «2 окна: логин+пароль → код».
+    private var rulesSummary: String {
+        let lines = doc.autofill.map { $0.trimmed }.filter { !$0.isEmpty }
+        guard lines.contains(where: { !ProfileDoc.isComment($0) }) else {
+            if !doc.rulesFile.trimmed.isEmpty { return "правила из общего файла" }
+            return FileManager.default.fileExists(atPath: rulesPath) ? "правила из autofill.rules" : "встроенные правила"
+        }
+        let names = ["username": "логин", "password": "пароль", "totp": "код", "manual": "вручную"]
+        var steps: [[String]] = [[]]
+        for line in lines {
+            if line.hasPrefix("# шаг") { if !(steps.last ?? []).isEmpty { steps.append([]) }; continue }
+            if ProfileDoc.isComment(line) { continue }
+            let w = line.split(separator: " ").map(String.init)
+            if w.first == "fill", w.count > 1 {
+                let k = names[w[1]] ?? w[1]
+                if !steps[steps.count - 1].contains(k) { steps[steps.count - 1].append(k) }
+            }
+        }
+        let parts = steps.map { $0.joined(separator: "+") }.filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return "\(lines.count) правил в профиле" }
+        let n = parts.count
+        let word = n == 1 ? "окно" : (2...4).contains(n) ? "окна" : "окон"
+        return "\(n) \(word): " + parts.joined(separator: " → ")
+    }
+
+    private var netsSummary: String {
+        let nets = doc.routes.compactMap { ProfileDoc.routeNet($0) }.count
+        let zones = doc.zones.filter { !$0.zone.trimmed.isEmpty }.count
+        return "\(nets) сет\(nets % 10 == 1 && nets % 100 != 11 ? "ь" : (2...4).contains(nets % 10) && !(12...14).contains(nets % 100) ? "и" : "ей") · \(zones) зон"
+    }
+
+    private var passwordStatus: (String, Color)? {
+        guard !dirty, let v = secrets["password"] else { return nil }
+        switch v {
+        case "keychain ok": return ("сохранён в связке", Palette.ok)
+        case "keychain missing": return ("в связке нет — ocbar secret set-password \(doc.fileName)", Palette.warn)
+        default: return nil
+        }
+    }
+
+    private var totpStatus: (String, Color)? {
+        guard !dirty, let v = secrets["totp"] else { return nil }
+        switch v {
+        case "keychain ok": return ("секрет в связке", Palette.ok)
+        case "keychain missing": return ("секрета нет — «Подключить и запомнить вход…» или камерой", Palette.warn)
+        default: return nil
         }
     }
 
@@ -466,9 +542,11 @@ struct ProfileEditorView: View {
                 Text(message).font(.system(size: 11)).foregroundStyle(Palette.ok)
             }
             HStack(spacing: 10) {
-                Toggle("показать файл", isOn: $showFile).toggleStyle(.checkbox).font(.system(size: 11))
+                if issues.isEmpty {
+                    Label("проверяется при вводе", systemImage: "checkmark.circle")
+                        .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                }
                 Spacer()
-                Button("Проверить") { issues = ProfileCheck.check(doc) }
                 Button("Сохранить") { save() }
                     .keyboardShortcut("s")
                     .disabled(!errors.isEmpty || doc.fileName.trimmed.isEmpty)
@@ -498,6 +576,102 @@ struct ProfileEditorView: View {
                     Text(hint).font(.system(size: 10)).foregroundStyle(Palette.tertiary)
                 }
             }
+        }
+    }
+
+    private func title(of name: String) -> String {
+        store.status.profiles.first { $0.name == name }?.display ?? name
+    }
+
+    private func badge(of name: String) -> String {
+        let s = store.status
+        var parts: [String] = []
+        if s.profile == name && s.state != .down { parts.append("подключён") }
+        if s.defaultProfile == name { parts.append("по умолчанию") }
+        parts.append(name + ".ocbar")
+        return parts.joined(separator: " · ")
+    }
+
+    private func sourceRow(_ label: String, selection: Binding<String>, options: [String],
+                           status: (String, Color)?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label).font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .frame(width: 150, alignment: .trailing)
+            // Столбец одной ширины: подписи «сохранён в связке» встают друг под другом.
+            HStack(spacing: 0) {
+                Picker("", selection: selection) {
+                    ForEach(options, id: \.self) { Text(Self.sourceTitle($0)).tag($0) }
+                }
+                .labelsHidden().fixedSize()
+                .onChange(of: selection.wrappedValue) { _ in touched() }
+                Spacer(minLength: 0)
+            }
+            .frame(width: 200)
+            if let status {
+                Text(status.0).font(.system(size: 11)).foregroundStyle(status.1)
+                    .lineLimit(1).truncationMode(.tail).textSelection(.enabled)
+            }
+            Spacer()
+        }
+    }
+
+    static func sourceTitle(_ v: String) -> String {
+        switch v {
+        case "auto": return "авто"
+        case "keychain": return "связка ключей"
+        case "keepassxc": return "KeePassXC"
+        case "command": return "своя команда"
+        case "ask": return "вводит человек"
+        case "sms": return "SMS — вводит человек"
+        case "off": return "не вводить"
+        default: return v
+        }
+    }
+
+    private func disclosure<C: View>(_ title: String, summary: String, isOn: Binding<Bool>,
+                                     @ViewBuilder content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Button {
+                withAnimation(.easeOut(duration: 0.12)) { isOn.wrappedValue.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isOn.wrappedValue ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9)).frame(width: 10)
+                    Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.secondary)
+                    if !isOn.wrappedValue {
+                        Text(summary).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                            .lineLimit(1).truncationMode(.tail)
+                    }
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if isOn.wrappedValue { content() }
+        }
+    }
+
+    /// Имя файла из названия: латиница, цифры и дефис.
+    static func slug(_ text: String) -> String {
+        let map: [Character: String] = ["а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+            "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",
+            "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch",
+            "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya"]
+        var out = ""
+        for ch in text.lowercased() {
+            if let t = map[ch] { out += t }
+            else if ch.isASCII, ch.isLetter || ch.isNumber { out.append(ch) }
+            else if !out.isEmpty, !out.hasSuffix("-") { out += "-" }
+        }
+        while out.hasSuffix("-") { out.removeLast() }
+        return out
+    }
+
+    private func refreshSecrets() {
+        guard let name = loadedName else { secrets = [:]; return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = OcbarClient.shared.secretStatus(profile: name)
+            DispatchQueue.main.async { if loadedName == name { secrets = r } }
         }
     }
 

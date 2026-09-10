@@ -999,7 +999,7 @@ qr_apply_params() { # строка --print-params
 }
 
 cmd_secret() {
-    local what="${1:-}" img="" p=""
+    local what="${1:-}" img="" p="" short=0
     # У import-qr вторым идёт файл, профиль третьим; у остальных — сразу профиль.
     local sel=""
     if [ "$what" = import-qr ]; then
@@ -1013,7 +1013,11 @@ cmd_secret() {
             esac
         done
     else
-        p="${2:-}"
+        shift 2>/dev/null || true
+        while [ $# -gt 0 ]; do
+            case "$1" in --short) short=1 ;; *) p="$1" ;; esac
+            shift
+        done
     fi
     load_profile "$p"
     case "$what" in
@@ -1060,6 +1064,21 @@ cmd_secret() {
             info "Файл с QR лучше удалить: rm -P \"$img\""
             ;;
         status|'')
+            if [ "$short" = 1 ]; then
+                # Машинный вид для окна профиля: источник и есть ли секрет в
+                # связке — без KeePassXC и команд: они могут спросить
+                # мастер-пароль или пойти в сеть при каждом открытии окна.
+                local ps; ps=$(password_source)
+                case "$ps" in
+                    keychain) if kc_has "$P_SVC" "$P_USER"; then echo "password=keychain ok"; else echo "password=keychain missing"; fi ;;
+                    *) echo "password=$ps" ;;
+                esac
+                case "$P_TOTP" in
+                    off|sms|keepassxc|command) echo "totp=$P_TOTP" ;;
+                    *) if kc_has "$P_SVC" "totp/$P_USER"; then echo "totp=keychain ok"; else echo "totp=keychain missing"; fi ;;
+                esac
+                return 0
+            fi
             local psrc; psrc=$(password_source)
             case "$psrc" in
                 keychain)
@@ -3010,6 +3029,9 @@ PROFILE
     rm -f "$tmp/profiles/p.ocbar"
     printf '[Connection]\nName = Код\nUrl = vpn.example.test/c\nUser = tester\n\n[Auth]\nTotp = command\nTotpCommand = echo 123456\n' > "$tmp/profiles/c.ocbar"
     has "secret code: свежий код из источника профиля" "123456" "$(run secret code c)"
+    printf '[Connection]\nName = Руками\nUrl = vpn.example.test/h\nUser = tester\n\n[Auth]\nPassword = ask\nTotp = sms\n' > "$tmp/profiles/h.ocbar"
+    is "secret status --short: источники без обращения к секретам" "password=ask totp=sms" "$(run secret status h --short | tr '\n' ' ' | sed 's/ $//' || true)"
+    rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
     # Уведомления: только через приложение, с его токеном и разрешением

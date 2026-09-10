@@ -5,6 +5,7 @@ import SwiftUI
 // систему, поэтому рядом написано, что именно она делает.
 struct DiagnosticsView: View {
     @ObservedObject private var store = StatusStore.shared
+    @Environment(\.openWindow) private var openWindow
     @State private var text = ""
     @State private var running = false
     @State private var stamp: Date?
@@ -40,9 +41,18 @@ struct DiagnosticsView: View {
             Text("ocbar doctor").font(.system(size: 13, weight: .medium))
             Text("ничего не меняет — только проверяет")
                 .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            // Сеть и супервизор раньше жили строкой в меню; здесь им место.
+            Text("· сеть \(store.status.iface.isEmpty ? "?" : store.status.iface) · "
+                 + (store.status.supervisor ? "супервизор работает" : "супервизор не запущен"))
+                .font(.system(size: 11))
+                .foregroundStyle(store.status.supervisor ? Palette.tertiary : Palette.warn)
             Spacer()
             if let stamp {
                 Text(Self.clock.string(from: stamp)).font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+            }
+            Button("Журналы…") {
+                openWindow(id: WindowID.logs)
+                NSApp.activate(ignoringOtherApps: true)
             }
             Button {
                 run()
@@ -59,7 +69,7 @@ struct DiagnosticsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Уборка следов прошлой сессии").font(.system(size: 12, weight: .medium))
                 Text("Снимает то, что осталось после падения: наши зоны в /etc/resolver, наши маршруты, "
-                     + "системный SOCKS без живого прокси, DNS 127.0.0.1 на интерфейсах при мёртвом резолвере. "
+                     + "системный SOCKS без живого прокси. Системный DNS не трогает — ocbar его не ставит. "
                      + "Живой туннель и чужой openconnect не трогает. То же, что `ocbar cleanup`.")
                     .font(.system(size: 11)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
