@@ -2916,10 +2916,13 @@ usage() {
     cat <<'USAGE'
 ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супервизор.
 
-  ocbar connect [профиль] [--show] [--teach]   подключиться; --teach — войти руками, а ocbar
-                                      запомнит форму и предложит сохранить пароль и код;
-                                      другим профилем при живой сессии — переключение;
-                                      Mode = proxy в профиле — SOCKS через ocproxy, без root
+  ocbar connect [профиль] [--show] [--teach] [-v]
+                                      подключиться; --show — показать окно входа;
+                                      --teach — войти руками, а ocbar запомнит форму
+                                      и предложит сохранить пароль и код; -v — подробный
+                                      журнал входа; другим профилем при живой сессии —
+                                      переключение; Mode = proxy в профиле — SOCKS
+                                      через ocproxy, без root
   ocbar disconnect                    отключиться
   ocbar pause                         «как будто выключен»: снять маршруты и зоны,
                                       туннель и вход оставить живыми
@@ -2929,18 +2932,23 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar profiles                      список профилей
   ocbar import <файл.ocbar> [имя]     добавить профиль одним файлом
   ocbar export <профиль> [файл]       выгрузить профиль (и перевести в новый формат)
-  ocbar routes add|del|toggle <CIDR>  маршруты в туннель на лету; apply | clear
+  ocbar routes [status]               состояние (то же, что ocbar status)
+  ocbar routes on|off|toggle <CIDR>   сеть в туннель на лету (add|del — то же);
+                                      apply — все включённые; clear — снять все
   ocbar dns status|apply|clear        зоны /etc/resolver; on|off|toggle <зона>
   ocbar dns init <файл> <DNS|vpn>     создать zones.conf из списка доменов
   ocbar secret set-password|set-totp|status|code [профиль]   Keychain; code — текущий код
   ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
-  ocbar learn [профиль] [--probe]     разметить форму входа мышью (--probe — без
+  ocbar learn [профиль] [--probe] [--out <файл>]
+                                      разметить форму входа мышью (--probe — без
                                       окна: что предзаполнение узнает само); правила
-                                      автозаполнения для своего портала —
-                                      в секцию [Autofill] самого профиля
-  ocbar rules show|import|clear       правила автозаполнения профиля
+                                      ложатся в секцию [Autofill] самого профиля,
+                                      с --out — в указанный файл
+  ocbar rules show [профиль]          правила автозаполнения профиля
+  ocbar rules import <файл> [профиль] положить правила из файла в [Autofill]
+  ocbar rules clear [профиль]         убрать [Autofill] из профиля
   ocbar app [start|stop|status]       приложение меню-бара; autostart on|off
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
@@ -2948,11 +2956,15 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar selftest                      проверка разбора на подставленных конфигах
   ocbar cleanup                       мусор от прошлой сессии
   ocbar supervise                     цикл реконнекта (его запускает LaunchAgent)
-  ocbar supervisor status|restart     состояние и перезапуск агента супервизора
+  ocbar supervisor status|start|stop|restart
+                                      агент супервизора: состояние, загрузить,
+                                      выгрузить (туннель это переживёт), перезапустить
   sudo ocbar install [--trust]        хелпер, sudoers, LaunchAgent (один раз)
   sudo ocbar uninstall
 
-  --dry-run   печатать привилегированные команды вместо выполнения
+  --dry-run   печатать привилегированные команды вместо выполнения;
+              процессы не гасятся (connect, cleanup, supervise)
+  -h, --help  эта справка
 
 Конфиги: ~/.config/ocbar/{profiles.conf,zones.conf,networks.conf,autofill.rules}
 USAGE
