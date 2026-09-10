@@ -2067,9 +2067,19 @@ cmd_supervise() {
     # неверных подряд блокируют учётную запись. Больше этого числа входов за
     # час супервизор не делает — ждёт человека.
     local logins_max="${OCBAR_LOGINS_PER_HOUR:-6}" logins_win_start=0 logins=0
+    # Счётчик живёт в файле: exec после правки скрипта и перезапуск агента
+    # launchd иначе обнуляли бы предохранитель посреди шторма входов.
+    local logins_file="$USER_STATE/supervisor.logins" _ws="" _lg="" _now
+    _now=$(date +%s)
+    if [ -f "$logins_file" ] && read -r _ws _lg < "$logins_file"; then :; fi
+    case "${_ws:-x}${_lg:-x}" in
+        *[!0-9]*) ;;
+        *) if [ "$_now" -ge "$_ws" ] && [ $((_now - _ws)) -lt 3600 ]; then logins_win_start=$_ws; logins=$_lg; fi ;;
+    esac
     local last_wake last_iface backoff=5 next_try=0 n=0 desired st now wake iface
-    local probe_bad_since=0 last_probe_log=0
+    local probe_bad_since=0 last_probe_log=0 no_net=0
     last_wake=$(wake_ts); last_iface=$(primary_iface)
+    [ -n "$last_iface" ] || no_net=1
 
     # Хвосты от прошлой сессии (аварийное завершение, перезагрузка) убирает
     # только connect. Если профиль снят, зоны и маршруты висели бы вечно.
@@ -2083,7 +2093,11 @@ cmd_supervise() {
         if [ "$(stat -f %m "$SELF" 2>/dev/null || echo 0)" != "$self_mtime" ]; then
             log "скрипт изменился — перезапускаю себя (exec)"
             trap - INT TERM EXIT
-            exec "$SELF" supervise "$@"
+            # --dry-run main снял с аргументов — вернуть явно: иначе после
+            # правки файла супервизор «для опыта» становился настоящим.
+            local -a again=(supervise)
+            [ "$DRY_RUN" = 1 ] && again+=(--dry-run)
+            exec "$SELF" "${again[@]}" "$@"
         fi
         desired=$(cat "$DESIRED" 2>/dev/null || true)
         st=$(tunnel_state)
@@ -2092,18 +2106,32 @@ cmd_supervise() {
             log "событие: пробуждение ($(date -r "$wake" '+%H:%M:%S' 2>/dev/null))"; last_wake="$wake"; next_try=0; backoff=5
             [ "$DRY_RUN" = 1 ] || sleep 3   # сети нужно время после сна
         fi
-        if [ "$iface" != "$last_iface" ]; then
-            log "событие: смена интерфейса $last_iface → ${iface:-нет}"
-            last_iface="$iface"; probe_bad_since=0; next_try=0; backoff=5
-            # Восстановиться по старому локальному адресу openconnect не сможет
-            # («Can't assign requested address» в логе), поэтому ждать смысла
-            # нет: сразу закрываем сессию и заходим заново. Прокси-режим — тот
-            # же openconnect, та же беда, перезапуск процесса целиком.
-            if [ "$st" = connected ] && [ -n "$desired" ]; then
-                log "смена интерфейса — восстановление по старому адресу невозможно, переподключаюсь"
-                session_stop >>"$SUP_LOG" 2>&1 || true
-                st=down; next_try=0
+        if [ -z "$iface" ]; then
+            # Сети нет вовсе (Wi-Fi пропал на пару минут). Это не смена
+            # интерфейса: рвать сессию незачем, а вход без сети только сжёг
+            # бы попытку из часового лимита. Ждём, пока сеть вернётся.
+            if [ "$no_net" = 0 ]; then log "событие: сети нет (${last_iface:-интерфейс} пропал) — жду, сессию не трогаю"; no_net=1; fi
+        elif [ "$no_net" = 1 ] || [ "$iface" != "$last_iface" ]; then
+            if [ "$iface" = "$last_iface" ]; then
+                log "событие: сеть вернулась тем же интерфейсом ($iface) — продолжаю"
+                probe_bad_since=0; next_try=0; backoff=5
+            elif [ -z "$last_iface" ]; then
+                log "событие: сеть появилась ($iface)"
+                next_try=0; backoff=5
+            else
+                log "событие: смена интерфейса $last_iface → $iface"
+                probe_bad_since=0; next_try=0; backoff=5
+                # Восстановиться по старому локальному адресу openconnect не
+                # сможет («Can't assign requested address» в логе), поэтому
+                # ждать смысла нет: сразу закрываем сессию и заходим заново.
+                # Прокси-режим — тот же openconnect, та же беда.
+                if [ "$st" = connected ] && [ -n "$desired" ]; then
+                    log "смена интерфейса — восстановление по старому адресу невозможно, переподключаюсь"
+                    session_stop >>"$SUP_LOG" 2>&1 || true
+                    st=down; next_try=0
+                fi
             fi
+            no_net=0; last_iface="$iface"
         fi
 
         # Отсчёт потери связи имеет смысл только в connected. Иначе после
@@ -2111,8 +2139,19 @@ cmd_supervise() {
         # «ждём три часа» и мгновенно порвёт живую сессию.
         [ "$st" = connected ] || { probe_bad_since=0; rm -f "$LINK_LOST" 2>/dev/null || true; }
 
+        # Системный SOCKS смотрит в порт прокси. Прокси нет — ждём вход, пауза
+        # между попытками, упёрлись в лимит входов — снять его, а не держать
+        # мак без интернета до следующего удачного входа.
+        if ! proxy_alive; then socks_cleanup >>"$SUP_LOG" 2>&1 || true; fi
+
         if [ -n "$desired" ]; then
-            if [ "$st" = paused ]; then
+            if [ "$no_net" = 1 ]; then
+                # Без сети ни проба, ни вход смысла не имеют: проба провалится
+                # на здоровой сессии, вход сожжёт попытку. Меню покажет
+                # «связь пропала», пока сеть не вернётся.
+                probe_bad_since=0
+                if [ "$st" = connected ] && [ ! -f "$LINK_LOST" ]; then printf '%s\n' "$now" > "$LINK_LOST"; fi
+            elif [ "$st" = paused ]; then
                 # На паузе DNS шлюза недостижим по определению — проверять
                 # туннель его опросом нельзя, живость процесса и есть критерий.
                 backoff=5
@@ -2188,6 +2227,7 @@ cmd_supervise() {
                         notify "ocbar: слишком много входов" "Автоподключение приостановлено, чтобы не заблокировать учётную запись"
                         last_probe_log=$now
                     fi
+                    [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
                     sleep 5; continue
                 fi
                 if [ -f "$NEEDS_LOGIN" ]; then
@@ -2199,6 +2239,7 @@ cmd_supervise() {
                     sleep 5; continue
                 fi
                 logins=$((logins + 1))
+                printf '%s %s\n' "$logins_win_start" "$logins" > "$logins_file" 2>/dev/null || true
                 log "туннель не поднят, профиль $desired — подключаю молча (вход $logins/$logins_max за час)"
                 local crc=0
                 ( export OCBAR_SILENT=1; load_profile "$desired" && do_connect ) >>"$SUP_LOG" 2>&1 || crc=$?
