@@ -22,7 +22,75 @@ enum AuthSelfTest {
         gate()
         journal()
         qr()
+        scope()
+        gatewayOnly()
         return failures
+    }
+
+    // MARK: - где можно заполнять форму (FillScope)
+
+    static func scope() {
+        out("Где заполнять форму и куда пускать всплывающие окна:")
+        let u = { (s: String) in URL(string: s)! }
+        var s = FillScope(explicit: [], gatewayHosts: ["vpn.example.test"])
+        // Старт входа: sso-v2-login на шлюзе, перенаправление к провайдеру.
+        let r0 = s.navigation(to: u("https://vpn.example.test/+CSCOE+/saml/sp/login?tgname=X"), humanRecent: false)
+        let r1 = s.navigation(to: u("https://idp.example.test/adfs/ls?SAMLRequest=1"), humanRecent: false)
+        s.committed(u("https://idp.example.test/adfs/ls"))
+        ok("без IdpHosts: шлюз и провайдер, куда увёл шлюз, — в цепочке",
+           r0 == .already && r1 == .gatewayChain && s.allowsFill(u("https://idp.example.test/login")), "\(r0) \(r1)")
+        ok("без IdpHosts: любой другой хост — нет (раньше — да)",
+           !s.allowsFill(u("https://evil.test/login")) && !s.allowsFill(u("https://example.test/")))
+        ok("только https: тот же хост по http — нет", !s.allowsFill(u("http://idp.example.test/login")))
+        let r2 = s.navigation(to: u("https://evil.test/phish"), humanRecent: false)
+        ok("переход, который страница провайдера сделала сама, цепочку не продлевает",
+           r2 == .refused && !s.allowsFill(u("https://evil.test/phish")), "\(r2)")
+        let r3 = s.navigation(to: u("https://mfa.example.test/"), humanRecent: true)
+        ok("переход сразу после жеста человека — продлевает", r3 == .human && s.allowsFill(u("https://mfa.example.test/x")), "\(r3)")
+        // Привязка HTTP-POST: страница шлюза сама отправляет форму провайдеру.
+        var p = FillScope(explicit: [], gatewayHosts: ["vpn.example.test"])
+        _ = p.navigation(to: u("https://vpn.example.test/saml"), humanRecent: false)
+        p.committed(u("https://vpn.example.test/saml"))
+        ok("автоотправка SAML-формы со страницы шлюза — в цепочке",
+           p.navigation(to: u("https://idp2.example.test/sso"), humanRecent: false) == .gatewayChain)
+        // Явный список.
+        let e = FillScope(explicit: ["corp.test"], gatewayHosts: ["vpn.example.test"])
+        ok("IdpHosts: хост и поддомены — да",
+           e.allowsFill(u("https://corp.test/")) && e.allowsFill(u("https://login.corp.test/")))
+        ok("IdpHosts: похожие чужие хосты и http — нет",
+           !e.allowsFill(u("https://corp.test.evil.com/")) && !e.allowsFill(u("https://evilcorp.test/"))
+           && !e.allowsFill(u("http://login.corp.test/")))
+        // Всплывающие окна.
+        ok("всплывающее окно на чужой хост — нет, на хост цепочки — да",
+           !s.allowsPopup(u("https://ads.evil.test/")) && s.allowsPopup(u("https://idp.example.test/help"))
+           && !s.allowsPopup(u("http://idp.example.test/help")))
+        let js = s.jsAllowed.compactMap { $0["h"] as? String }
+        ok("в скрипт уходит тот же список хостов", Set(js) == s.chain && s.jsAllowed.allSatisfy { ($0["s"] as? Bool) == false },
+           js.joined(separator: ","))
+    }
+
+    // MARK: - cookie и --insecure — только хост шлюза
+
+    static func gatewayOnly() {
+        out("Cookie и --insecure — только хост шлюза:")
+        let hosts: Set<String> = ["vpn.example.test"]
+        ok("cookie с хоста шлюза — принимается",
+           WebAuth.cookieFromGateway(domain: "vpn.example.test", hosts: hosts)
+           && WebAuth.cookieFromGateway(domain: ".vpn.example.test", hosts: hosts)
+           && WebAuth.cookieFromGateway(domain: "VPN.Example.Test", hosts: hosts))
+        ok("cookie с родительского домена — нет (раньше — да)",
+           !WebAuth.cookieFromGateway(domain: ".example.test", hosts: hosts)
+           && !WebAuth.cookieFromGateway(domain: "example.test", hosts: hosts))
+        ok("cookie соседнего и чужого хоста — нет",
+           !WebAuth.cookieFromGateway(domain: "idp.example.test", hosts: hosts)
+           && !WebAuth.cookieFromGateway(domain: "evil.test", hosts: hosts)
+           && !WebAuth.cookieFromGateway(domain: "", hosts: hosts))
+        ok("--insecure: хост шлюза — без проверки сертификата",
+           WebAuth.trustsUnverified(host: "vpn.example.test", insecure: true, gatewayHosts: hosts))
+        ok("--insecure: страницы провайдера входа проверяются всегда (раньше — нет)",
+           !WebAuth.trustsUnverified(host: "idp.example.test", insecure: true, gatewayHosts: hosts))
+        ok("без --insecure — проверка и на шлюзе",
+           !WebAuth.trustsUnverified(host: "vpn.example.test", insecure: false, gatewayHosts: hosts))
     }
 
     // MARK: - QR

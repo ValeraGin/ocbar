@@ -516,7 +516,7 @@ DispatchQueue.global().async {
                 opts.totpSecret = secret    // считаем в момент заполнения
             }
         }
-        opts.cookieDomain = r.postURL.host
+        opts.gatewayHosts = [r.postURL.host, r.groupURL.host].compactMap { $0 }
         opts.fillHosts = args.fillHosts
         opts.teach = args.teachOut != nil && !args.noWindow
         opts.teachOn = args.teachOn
