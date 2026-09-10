@@ -21,7 +21,7 @@
 | Homebrew | `openconnect` | `brew --version` |
 | `openconnect` | сам туннель | `brew install openconnect` |
 | KeePassXC | если второй фактор храните там | необязательно |
-| SwiftBar | меню в строке состояния | необязательно |
+| SwiftBar | запасной плагин меню; основное меню — приложение `ocbar.app`, оно ставится вместе с ocbar | необязательно |
 
 **[проверено]** Swift 6.3.3 идёт с Command Line Tools: полный Xcode не
 требуется. Если `swift --version` ругается, поставьте инструменты:
@@ -107,8 +107,24 @@ sudo ocbar install --trust
 
 ## 4. Свои данные
 
-Сначала заведите каталог и возьмите образцы — без файла профилей не работает
-ни одна команда:
+Сначала заведите профиль — без него не работает ни одна команда. Основной
+формат — один файл на подключение: адрес, сети, зоны DNS, источники пароля
+и кода, правила формы входа — всё в нём:
+
+```bash
+mkdir -p ~/.config/ocbar/profiles
+cp etc/example.ocbar ~/.config/ocbar/profiles/main.ocbar
+$EDITOR ~/.config/ocbar/profiles/main.ocbar
+```
+
+Для установки через Homebrew образцы лежат в
+`$(brew --prefix ocbar)/share/ocbar/examples`. Готовый файл от коллеги —
+`ocbar import <файл>.ocbar`. Ключи профиля-файла описаны в самом образце и в
+[README](README.md#профиль-одним-файлом).
+
+Ниже — старый формат: общий `profiles.conf` плюс `networks.conf` и
+`zones.conf`. Он продолжает работать, а `ocbar export <профиль> <файл>`
+переводит его в профиль-файл:
 
 ```bash
 mkdir -p ~/.config/ocbar
@@ -118,12 +134,13 @@ cp etc/zones.conf.example    ~/.config/ocbar/zones.conf
 $EDITOR ~/.config/ocbar/profiles.conf
 ```
 
-Для установки через Homebrew образцы лежат в
-`$(brew --prefix ocbar)/share/ocbar/examples`.
-
-Файл `autofill.rules` не обязателен: без него используется встроенный набор
-правил для типовых форм входа. Заводите его, только если форма вашего
-провайдера входа не распознаётся.
+Правила формы входа заводить заранее не нужно: без них используется
+встроенный набор для типовых форм (Keycloak, Microsoft). Если форма вашего
+провайдера входа не распознаётся, разметьте её (`ocbar learn`, ниже) —
+правила лягут в секцию `[Autofill]` профиля-файла, прошлая версия профиля
+останется рядом с суффиксом `.bak`. Отдельный файл `autofill.rules` нужен
+только старому формату (`profiles.conf`) или для одного файла правил на
+несколько профилей (ключ `Rules`).
 
 Дальше по файлам.
 
@@ -136,8 +153,13 @@ default = main
 url = vpn.example.com/employees
 name = Основной
 user = alice
-mode = split                  # split — свои маршруты и зоны; full — всё в туннель
+mode = split                  # единственное значение; можно не писать
 ```
+
+Режима `full` больше нет: с `mode = full` профиль не загружается, и
+`ocbar` скажет почему. «Всё в туннель» — две строки в `networks.conf`:
+`0.0.0.0/1` и `128.0.0.0/1`; шлюз при этом может не выпускать в интернет
+(D4, D32).
 
 Профилей может быть сколько угодно, они переключаются из меню. Группы, где
 вход идёт логином с паролем и одноразовым кодом из SMS, помечайте
@@ -354,21 +376,46 @@ sudo ./bin/ocbar install
 
 ## 8. Удаление
 
+**Порядок важен: сначала `sudo ocbar uninstall`, потом `brew uninstall
+ocbar`.** `uninstall` — команда самого `ocbar`; если сначала удалить
+формулу, убирать системную часть будет нечем, и на машине останутся
+root-хелпер с беспарольным правилом в `/etc/sudoers.d/ocbar`, копия
+`openconnect` в root-каталоге и LaunchAgent супервизора, который launchd
+будет перезапускать, хотя программы уже нет.
+
 ```bash
-./bin/ocbar disconnect
-sudo ./bin/ocbar uninstall     # приложение и его автозапуск, агент, sudoers, хелпер, /usr/local/libexec/ocbar
+ocbar disconnect
+sudo ocbar uninstall           # приложение и его автозапуск, агент, sudoers, хелпер, /usr/local/libexec/ocbar
+brew uninstall ocbar           # только после uninstall; из репозитория — просто удалить клон
 sudo rm -rf /usr/local/var/ocbar                      # состояние: uninstall его оставляет
 rm -rf ~/.config/ocbar ~/Library/Logs/ocbar
 rm -rf "$HOME/Library/Application Support/ocbar"      # выбранный профиль, тумблеры меню
 rm -rf ~/Library/WebKit/ocbar-auth ~/Library/HTTPStorages/ocbar-auth.binarycookies
-security delete-generic-password -s ru.ocbar.client   # если заводили секреты
+rm -rf ~/Library/Caches/ocbar-auth                    # кэш окна входа
+rm -f ~/Library/Preferences/ru.ocbar.app.plist ~/Library/Preferences/ocbar-app.plist   # настройки приложения
 ```
+
+Из репозитория то же самое — `./bin/ocbar` вместо `ocbar`, без строки с
+`brew`.
+
+Секреты в связке ключей удаляются по одной записи за вызов: у каждого
+логина их две — пароль и секрет кода.
+
+```bash
+security delete-generic-password -s ru.ocbar.client -a <логин>        # пароль
+security delete-generic-password -s ru.ocbar.client -a totp/<логин>   # секрет TOTP
+```
+
+Логин — `User` из профиля (по умолчанию — имя пользователя macOS); если в
+профиле задан свой `KeychainService`, подставьте его вместо
+`ru.ocbar.client`. Команда без `-a` удаляет только первую найденную запись
+сервиса, и вторая остаётся.
 
 `uninstall` намеренно оставляет каталог состояния: там манифест зон, по
 которому убираются файлы в системном каталоге резолверов. Удаляйте его
 последним и только после `disconnect`.
 
-Последние две строки стоит выполнить и без удаления программы, если нужно
+Строки с `~/Library/WebKit/ocbar-auth` и `HTTPStorages` стоит выполнить и без удаления программы, если нужно
 оборвать сохранённую сессию SSO: **[проверено]** cookie провайдера входа
 живут в этом хранилище месяцами, и отключение VPN их не трогает.
 

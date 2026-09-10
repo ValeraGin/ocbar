@@ -6,12 +6,16 @@
 прокси-режим без привилегий (`openconnect --script-tun` + `ocproxy`),
 приложение меню-бара на SwiftUI, раздача через Homebrew tap.
 
-**Статус: 0.2.0.** Вход через SSO, туннель, split DNS, маршруты и зоны на
-лету, пауза, супервизор и приложение меню-бара проверены на реальном шлюзе.
-Реконнект и смена сетевого интерфейса подтверждены живыми событиями.
-Прокси-режим и системный SOCKS написаны и проверены без сети (`ocbar
-selftest`, dry-run хелпера); живое подключение в этом режиме — см.
-[ROADMAP.md](ROADMAP.md). Как поставить — [INSTALL.md](INSTALL.md).
+**Статус: 0.2.x** (на 2026-09-10 — 0.2.10; точная версия — `ocbar version`).
+Вход через SSO, туннель, split DNS, маршруты и зоны на лету, пауза,
+супервизор и приложение меню-бара проверены на реальном шлюзе. Реконнект и
+смена сетевого интерфейса подтверждены живыми событиями. Прокси-режим
+**[проверено 2026-09-08]** живым подключением: вход через SSO, SOCKS
+отвечает, внутренний хост доступен через `curl --socks5-hostname`, `utun` и
+`/etc/resolver` не тронуты. Установка системного SOCKS проверена только
+dry-run хелпера — на машине автора включён чужой SOCKS. Что ещё ждёт
+живой проверки — [ROADMAP.md](ROADMAP.md). Как поставить —
+[INSTALL.md](INSTALL.md).
 
 ## Как это устроено
 
@@ -44,10 +48,9 @@ brew trust ValeraGin/ocbar            # tap не из homebrew-core: без эт
 brew install ocbar                    # собирает из исходников у вас; --HEAD — с main
 sudo ocbar install                    # один раз: хелпер, sudoers, агент
 
-mkdir -p ~/.config/ocbar              # без профиля не работает ни одна команда
-cp "$(brew --prefix ocbar)"/share/ocbar/examples/*.example ~/.config/ocbar/
-cd ~/.config/ocbar && for f in *.example; do mv "$f" "${f%.example}"; done
-$EDITOR ~/.config/ocbar/profiles.conf
+mkdir -p ~/.config/ocbar/profiles     # без профиля не работает ни одна команда
+cp "$(brew --prefix ocbar)"/share/ocbar/examples/example.ocbar ~/.config/ocbar/profiles/main.ocbar
+$EDITOR ~/.config/ocbar/profiles/main.ocbar
 
 ocbar secret set-password
 ocbar connect --show
@@ -59,7 +62,7 @@ ocbar connect --show
 brew install openconnect
 git clone https://github.com/ValeraGin/ocbar.git ~/Projects/ocbar && cd ~/Projects/ocbar
 (cd auth && swift build -c release)   # Swift идёт с Command Line Tools
-mkdir -p ~/.config/ocbar && cp etc/profiles.conf.example ~/.config/ocbar/profiles.conf
+mkdir -p ~/.config/ocbar/profiles && cp etc/example.ocbar ~/.config/ocbar/profiles/main.ocbar
 sudo ./bin/ocbar install
 ```
 
@@ -181,7 +184,7 @@ ALL_PROXY=socks5h://127.0.0.1:11080 git fetch
 | `profiles.conf` | профили: `url`, `user`, `auth = sso\|password`, `keychain_service`, `healthcheck` |
 | `networks.conf` | CIDR в туннель, по одному на строку |
 | `zones.conf` | `<зона> <DNS\|vpn> [порт]` — `vpn` означает DNS, который прислал шлюз |
-| `autofill.rules` | правила заполнения формы IdP, читаются при каждом запуске |
+| `autofill.rules` | правила заполнения формы IdP, читаются при каждом запуске; у профиля-файла с секцией `[Autofill]` не читаются |
 
 Полезные ключи профиля: `healthcheck` — что проверить после подключения
 (URL, «хост:порт» или имя); `notifications = off` в шапке файла выключает
@@ -212,8 +215,8 @@ ocbar secret import-qr ~/Downloads/qr.png --select <часть-имени>   # �
 одна и та же схема для обоих. Для KeePassXC в профиле:
 
 ```ini
-password = keepassxc          # keychain (по умолчанию) | keepassxc | command | ask
-totp = keepassxc              # keychain | keepassxc | command | off
+password = keepassxc          # auto (по умолчанию) | keychain | keepassxc | command | ask
+totp = keepassxc              # auto (по умолчанию) | keychain | keepassxc | command | sms | off
 keepass_entry = Группа/Запись
 keepass_db = ~/путь/база.kdbx
 keepass_keychain_service = keepassxc-docs
@@ -221,8 +224,11 @@ keepass_keychain_service = keepassxc-docs
 
 Ни пароль, ни секрет при этом не копируются: `keepassxc-cli` читает базу
 напрямую, значения уходят в окружение подпроцесса и нигде не печатаются.
-`password = ask` означает «вводит человек» — тогда молчаливого
-переподключения не будет.
+`auto` — «разберись сам»: команда, если задана; иначе связка ключей (для
+пароля — если он там есть); иначе база, если указана запись.
+`password = ask` означает «вводит человек», `totp = sms` — код приходит по
+SMS и вводится руками, `totp = off` — автоввод кода выключен; во всех трёх
+случаях молчаливого переподключения не будет.
 
 Мастер-пароль базы берётся из Keychain по имени сервиса и в аргументы не
 попадает; `keepassxc-cli` читает файл напрямую, разблокировать окно
@@ -256,12 +262,24 @@ ocbar learn                 # откроется форма входа ваше�
 сработает; чтобы пройти форму дальше, снимите галочку «Отмечать элементы»
 или просто печатайте — отмеченное поле получает фокус сразу.
 
-По кнопке «Готово» правила ложатся в `~/.config/ocbar/autofill.rules`,
-прошлые остаются рядом с суффиксом `.bak`. Закрытое окно без «Готово» ничего
-не пишет. То же самое есть в приложении: «Настройка → Профили → Разметить
-портал…».
+По кнопке «Готово» правила ложатся в сам профиль — секцию `[Autofill]`
+файла `~/.config/ocbar/profiles/<имя>.ocbar`, а прошлая версия профиля
+остаётся рядом с суффиксом `.bak` (D49). В общий файл
+`~/.config/ocbar/autofill.rules` (или в файл из ключа `Rules`) они пишутся,
+только если профиль указывает на файл ключом `Rules`, если профиль старого
+формата (`profiles.conf`) или если задан `ocbar learn --out <файл>`. Закрытое
+окно без «Готово» ничего не пишет. То же самое есть в приложении:
+«Настройка → Профили → Разметить портал…».
 
-Формат правил простой и правится руками — [etc/autofill.rules.example](etc/autofill.rules.example).
+```bash
+ocbar rules show <профиль>              # какие правила действуют и откуда
+ocbar rules import <файл> <профиль>     # положить файл правил в [Autofill]
+ocbar rules clear <профиль>             # убрать секцию — снова встроенные или общий файл
+```
+
+Формат правил простой и правится руками — один и тот же в секции
+`[Autofill]` ([etc/example.ocbar](etc/example.ocbar)) и в файле
+([etc/autofill.rules.example](etc/autofill.rules.example)).
 
 ### Автоподключение и вход
 
