@@ -76,7 +76,13 @@ struct ProfileDoc {
         var section = "", sectionName = ""
         for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let line = raw.trimmed
-            if line.isEmpty || line.hasPrefix("#") || line.hasPrefix(";") { continue }
+            if line.isEmpty { continue }
+            if line.hasPrefix("#") || line.hasPrefix(";") {
+                // Заголовки окон формы («# шаг 1 — …») в [Autofill] — часть
+                // правил: по ним видно, какое окно что заполняет.
+                if section == "autofill" { d.autofill.append(line) }
+                continue
+            }
             if line.hasPrefix("[") && line.hasSuffix("]") {
                 sectionName = String(line.dropFirst().dropLast())
                 section = sectionName.lowercased()

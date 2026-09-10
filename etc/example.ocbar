@@ -62,10 +62,16 @@ KeepassKeychain = имя-сервиса-в-связке-ключей
 #   fill   username|password|totp <селектор>
 #   click  <селектор>                  нажать, только если что-то заполнили
 #   click! <селектор>                  нажать безусловно («другой способ входа»)
+# Форма в несколько окон (сначала пароль, потом код) пишется блоками
+# «# шаг N — страница»: заголовки для человека, движок заполняет видимое.
+# # шаг 1 — idp.example.com/login
 # stop  div.alert-error
 # fill  username input[name=username]
 # fill  password input[name=password]
 # click button[type=submit]
+# # шаг 2 — idp.example.com/otp
+# fill  totp  input[autocomplete=one-time-code]
+# click button[id=kc-login]
 
 # [Proxy]
 # Настройки прокси-режима — см. docs/09-proxy-mode.md.
