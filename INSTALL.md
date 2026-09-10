@@ -21,7 +21,7 @@
 | Homebrew | `openconnect` | `brew --version` |
 | `openconnect` | сам туннель | `brew install openconnect` |
 | KeePassXC | если второй фактор храните там | необязательно |
-| SwiftBar | меню в строке состояния | необязательно |
+| SwiftBar | запасной плагин меню; основное меню — приложение `ocbar.app`, оно ставится вместе с ocbar | необязательно |
 
 **[проверено]** Swift 6.3.3 идёт с Command Line Tools: полный Xcode не
 требуется. Если `swift --version` ругается, поставьте инструменты:
