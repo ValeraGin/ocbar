@@ -48,10 +48,9 @@ brew trust ValeraGin/ocbar            # tap не из homebrew-core: без эт
 brew install ocbar                    # собирает из исходников у вас; --HEAD — с main
 sudo ocbar install                    # один раз: хелпер, sudoers, агент
 
-mkdir -p ~/.config/ocbar              # без профиля не работает ни одна команда
-cp "$(brew --prefix ocbar)"/share/ocbar/examples/*.example ~/.config/ocbar/
-cd ~/.config/ocbar && for f in *.example; do mv "$f" "${f%.example}"; done
-$EDITOR ~/.config/ocbar/profiles.conf
+mkdir -p ~/.config/ocbar/profiles     # без профиля не работает ни одна команда
+cp "$(brew --prefix ocbar)"/share/ocbar/examples/example.ocbar ~/.config/ocbar/profiles/main.ocbar
+$EDITOR ~/.config/ocbar/profiles/main.ocbar
 
 ocbar secret set-password
 ocbar connect --show
@@ -63,7 +62,7 @@ ocbar connect --show
 brew install openconnect
 git clone https://github.com/ValeraGin/ocbar.git ~/Projects/ocbar && cd ~/Projects/ocbar
 (cd auth && swift build -c release)   # Swift идёт с Command Line Tools
-mkdir -p ~/.config/ocbar && cp etc/profiles.conf.example ~/.config/ocbar/profiles.conf
+mkdir -p ~/.config/ocbar/profiles && cp etc/example.ocbar ~/.config/ocbar/profiles/main.ocbar
 sudo ./bin/ocbar install
 ```
 

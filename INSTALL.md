@@ -107,8 +107,24 @@ sudo ocbar install --trust
 
 ## 4. Свои данные
 
-Сначала заведите каталог и возьмите образцы — без файла профилей не работает
-ни одна команда:
+Сначала заведите профиль — без него не работает ни одна команда. Основной
+формат — один файл на подключение: адрес, сети, зоны DNS, источники пароля
+и кода, правила формы входа — всё в нём:
+
+```bash
+mkdir -p ~/.config/ocbar/profiles
+cp etc/example.ocbar ~/.config/ocbar/profiles/main.ocbar
+$EDITOR ~/.config/ocbar/profiles/main.ocbar
+```
+
+Для установки через Homebrew образцы лежат в
+`$(brew --prefix ocbar)/share/ocbar/examples`. Готовый файл от коллеги —
+`ocbar import <файл>.ocbar`. Ключи профиля-файла описаны в самом образце и в
+[README](README.md#профиль-одним-файлом).
+
+Ниже — старый формат: общий `profiles.conf` плюс `networks.conf` и
+`zones.conf`. Он продолжает работать, а `ocbar export <профиль> <файл>`
+переводит его в профиль-файл:
 
 ```bash
 mkdir -p ~/.config/ocbar
@@ -117,9 +133,6 @@ cp etc/networks.conf.example ~/.config/ocbar/networks.conf
 cp etc/zones.conf.example    ~/.config/ocbar/zones.conf
 $EDITOR ~/.config/ocbar/profiles.conf
 ```
-
-Для установки через Homebrew образцы лежат в
-`$(brew --prefix ocbar)/share/ocbar/examples`.
 
 Правила формы входа заводить заранее не нужно: без них используется
 встроенный набор для типовых форм (Keycloak, Microsoft). Если форма вашего
