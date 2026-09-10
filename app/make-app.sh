@@ -55,6 +55,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSCameraUsageDescription</key><string>ocbar читает QR второго фактора с экрана телефона, чтобы сохранить секрет одноразового кода. Кадры никуда не сохраняются.</string>
     <key>CFBundleURLTypes</key>
     <array><dict>
         <key>CFBundleURLName</key><string>ru.ocbar.app.notify</string>
