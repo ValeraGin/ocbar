@@ -9,7 +9,19 @@ struct ProfileEditorView: View {
     @State private var selected: String?
     @State private var doc = ProfileDoc()
     @State private var issues: [Issue] = []
-    @State private var dirty = false
+    // Что лежит на диске, в том же виде, в каком редактор это запишет. Есть
+    // ли правки — сравнением с ним, а не по событиям полей: onChange у полей
+    // срабатывает и при загрузке профиля, и тогда любой открытый профиль
+    // выглядел «несохранённым» — а разметка при правках была заблокирована.
+    @State private var savedText: String?
+    private var dirty: Bool { savedText.map { $0 != Self.snapshot(doc) } ?? true }
+    private static func snapshot(_ d: ProfileDoc) -> String { d.render(dated: Date(timeIntervalSince1970: 0)) }
+
+    // Доступна ли разметка — одним выражением: его же видит самопроверка
+    // (ocbar-app --selftest открывает редактор на настоящем окне). Кнопки
+    // SwiftUI рисует сам, и снаружи их состояние не прочитать.
+    private var learnDisabled: Bool { learning || doc.fileName.trimmed.isEmpty || !errors.isEmpty }
+    static var probeLearnEnabled: Bool?
     @State private var message: String?
     @State private var showFile = false
     @State private var learning = false
@@ -55,14 +67,14 @@ struct ProfileEditorView: View {
                 guard let name else { return }
                 doc = ProfileStore.load(name) ?? ProfileDoc(fileName: name)
                 issues = ProfileCheck.check(doc)
-                dirty = false
+                savedText = ProfileStore.load(name).map(Self.snapshot)
                 message = nil
             }
             Divider()
             HStack(spacing: 8) {
                 Button {
                     doc = ProfileDoc(fileName: "", userAgent: ProfileDoc.defaultUserAgent)
-                    selected = nil; dirty = true; issues = ProfileCheck.check(doc)
+                    selected = nil; savedText = nil; issues = ProfileCheck.check(doc)
                 } label: { Image(systemName: "plus") }
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting(
@@ -146,8 +158,9 @@ struct ProfileEditorView: View {
     private var learnBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
+                let _ = { Self.probeLearnEnabled = !learnDisabled }()
                 Button(learning ? "Идёт разметка…" : "Разметить портал…") { learn() }
-                    .disabled(learning || dirty || doc.fileName.trimmed.isEmpty || !fileExists)
+                    .disabled(learnDisabled)
                 if learning { ProgressView().controlSize(.small).scaleEffect(0.6) }
                 Spacer()
                 Text(doc.autofill.isEmpty
@@ -181,9 +194,9 @@ struct ProfileEditorView: View {
     }
 
     private var learnHint: String {
-        if doc.fileName.trimmed.isEmpty { return "Сначала сохраните профиль — размечать нужно его форму входа." }
-        if !fileExists { return "Профиль ещё не записан на диск: сохраните, потом размечайте." }
-        if dirty { return "Есть несохранённые правки — сохраните, чтобы разметка шла по актуальному адресу." }
+        if doc.fileName.trimmed.isEmpty { return "Укажите имя файла профиля — размечать нужно его форму входа." }
+        if !errors.isEmpty { return "В профиле ошибки (внизу окна) — исправьте, и разметка станет доступна." }
+        if !fileExists || dirty { return "Профиль сначала сохранится — разметка идёт по его адресу, а правила ложатся в сам файл." }
         return "Откроется форма входа вашего портала. Отмечайте мышью поле логина, поле пароля, поле кода и кнопку — правила запишутся в этот профиль сами. Прошлая версия профиля останется рядом с суффиксом .bak."
     }
 
@@ -199,6 +212,12 @@ struct ProfileEditorView: View {
 
     private func learn() {
         guard !learning else { return }
+        // Разметка идёт по адресу из файла и пишет правила в файл — значит,
+        // сначала файл должен совпадать с тем, что на экране.
+        if dirty || !fileExists {
+            save()
+            guard !dirty, fileExists else { return }
+        }
         learning = true
         learnResult = nil
         let name = doc.fileName
@@ -212,7 +231,7 @@ struct ProfileEditorView: View {
                     // Правила легли в файл профиля — перечитать его, чтобы
                     // редактор показывал то, что на диске.
                     if let fresh = ProfileStore.load(name) {
-                        doc = fresh; issues = ProfileCheck.check(doc); dirty = false
+                        doc = fresh; issues = ProfileCheck.check(doc); savedText = Self.snapshot(fresh)
                     }
                     learnResult = text.contains("отменена") ? "разметка отменена — профиль не тронут"
                         : "правила записаны в профиль: \(doc.autofill.count) строк"
@@ -350,7 +369,6 @@ struct ProfileEditorView: View {
     }
 
     private func touched() {
-        dirty = true
         message = nil
         issues = ProfileCheck.check(doc)
     }
@@ -362,6 +380,7 @@ struct ProfileEditorView: View {
         if selected == nil, let first = files.first {
             selected = first
             doc = ProfileStore.load(first) ?? ProfileDoc(fileName: first)
+            savedText = ProfileStore.load(first).map(Self.snapshot)
             issues = ProfileCheck.check(doc)
         }
     }
@@ -373,7 +392,7 @@ struct ProfileEditorView: View {
             issues.append(Issue(level: .error, text: "не удалось записать: \(error)"))
             return
         }
-        dirty = false
+        savedText = Self.snapshot(doc)
         // Проверяем не своими глазами, а клиентом: профиль должен появиться
         // в его списке — значит файл разобран.
         let seen = OcbarClient.shared.status().profiles.contains { $0.name == doc.fileName }

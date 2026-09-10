@@ -41,7 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         if CommandLine.arguments.contains("--selftest") {
             var code = SelfTest.run()
+            code += SelfTest.editorProbe()
             if CommandLine.arguments.contains("--live-actions") { code += SelfTest.liveActions() }
+            // Итог по всем частям: строка «selftest: всё OK» выше — только
+            // про разбор и правила, проба редактора идёт после неё.
+            print(code == 0 ? "ocbar-app: всё OK" : "ocbar-app: провалов \(code)")
             exit(code)
         }
         OcbarClient.shared.preloadVersions()

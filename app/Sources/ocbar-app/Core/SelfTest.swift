@@ -1,5 +1,7 @@
 import Foundation
 import Carbon.HIToolbox
+import AppKit
+import SwiftUI
 
 // `ocbar-app --selftest` — проверка того, что можно проверить без человека:
 // разбор и запись профиля, правила проверки, чтение состояния. Последний шаг
@@ -313,5 +315,70 @@ extension SelfTest {
 
         print(failures == 0 ? "live-actions: всё OK" : "live-actions: провалов \(failures)")
         return failures == 0 ? 0 : 1
+    }
+}
+
+// Редактор профиля на настоящем окне: у только что открытого профиля и
+// после выбора другого в списке кнопка разметки должна быть доступна.
+// Раньше onChange полей срабатывал при загрузке профиля, редактор считал его
+// «несохранённым», и кнопка была серой — глазами на витрине это не видно.
+// Кнопки SwiftUI рисует сам (это не NSButton), а дерево доступности окна
+// вне экрана пустое, поэтому редактор сам отдаёт то выражение, что стоит
+// у кнопки в .disabled — его и проверяем после настоящей отрисовки.
+extension SelfTest {
+    @MainActor
+    static func editorProbe() -> Int32 {
+        guard OcbarClient.shared.binary != nil else {
+            print("  [ -- ] редактор: живой ocbar не найден, проверка пропущена")
+            return 0
+        }
+        var failures: Int32 = 0
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") {
+            print(ok ? "  [ OK ] \(name)" : "  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)")
+            if !ok { failures += 1 }
+        }
+        let fm = FileManager.default
+        let tmp = NSTemporaryDirectory() + "ocbar-editor-\(getpid())"
+        try? fm.createDirectory(atPath: tmp + "/profiles", withIntermediateDirectories: true)
+        try? "[Connection]\nName = Альфа\nUrl = vpn.example.test/a\nUser = alice\n\n[Auth]\nTotp = keychain\n"
+            .write(toFile: tmp + "/profiles/a.ocbar", atomically: true, encoding: .utf8)
+        try? "[Connection]\nName = Бета\nUrl = vpn.example.test/b\nUser = bob\nUserAgent = AnyConnect Linux_64 4.10.06079\n\n[Routes]\n10.0.0.0/8\n\n[Auth]\nPassword = ask\nTotp = off\n"
+            .write(toFile: tmp + "/profiles/b.ocbar", atomically: true, encoding: .utf8)
+        let oldConfig = ProcessInfo.processInfo.environment["OCBAR_CONFIG_DIR"]
+        setenv("OCBAR_CONFIG_DIR", tmp, 1)
+        defer {
+            if let oldConfig { setenv("OCBAR_CONFIG_DIR", oldConfig, 1) } else { unsetenv("OCBAR_CONFIG_DIR") }
+            try? fm.removeItem(atPath: tmp)
+        }
+
+        let window = NSWindow(contentRect: NSRect(x: -4000, y: 0, width: 900, height: 1500),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: ProfileEditorView())
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        func settle(_ s: TimeInterval) { RunLoop.current.run(until: Date().addingTimeInterval(s)) }
+        func views<T: NSView>(_ type: T.Type) -> [T] {
+            var out: [T] = [], stack: [NSView] = [window.contentView!]
+            while let v = stack.popLast() { if let t = v as? T { out.append(t) }; stack += v.subviews }
+            return out
+        }
+        func shows(_ text: String) -> Bool { views(NSTextField.self).contains { $0.stringValue == text } }
+        settle(2.5)
+        check("редактор: открыт первый профиль", shows("Альфа"))
+        check("редактор: разметка доступна у открытого профиля", ProfileEditorView.probeLearnEnabled == true,
+              "кнопка " + (ProfileEditorView.probeLearnEnabled.map { $0 ? "доступна" : "серая" } ?? "не отрисована"))
+
+        // Выбор другого профиля в списке — ровно то, что делает человек.
+        // Профили в списке по алфавиту, «b» — последняя строка.
+        if let table = views(NSTableView.self).first, table.numberOfRows > 0 {
+            table.selectRowIndexes(IndexSet(integer: table.numberOfRows - 1), byExtendingSelection: false)
+            settle(2)
+            check("редактор: выбран второй профиль", shows("Бета"))
+            check("редактор: разметка доступна после выбора другого профиля", ProfileEditorView.probeLearnEnabled == true,
+                  "кнопка " + (ProfileEditorView.probeLearnEnabled.map { $0 ? "доступна" : "серая" } ?? "не отрисована"))
+        } else {
+            check("редактор: список профилей найден", false)
+        }
+        return failures
     }
 }
