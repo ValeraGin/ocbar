@@ -153,7 +153,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             finish(.failure(.navigation("некорректный sso-v2-login: \(request.loginURL)")))
             return
         }
-        Log.info("открываю \(url.absoluteString)")
+        Log.info("открываю \(Log.redact(url))")
         webView.load(URLRequest(url: url))
     }
 
@@ -234,9 +234,11 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         let u = webView.url?.absoluteString ?? "?"
-        Log.debug("страница загружена: \(u)")
+        // В журнал и в строку состояния — без query: строка состояния
+        // уходит в журнал как причина «нужен человек» (--no-window).
+        Log.debug("страница загружена: \(Log.redact(webView.url))")
         recorder?.apply(to: webView)
-        statusLabel.stringValue = u
+        statusLabel.stringValue = Log.redact(webView.url)
         if urlLooksFinal(webView.url) {
             Log.info("достигнут sso-v2-login-final, жду cookie")
         }
