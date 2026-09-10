@@ -8,6 +8,7 @@ struct DiagnosticsView: View {
     @State private var text = ""
     @State private var running = false
     @State private var stamp: Date?
+    @State private var cleanupPending = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +28,11 @@ struct DiagnosticsView: View {
         }
         .frame(minWidth: 640, minHeight: 420)
         .onAppear { run() }
+        // Результат уборки виден в повторной диагностике — когда уборка
+        // закончится, а не через три секунды наугад.
+        .onChange(of: store.finishedActions) { _ in
+            if cleanupPending { cleanupPending = false; run() }
+        }
     }
 
     private var toolbar: some View {
@@ -64,9 +70,8 @@ struct DiagnosticsView: View {
             }
             Spacer()
             Button("Убрать") {
+                cleanupPending = true
                 store.cleanup()
-                // Результат уборки виден в повторной диагностике.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { run() }
             }
             .disabled(store.busy != nil)
         }

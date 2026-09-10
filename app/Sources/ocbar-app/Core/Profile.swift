@@ -570,8 +570,33 @@ enum ProfileStore {
     }
 
     static func load(_ name: String) -> ProfileDoc? {
-        guard let text = try? String(contentsOfFile: path(name), encoding: .utf8) else { return nil }
+        guard let text = read(name) else { return nil }
         return ProfileDoc.parse(text, fileName: name)
+    }
+
+    // Текст файла. Байты не в UTF-8 не повод считать файл пустым: иначе
+    // редактор открыл бы чистую форму и сохранение затёрло бы профиль.
+    static func read(_ name: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: path(name)) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Что лежит на диске: текст и время изменения. Редактор запоминает его
+    /// при открытии и перед записью сверяет — файл мог записать ocbar
+    /// (разметка, «Запомнить, как я вхожу», ocbar rules). Равенство — по
+    /// тексту: время само по себе меняет и touch.
+    struct DiskStamp: Equatable {
+        let mtime: Date?
+        let text: String?
+        static func == (a: DiskStamp, b: DiskStamp) -> Bool { a.text == b.text }
+    }
+
+    static func mtime(_ name: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path(name)))?[.modificationDate] as? Date
+    }
+
+    static func stamp(_ name: String) -> DiskStamp {
+        DiskStamp(mtime: mtime(name), text: read(name))
     }
 
     // Пишем во временный файл рядом и переименовываем: оборванная запись не
