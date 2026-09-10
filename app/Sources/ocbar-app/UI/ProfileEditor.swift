@@ -152,6 +152,11 @@ struct ProfileEditorView: View {
                         .padding(.vertical, 1)
                         .tag(name)
                     }
+                    // Порядок — перетаскиванием; тот же порядок в меню.
+                    .onMove { from, to in
+                        files.move(fromOffsets: from, toOffset: to)
+                        saveOrder()
+                    }
                     if files.isEmpty {
                         Text("ни одного").font(.ocNote).foregroundStyle(Palette.tertiary)
                     }
@@ -189,6 +194,7 @@ struct ProfileEditorView: View {
                         [URL(fileURLWithPath: OcbarClient.shared.profileDir)])
                 } label: { Image(systemName: "folder") }
                 Spacer()
+                Text("порядок — перетаскиванием").font(.system(size: 10)).foregroundStyle(Palette.tertiary)
             }
             .buttonStyle(.borderless)
             .padding(8)
@@ -665,6 +671,19 @@ struct ProfileEditorView: View {
         }
         while out.hasSuffix("-") { out.removeLast() }
         return out
+    }
+
+    // Порядок пишет bin/ocbar (profiles.order) — один писатель на файл; меню
+    // берёт порядок из `ocbar status --short` и обновится после записи.
+    private func saveOrder() {
+        let names = files + legacy.map { $0.name }.filter { !files.contains($0) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = OcbarClient.shared.action(["profiles", "order"] + names, timeout: 10)
+            DispatchQueue.main.async {
+                if case .failed(_, let text) = r { message = "порядок не сохранён: " + text }
+                store.refresh()
+            }
+        }
     }
 
     private func refreshSecrets() {

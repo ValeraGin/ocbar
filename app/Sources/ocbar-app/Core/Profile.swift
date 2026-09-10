@@ -560,9 +560,21 @@ enum ProfileStore {
     static func list() -> [String] {
         let dir = OcbarClient.shared.profileDir
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
-        return files.filter { $0.hasSuffix(".ocbar") }
+        let names = files.filter { $0.hasSuffix(".ocbar") }
             .map { String($0.dropLast(".ocbar".count)) }
             .sorted()
+        let text = (try? String(contentsOfFile: OcbarClient.shared.configDir + "/profiles.order", encoding: .utf8)) ?? ""
+        return ordered(names, by: text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+
+    /// Порядок, который расставил человек (profiles.order, как в bin/ocbar):
+    /// кого там нет — следом, в прежнем порядке.
+    static func ordered(_ names: [String], by order: [String]) -> [String] {
+        var rank: [String: Int] = [:]
+        for (i, n) in order.enumerated() where !n.isEmpty && rank[n] == nil { rank[n] = i }
+        return names.enumerated()
+            .sorted { (rank[$0.element] ?? 100_000 + $0.offset) < (rank[$1.element] ?? 100_000 + $1.offset) }
+            .map { $0.element }
     }
 
     static func path(_ name: String) -> String {

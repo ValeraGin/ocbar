@@ -29,6 +29,8 @@ SELF_DIR="$(dirname "$SELF")"
 
 CONFIG_DIR="${OCBAR_CONFIG_DIR:-$HOME/.config/ocbar}"
 PROFILE_DIR="$CONFIG_DIR/profiles"      # по файлу на подключение, формат .ocbar
+# Порядок профилей в меню и в `ocbar profiles` — по имени в строке (D63).
+PROFILE_ORDER="${PROFILE_DIR%/*}/profiles.order"
 PROFILES="$CONFIG_DIR/profiles.conf"
 ZONES_CONF="${OCBAR_CONFIG:-$CONFIG_DIR/zones.conf}"
 NETWORKS_CONF="${OCBAR_NETWORKS:-$CONFIG_DIR/networks.conf}"
@@ -445,7 +447,17 @@ profile_list() {
       [ -f "$PROFILES" ] && awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/\r$/, "") }
           /^\[.*\]$/ { s = $0; sub(/^\[/, "", s); sub(/\]$/, "", s); print s }' "$PROFILES"
       true; } 2>/dev/null \
-        | awk 'NF && !seen[$0]++'
+        | awk 'NF && !seen[$0]++' | order_sort
+}
+
+# Порядок, который расставил человек (profiles.order); кого там нет — следом,
+# в прежнем порядке. Имя — до первого «|», так что годится и для строк
+# profiles_summary.
+order_sort() {
+    if [ ! -s "$PROFILE_ORDER" ]; then cat; return 0; fi
+    awk -F'|' 'NR == FNR { sub(/\r$/, ""); if ($0 != "" && !($0 in rank)) rank[$0] = ++n; next }
+               { r = ($1 in rank) ? rank[$1] : 100000 + FNR; printf "%09d\t%s\n", r, $0 }' "$PROFILE_ORDER" - \
+        | sort -n | cut -f2-
 }
 
 # "имя|название|auth|описание" по всем профилям, по строке на профиль.
@@ -454,7 +466,8 @@ profile_list() {
 # Каждое имя — один раз, профиль-файл важнее одноимённой секции
 # profiles.conf (тот же порядок, что у load_profile): раньше профиль из
 # файла и из profiles.conf выдавался дважды, и меню показывало всё вдвое.
-profiles_summary() {
+profiles_summary() { profiles_summary_raw | order_sort; }
+profiles_summary_raw() {
     local n f files nm au ds; files=$(profile_files)
     while read -r n; do
         [ -n "$n" ] || continue
@@ -1874,7 +1887,22 @@ cmd_dns() {
 }
 
 # -------------------------------------------------------------- profiles ----
+# ocbar profiles order [имя…]: без имён — текущий порядок, с именами —
+# записать его. Пишет только этот файл; сами профили не трогает.
+profiles_order() {
+    local n all; all=$(profile_list)
+    if [ $# -eq 0 ]; then printf '%s\n' "$all"; return 0; fi
+    for n in "$@"; do
+        printf '%s\n' "$all" | grep -Fxq -- "$n" || die "профиля [$n] нет (есть: $(printf '%s\n' "$all" | tr '\n' ' '))"
+    done
+    mkdir -p "${PROFILE_ORDER%/*}"
+    local tmp="$PROFILE_ORDER.tmp.$$"
+    printf '%s\n' "$@" | awk '!seen[$0]++' > "$tmp" && mv -f "$tmp" "$PROFILE_ORDER"
+    ok "порядок профилей" "$PROFILE_ORDER"
+    return 0
+}
 cmd_profiles() {
+    if [ "${1:-}" = order ]; then shift; profiles_order "$@"; return 0; fi
     [ -n "$(profile_list)" ] || die "профилей нет: положите файл в $PROFILE_DIR (образец etc/example.ocbar) или заполните $PROFILES"
     local d p nm au ds; d=$(profile_default)
     while IFS='|' read -r p nm au ds; do
@@ -2759,6 +2787,13 @@ PROFILE
     out=$(run status --short || true)
     is "profile_list: профиль-файл и одноимённая секция — одна строка" 1 "$(printf '%s\n' "$out" | grep -c '^profile_list=t|' || true)"
     has "profile_list: «|» в названии заменён на «¦»" "profile_list=old|Старый¦формат||" "$out"
+    # Порядок профилей: как расставил человек, неизвестное имя — отказ.
+    printf '[Connection]\nName = Второй\nUrl = vpn.example.test/b\n' > "$tmp/profiles/b2.ocbar"
+    run profiles order b2 >/dev/null 2>&1 || true
+    is "profiles order: указанный профиль первым в меню" "b2" "$(run status --short | sed -n 's/^profile_list=\([^|]*\)|.*/\1/p' | head -1 || true)"
+    is "profiles order: в ocbar profiles тот же порядок" "b2" "$(run profiles order | head -1 || true)"
+    is "profiles order: неизвестный профиль — отказ" fail "$( (run profiles order nope >/dev/null 2>&1) && echo ok || echo fail)"
+    rm -f "$tmp/profiles/b2.ocbar" "$tmp/profiles.order"
     matches "profiles.conf с BOM и CRLF: адрес без мусора" '^Url += vpn\.example\.test/o$' "$(run export old)"
     rm -f "$tmp/profiles.conf"
     printf '\357\273\277[Connection]\r\nName = БОМ\r\nUrl = vpn.example.test/bom\r\n\r\n[Routes]\r\n10.20.0.0/16\r\n' > "$tmp/profiles/bom.ocbar"
@@ -3318,6 +3353,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar toggle                        pause ↔ resume
   ocbar status [--short]              состояние; --short — машинный вид для меню
   ocbar profiles                      список профилей
+  ocbar profiles order [имя…]         порядок профилей в меню; без имён — текущий
   ocbar import <файл.ocbar> [имя]     добавить профиль одним файлом
   ocbar export <профиль> [файл]       выгрузить профиль (и перевести в новый формат)
   ocbar routes [status]               состояние (то же, что ocbar status)
@@ -3367,7 +3403,7 @@ case "${1:-}" in
     connect)    shift; cmd_connect "$@" ;;
     disconnect) cmd_disconnect ;;
     status)     cmd_status "${2:-}" ;;
-    profiles)   cmd_profiles ;;
+    profiles)   shift; cmd_profiles "$@" ;;
     routes)     shift; cmd_routes "$@" ;;
     dns)        shift; cmd_dns "$@" ;;
     secret)     shift; cmd_secret "$@" ;;
