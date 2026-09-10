@@ -291,6 +291,7 @@ if args.selfTest {
         out("  разбор complete: token=\(c.sessionToken) hash=\(c.serverCertHash)  \(ok ? "OK" : "FAIL")")
         if !ok { failed += 1 }
     } catch { out("  FAIL: \(error)"); failed += 1 }
+    failed += AuthSelfTest.run()
     out(failed == 0 ? "selftest: всё OK" : "selftest: провалов \(failed)")
     exit(failed == 0 ? 0 : 1)
 }
