@@ -85,8 +85,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
     }
 
     static func fits(_ e: QRImport.Entry, code: String, at: Date) -> Bool {
-        e.isTOTP && e.algorithm == "SHA1" && e.period == 30 && e.digits == code.count
-            && TeachDialog.secretMatches(e.secretBase32, code: code, at: at)
+        TeachDialog.entryMatches(e, code: code, at: at)
     }
 
     private func build(withPreview: Bool) {

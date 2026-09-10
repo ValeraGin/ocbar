@@ -26,6 +26,11 @@ struct ProfileDoc {
     var passwordCommand = ""
     var totp = "auto"
     var totpCommand = ""
+    // Параметры кода для секрета в связке ключей (RFC 6238). Пишутся в файл,
+    // только если отличаются от умолчания: SHA1, 6 цифр, 30 с.
+    var totpAlgorithm = "SHA1"
+    var totpDigits = "6"
+    var totpPeriod = "30"
     var keepassEntry = ""
     var keepassDb = ""
     var keepassKeychain = ""
@@ -64,6 +69,7 @@ struct ProfileDoc {
     ]
 
     // sms — код приходит по SMS и вводится человеком (как off, но с причиной).
+    static let totpAlgorithms = ["SHA1", "SHA256", "SHA512"]
     static let totpSources = ["auto", "keychain", "keepassxc", "command", "sms", "off"]
     // Источник пароля — один из нескольких, как и источник кода: связка
     // ключей, база KeePassXC, произвольная команда, «вводит человек».
@@ -122,6 +128,9 @@ struct ProfileDoc {
                 case "passwordcommand": d.passwordCommand = value
                 case "totp": d.totp = value
                 case "totpcommand": d.totpCommand = value
+                case "totpalgorithm": d.totpAlgorithm = value.uppercased()
+                case "totpdigits": d.totpDigits = value
+                case "totpperiod": d.totpPeriod = value
                 case "keepassentry": d.keepassEntry = value
                 case "keepassdb": d.keepassDb = value
                 case "keepasskeychain": d.keepassKeychain = value
@@ -184,6 +193,9 @@ struct ProfileDoc {
         if !passwordCommand.isEmpty { out += kv("PasswordCommand", 15, passwordCommand) }
         out += kv("Totp", 15, totp.isEmpty ? "auto" : totp)
         if !totpCommand.isEmpty { out += kv("TotpCommand", 15, totpCommand) }
+        if !totpAlgorithm.isEmpty && totpAlgorithm.uppercased() != "SHA1" { out += kv("TotpAlgorithm", 15, totpAlgorithm.uppercased()) }
+        if !totpDigits.trimmed.isEmpty && totpDigits.trimmed != "6" { out += kv("TotpDigits", 15, totpDigits.trimmed) }
+        if !totpPeriod.trimmed.isEmpty && totpPeriod.trimmed != "30" { out += kv("TotpPeriod", 15, totpPeriod.trimmed) }
         if !keepassEntry.isEmpty { out += kv("KeepassEntry", 15, keepassEntry) }
         if !keepassDb.isEmpty { out += kv("KeepassDb", 15, keepassDb) }
         if !keepassKeychain.isEmpty { out += kv("KeepassKeychain", 15, keepassKeychain) }
@@ -329,6 +341,20 @@ enum ProfileCheck {
             }
         }
 
+        let alg = d.totpAlgorithm.uppercased()
+        if !ProfileDoc.totpAlgorithms.contains(alg) {
+            err("алгоритм кода «\(d.totpAlgorithm)» — бывает SHA1, SHA256 или SHA512")
+        }
+        if !["6", "7", "8"].contains(d.totpDigits.trimmed) {
+            err("цифр в коде «\(d.totpDigits)» — бывает 6, 7 или 8")
+        }
+        if let p = Int(d.totpPeriod.trimmed), (10...300).contains(p) {} else {
+            err("период кода «\(d.totpPeriod)» — число секунд от 10 до 300")
+        }
+        let customCode = alg != "SHA1" || d.totpDigits.trimmed != "6" || d.totpPeriod.trimmed != "30"
+        if customCode && ["keepassxc", "command", "off", "sms"].contains(d.totp) {
+            warn("параметры кода нужны только секрету в связке ключей — KeePassXC и команда отдают готовый код")
+        }
         switch d.totp {
         case "sms":
             warn("код приходит по SMS и вводится руками — молчаливое переподключение работать не будет")

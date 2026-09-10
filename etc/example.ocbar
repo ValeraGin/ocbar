@@ -49,6 +49,12 @@ KeepassKeychain = имя-сервиса-в-связке-ключей
 # Totp        = command
 # TotpCommand = op item get VPN --otp
 #
+# Параметры кода для секрета в связке ключей (RFC 6238). ocbar пишет их сам
+# при импорте QR и после «Запомнить, как я вхожу»; умолчание — SHA1, 6, 30:
+# TotpAlgorithm = SHA256              # SHA1 | SHA256 | SHA512
+# TotpDigits    = 8                   # 6 | 7 | 8
+# TotpPeriod    = 60                  # секунд, 10–300
+#
 # KeychainService = ru.ocbar.client   # где лежит пароль (и секрет, если Totp = keychain)
 # IdpHosts = idp.example.com          # где разрешено автозаполнять форму входа
 # Rules    = ~/.config/ocbar/autofill.rules   # общий файл правил на несколько профилей;

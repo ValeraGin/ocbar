@@ -321,6 +321,10 @@ profile_default() {
     [ -n "$(profile_file default)" ] && { printf 'default'; return 0; }
     local files; files=$(profile_files)
     [ "$(printf '%s\n' "$files" | grep -c .)" = 1 ] && printf '%s' "$files"
+    # «Умолчания нет» — не ошибка. Без этой строки при двух профилях-файлах
+    # функция возвращала 1, и под set -e присваивание d=$(profile_default)
+    # молча обрывало ocbar profiles и ocbar connect без имени.
+    return 0
 }
 profile_list() {
     # Завершающий `true` обязателен: без него отсутствие profiles.conf делает
@@ -351,6 +355,23 @@ profiles_summary() {
 }
 profile_exists() { profile_list | grep -Fxq "$1"; }
 
+# Параметры кода для секрета в связке ключей (RFC 6238): алгоритм, число
+# цифр, период. В связке лежит только секрет — без параметров секрет SHA256
+# или на 8 цифр давал бы неверные коды, а каждый неверный код — неудачная
+# попытка входа.
+check_totp_params() { # имя профиля
+    P_TOTP_ALG=$(printf '%s' "${P_TOTP_ALG:-SHA1}" | tr '[:lower:]' '[:upper:]')
+    P_TOTP_DIGITS="${P_TOTP_DIGITS:-6}"; P_TOTP_PERIOD="${P_TOTP_PERIOD:-30}"
+    case "$P_TOTP_ALG" in SHA1|SHA256|SHA512) ;; *) die "профиль [$1]: TotpAlgorithm = SHA1 | SHA256 | SHA512, а не '$P_TOTP_ALG'" ;; esac
+    case "$P_TOTP_DIGITS" in 6|7|8) ;; *) die "профиль [$1]: TotpDigits = 6 | 7 | 8, а не '$P_TOTP_DIGITS'" ;; esac
+    case "$P_TOTP_PERIOD" in ''|*[!0-9]*) die "профиль [$1]: TotpPeriod — число секунд, а не '$P_TOTP_PERIOD'" ;; esac
+    [ "$P_TOTP_PERIOD" -ge 10 ] && [ "$P_TOTP_PERIOD" -le 300 ] || die "профиль [$1]: TotpPeriod вне 10–300 с"
+}
+totp_params_label() {
+    [ "$P_TOTP_ALG/$P_TOTP_DIGITS/$P_TOTP_PERIOD" = "SHA1/6/30" ] || printf ' (%s, %s цифр, %s с)' "$P_TOTP_ALG" "$P_TOTP_DIGITS" "$P_TOTP_PERIOD"
+}
+totp_env() { printf 'OCBAR_TOTP_ALGORITHM=%s OCBAR_TOTP_DIGITS=%s OCBAR_TOTP_PERIOD=%s' "$P_TOTP_ALG" "$P_TOTP_DIGITS" "$P_TOTP_PERIOD"; }
+
 # Профиль → переменные P_*
 load_profile() {
     local p="${1:-}"
@@ -377,6 +398,8 @@ load_profile() {
     P_PW_CMD=$(profile_get "$p" password_command)
     P_TOTP=$(profile_get "$p" totp); P_TOTP="${P_TOTP:-auto}"
     P_TOTP_CMD=$(profile_get "$p" totp_command)
+    P_TOTP_ALG=$(profile_get "$p" totp_algorithm); P_TOTP_DIGITS=$(profile_get "$p" totp_digits); P_TOTP_PERIOD=$(profile_get "$p" totp_period)
+    check_totp_params "$p"
     P_KP_ENTRY=$(profile_get "$p" keepass_entry)
     P_KP_DB=$(profile_get "$p" keepass_db); P_KP_DB="${P_KP_DB/#\~/$HOME}"
     P_KP_SVC=$(profile_get "$p" keepass_keychain_service)
@@ -460,6 +483,8 @@ load_profile_file() { # файл имя
     P_PW_CMD=$(pf_get "$f" Auth PasswordCommand)
     P_TOTP=$(pf_get "$f" Auth Totp); P_TOTP="${P_TOTP:-auto}"
     P_TOTP_CMD=$(pf_get "$f" Auth TotpCommand)
+    P_TOTP_ALG=$(pf_get "$f" Auth TotpAlgorithm); P_TOTP_DIGITS=$(pf_get "$f" Auth TotpDigits); P_TOTP_PERIOD=$(pf_get "$f" Auth TotpPeriod)
+    check_totp_params "$2"
     P_KP_ENTRY=$(pf_get "$f" Auth KeepassEntry)
     P_KP_DB=$(pf_get "$f" Auth KeepassDb); P_KP_DB="${P_KP_DB/#\~/$HOME}"
     P_KP_SVC=$(pf_get "$f" Auth KeepassKeychain)
@@ -800,6 +825,33 @@ keepass_totp() {
     esac
 }
 
+# Годится ли запись из QR (строка «TOTP|HOTP алгоритм цифры период» от
+# ocbar-auth --print-params). Решается ДО того, как класть секрет: HOTP и
+# неподдерживаемые параметры дали бы неверный код на каждом входе.
+qr_entry_check() {
+    local kind alg dig per; read -r kind alg dig per <<< "$1"
+    [ "$kind" = TOTP ] || die "это код по счётчику (HOTP): ocbar его не ведёт — счётчик живёт в приложении, и две копии разойдутся после первого же входа"
+    case "$alg" in SHA1|SHA256|SHA512) ;; *) die "алгоритм кода $alg не поддерживается (бывает SHA1, SHA256, SHA512)" ;; esac
+    case "$dig" in 6|7|8) ;; *) die "в коде $dig цифр — поддерживается 6, 7 или 8" ;; esac
+    case "$per" in ''|*[!0-9]*) die "период кода «${per}» не разобрался" ;; esac
+    [ "$per" -ge 10 ] && [ "$per" -le 300 ] || die "период кода $per с не поддерживается (10–300 с)"
+    if [ -z "${P_FILE:-}" ] && [ "$alg/$dig/$per" != "SHA1/6/30" ]; then
+        die "у записи нестандартные параметры ($alg, $dig цифр, $per с), а профиль [$P_NAME] — старого формата: их некуда записать. Переведите его в файл: ocbar export $P_NAME ~/.config/ocbar/profiles/$P_NAME.ocbar"
+    fi
+}
+
+# Параметры кода — в профиль: пишутся, только если отличаются от умолчания
+# или уже заданы (тогда — ставятся в новое значение).
+set_totp_params() { # алгоритм цифры период
+    [ -n "${P_FILE:-}" ] || return 0
+    local k v d kv
+    for kv in "TotpAlgorithm $1 SHA1" "TotpDigits $2 6" "TotpPeriod $3 30"; do
+        read -r k v d <<< "$kv"
+        if [ "$v" != "$d" ] || [ -n "$(pf_get "$P_FILE" Auth "$k")" ]; then pf_set_key "$P_FILE" Auth "$k" "$v"; fi
+    done
+    P_TOTP_ALG="$1"; P_TOTP_DIGITS="$2"; P_TOTP_PERIOD="$3"
+}
+
 cmd_secret() {
     local what="${1:-}" img="" p=""
     # У import-qr вторым идёт файл, профиль третьим; у остальных — сразу профиль.
@@ -836,6 +888,9 @@ cmd_secret() {
             info "Читаю QR из $img (секрет не печатается)"
             # Первый проход: метаданные и код для сверки — их человек видит.
             "$auth" --import-qr "$img" "${sa[@]+"${sa[@]}"}" || die "QR не импортирован"
+            local qp; qp=$("$auth" --import-qr "$img" "${sa[@]+"${sa[@]}"}" --print-params 2>/dev/null) \
+                || die "QR не импортирован"
+            qr_entry_check "$qp"
             # Второй: секрет идёт из подпроцесса в security через stdin в
             # interactive-режиме. Через `-w` без значения security при пайпе
             # просит подтверждение и ломается; через argv секрет был бы виден
@@ -845,12 +900,15 @@ cmd_secret() {
             if printf 'add-generic-password -U -s %s -a %s -l %s -w %s\n' \
                    "$P_SVC" "totp/$P_USER" "ocbar-TOTP-$P_USER" "$secret" | security -i >/dev/null 2>&1; then
                 ok "секрет сохранён в Keychain ($P_SVC / totp/$P_USER)"
+                local _k _a _d _p; read -r _k _a _d _p <<< "$qp"
+                set_totp_params "$_a" "$_d" "$_p"
+                [ "$_a/$_d/$_p" = "SHA1/6/30" ] || ok "параметры кода" "$_a, $_d цифр, $_p с — записаны в профиль [$P_NAME]"
             else
                 secret=""; die "не удалось сохранить в Keychain"
             fi
             secret=""
             # Сверка: код, посчитанный из того, что реально легло в Keychain.
-            local kc_code; kc_code=$(OCBAR_TOTP_SECRET="$(kc_get "$P_SVC" "totp/$P_USER")" "$auth" --totp-now 2>/dev/null)
+            local kc_code; kc_code=$(env $(totp_env) OCBAR_TOTP_SECRET="$(kc_get "$P_SVC" "totp/$P_USER")" "$auth" --totp-now 2>/dev/null)
             [ -n "$kc_code" ] && ok "код из Keychain" "$kc_code — должен совпасть с показанным выше и с приложением"
             info ""
             info "Сверьте код с приложением. Совпал — включайте автоввод:"
@@ -897,7 +955,7 @@ cmd_secret() {
                     if [ -n "$c" ]; then ok "Автоввод TOTP" "из $src (код сейчас $c)"
                     else bad "Автоввод TOTP" "$src — $(head -1 "$err" 2>/dev/null)"; fi
                     rm -f "$err" ;;
-                *)  if kc_has "$P_SVC" "totp/$P_USER"; then ok "Автоввод TOTP" "из Keychain, один раз за вход"; else skip "Автоввод TOTP" "включён, но секрета нет"; fi ;;
+                *)  if kc_has "$P_SVC" "totp/$P_USER"; then ok "Автоввод TOTP" "из Keychain, один раз за вход$(totp_params_label)"; else skip "Автоввод TOTP" "включён, но секрета нет"; fi ;;
             esac ;;
         code)
             # Текущий одноразовый код из источника профиля — одной строкой.
@@ -911,7 +969,7 @@ cmd_secret() {
                 *)  local sec a; sec=$(kc_get "$P_SVC" "totp/$P_USER")
                     [ -n "$sec" ] || die "в Keychain нет TOTP-секрета ($P_SVC / totp/$P_USER)"
                     a=$(auth_path) || die "не найден ocbar-auth"
-                    c=$(OCBAR_TOTP_SECRET="$sec" "$a" --totp-now 2>/dev/null) || true; sec="" ;;
+                    c=$(env $(totp_env) OCBAR_TOTP_SECRET="$sec" "$a" --totp-now 2>/dev/null) || true; sec="" ;;
             esac
             [ -n "$c" ] || die "код не получен"
             printf '%s\n' "$c" ;;
@@ -963,7 +1021,9 @@ authenticate() { # печатает "token hash post_url"
     local json
     json=$(OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp" \
            OCBAR_TOTP_CODE="$code" OCBAR_KEYCHAIN_SERVICE="$P_SVC" OCBAR_PROFILE_NAME="$P_TITLE" \
-           OCBAR_PASSWORD_SOURCE="$(password_source)" OCBAR_TOTP_SOURCE="$P_TOTP" "$auth" "${args[@]}") || {
+           OCBAR_PASSWORD_SOURCE="$(password_source)" OCBAR_TOTP_SOURCE="$P_TOTP" \
+           OCBAR_TOTP_ALGORITHM="$P_TOTP_ALG" OCBAR_TOTP_DIGITS="$P_TOTP_DIGITS" OCBAR_TOTP_PERIOD="$P_TOTP_PERIOD" \
+           "$auth" "${args[@]}") || {
         local rc=$?
         case $rc in
             2) die "SSO: тайм-аут" ;;
@@ -1077,6 +1137,10 @@ apply_teach() { # файл
     rules=$(/usr/bin/python3 -c "$get" "$f" rules 2>/dev/null || true)
     totp=$(/usr/bin/python3 -c "$get" "$f" totp 2>/dev/null || true)
     pwmode=$(/usr/bin/python3 -c "$get" "$f" password 2>/dev/null || true)
+    local ta td tp
+    ta=$(/usr/bin/python3 -c "$get" "$f" totp_algorithm 2>/dev/null || true)
+    td=$(/usr/bin/python3 -c "$get" "$f" totp_digits 2>/dev/null || true)
+    tp=$(/usr/bin/python3 -c "$get" "$f" totp_period 2>/dev/null || true)
     if [ -n "$rules" ]; then
         local t; t=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach-rules.XXXXXX")
         printf '%s\n' "$rules" > "$t"
@@ -1085,7 +1149,8 @@ apply_teach() { # файл
     fi
     case "$totp" in
         keychain) pf_set_key "$P_FILE" Auth Totp keychain
-                  ok "код второго фактора" "секрет в связке ключей, проверен по введённому коду — Totp = keychain" ;;
+                  set_totp_params "${ta:-SHA1}" "${td:-6}" "${tp:-30}"
+                  ok "код второго фактора" "секрет в связке ключей, проверен по введённому коду — Totp = keychain$(totp_params_label)" ;;
         sms)      pf_set_key "$P_FILE" Auth Totp sms
                   ok "код второго фактора" "приходит по SMS — Totp = sms: вводите вы, молчаливого переподключения не будет" ;;
     esac
@@ -1693,6 +1758,9 @@ cmd_export() {
         if [ -n "${P_PW_CMD:-}" ]; then printf 'PasswordCommand = %s\n' "$P_PW_CMD"; fi
         printf 'Totp            = %s\n' "${P_TOTP:-auto}"
         if [ -n "${P_TOTP_CMD:-}" ];   then printf 'TotpCommand     = %s\n' "$P_TOTP_CMD"; fi
+        if [ "${P_TOTP_ALG:-SHA1}" != SHA1 ]; then printf 'TotpAlgorithm   = %s\n' "$P_TOTP_ALG"; fi
+        if [ "${P_TOTP_DIGITS:-6}" != 6 ];    then printf 'TotpDigits      = %s\n' "$P_TOTP_DIGITS"; fi
+        if [ "${P_TOTP_PERIOD:-30}" != 30 ];  then printf 'TotpPeriod      = %s\n' "$P_TOTP_PERIOD"; fi
         if [ -n "${P_KP_ENTRY:-}" ];   then printf 'KeepassEntry    = %s\n' "$P_KP_ENTRY"; fi
         if [ -n "${P_KP_DB:-}" ];      then printf 'KeepassDb       = %s\n' "$P_KP_DB"; fi
         if [ -n "${P_KP_SVC:-}" ];     then printf 'KeepassKeychain = %s\n' "$P_KP_SVC"; fi
@@ -2336,6 +2404,41 @@ PROFILE
     has "запомненное: Totp = sms" "Totp = sms" "$(cat "$tmp/profiles/l.ocbar")"
     has "Totp = sms виден в secret status" "приходит по SMS" "$(run secret status l 2>&1)"
     rm -f "$tmp/profiles/l.ocbar" "$tmp/k.ocbar"
+    # Параметры кода (RFC 6238): читаются, проверяются, уезжают с экспортом,
+    # решают судьбу записи из QR и доходят до расчёта кода.
+    printf '[Connection]\nName = Параметры\nUrl = vpn.example.test/p\nUser = tester\n\n[Auth]\nTotp = keychain\nTotpAlgorithm = sha256\nTotpDigits = 8\nTotpPeriod = 60\n' > "$tmp/profiles/p.ocbar"
+    # Два профиля-файла без умолчания: раньше profile_default возвращал 1, и
+    # set -e молча обрывал и список, и connect без имени.
+    has "два профиля без умолчания: список виден целиком" "Параметры" "$(run profiles 2>&1)"
+    has "два профиля без умолчания: connect без имени объясняет" "нет профиля" "$(run connect 2>&1)"
+    out=$(run export p 2>&1)
+    has "параметры кода: экспорт уносит алгоритм" "TotpAlgorithm   = SHA256" "$out"
+    has "параметры кода: экспорт уносит период" "TotpPeriod      = 60" "$out"
+    local bad
+    for bad in "TotpAlgorithm = MD5" "TotpDigits = 9" "TotpPeriod = 5"; do
+        make_bad "$(printf '\n[Auth]\n%s' "$bad")"
+        has "параметры кода: «${bad}» отвергнуто" "${bad%% *}" "$(run connect bad 2>&1)"
+    done
+    rm -f "$tmp/profiles/bad.ocbar"
+    has "QR: HOTP отвергнут" "по счётчику" "$(run _qr-check p 'HOTP SHA1 6 30' 2>&1)"
+    has "QR: MD5 отвергнут" "не поддерживается" "$(run _qr-check p 'TOTP MD5 6 30' 2>&1)"
+    has "QR: SHA256, 8 цифр, 60 с — принято для профиля-файла" "ok" "$(run _qr-check p 'TOTP SHA256 8 60' 2>&1)"
+    printf 'default = old\n\n[old]\nurl = vpn.example.test/o\n' > "$tmp/profiles.conf"
+    has "QR: нестандартные параметры в старый формат не пишутся" "старого формата" "$(run _qr-check old 'TOTP SHA256 8 60' 2>&1)"
+    has "QR: обычная запись в старый формат — принята" "ok" "$(run _qr-check old 'TOTP SHA1 6 30' 2>&1)"
+    rm -f "$tmp/profiles.conf"
+    printf '%s' '{"rules": "", "totp": "keychain", "password": "", "totp_algorithm": "SHA512", "totp_digits": "8", "totp_period": "30"}' > "$tmp/teach2.json"
+    OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" OCBAR_SELFTEST_TEACH="$tmp/teach2.json" "$SELF" _apply-teach p >/dev/null 2>&1
+    out=$(cat "$tmp/profiles/p.ocbar")
+    has "запомненное: алгоритм кода в профиле" "TotpAlgorithm = SHA512" "$out"
+    has "запомненное: период по умолчанию — поверх прежнего" "TotpPeriod = 30" "$out"
+    hasnt "запомненное: прежний период убран" "TotpPeriod = 60" "$out"
+    local qa
+    if qa=$(auth_path); then
+        has "расчёт кода: SHA256, 8 цифр — вектор RFC 6238" "46119246" \
+            "$(OCBAR_TOTP_SECRET=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA OCBAR_TOTP_ALGORITHM=SHA256 OCBAR_TOTP_DIGITS=8 OCBAR_TOTP_AT=59 "$qa" --totp-now 2>&1)"
+    fi
+    rm -f "$tmp/profiles/p.ocbar"
     printf '[Connection]\nName = Код\nUrl = vpn.example.test/c\nUser = tester\n\n[Auth]\nTotp = command\nTotpCommand = echo 123456\n' > "$tmp/profiles/c.ocbar"
     has "secret code: свежий код из источника профиля" "123456" "$(run secret code c 2>&1)"
     rm -f "$tmp/profiles/c.ocbar"
@@ -2461,6 +2564,7 @@ cmd_learn() {
     info "  и нажмите «Пройти шаг →»: ocbar заполнит их вашими данными (пароль: $(password_source)$([ -n "$pw" ] || printf ' — не получен, введёте сами'), код: $P_TOTP)"
     local rc=0
     OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp_secret" OCBAR_TOTP_COMMAND="$totp_cmd" \
+        OCBAR_TOTP_ALGORITHM="$P_TOTP_ALG" OCBAR_TOTP_DIGITS="$P_TOTP_DIGITS" OCBAR_TOTP_PERIOD="$P_TOTP_PERIOD" \
         "$auth" --learn --url "$P_URL" --useragent "$P_UA" --out "$target" >/dev/null || rc=$?
     pw=""; totp_secret=""
     case "$rc" in
@@ -2659,6 +2763,7 @@ case "${1:-}" in
     supervise)  shift; cmd_supervise "$@" ;;
     _proxy-tun) cmd_proxy_tun ;;
     _apply-teach) shift; load_profile "${1:-}"; apply_teach "${OCBAR_SELFTEST_TEACH:-}" ;;   # для selftest
+    _qr-check) shift; load_profile "${1:-}"; qr_entry_check "${2:-}"; echo ok ;;             # для selftest
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
     version)    shift; cmd_version "${1:-}" ;;

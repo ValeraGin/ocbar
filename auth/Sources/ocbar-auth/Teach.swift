@@ -270,6 +270,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         var savePassword = false
         var codeMode = 0          // 0 не менять, 1 из приложения (секрет ниже), 2 SMS
         var secret: String?
+        var params = TOTPParams()
     }
 
     private let input: Input
@@ -284,19 +285,43 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
     private var cameraActive = false
     private var verifyLabel: NSTextField?
     private var secret: String?
+    private var params = TOTPParams()
     private var verified = false
 
     init(_ input: Input) { self.input = input; super.init() }
 
-    /// Код, который человек только что ввёл, подтверждает секрет: секрет
-    /// принимается, только если даёт этот код (± один шаг в 30 с).
-    static func secretMatches(_ raw: String, code: String, at: Date) -> Bool {
-        let s = normalize(raw)
-        guard !s.isEmpty, TOTP.base32Decode(s) != nil, (4...8).contains(code.count) else { return false }
+    /// Код, который человек только что ввёл, подтверждает секрет: секрет с
+    /// этими параметрами принимается, только если даёт этот код (± шаг).
+    static func matches(_ secret: String, code: String, at: Date, params p: TOTPParams) -> Bool {
+        let s = normalize(secret)
+        guard p.isSupported, p.digits == code.count, TOTP.base32Decode(s) != nil else { return false }
         for k in -1...1 {
-            if TOTP.code(secretBase32: s, at: at.addingTimeInterval(Double(k) * 30), digits: code.count) == code { return true }
+            if TOTP.code(secretBase32: s, at: at.addingTimeInterval(Double(k * p.period)), params: p) == code { return true }
         }
         return false
+    }
+
+    /// Параметры голого секрета не видны — определяем по введённому коду:
+    /// три алгоритма × периоды 30 и 60 с, цифр — сколько ввёл человек.
+    /// Случайное совпадение при таком переборе для 6 цифр — около 1 на 55 000.
+    static func matchParams(_ raw: String, code: String, at: Date) -> TOTPParams? {
+        for alg in TOTPParams.algorithms {
+            for period in [30, 60] {
+                let p = TOTPParams(algorithm: alg, digits: code.count, period: period)
+                if matches(raw, code: code, at: at, params: p) { return p }
+            }
+        }
+        return nil
+    }
+
+    static func secretMatches(_ raw: String, code: String, at: Date) -> Bool {
+        matchParams(raw, code: code, at: at) != nil
+    }
+
+    /// Запись из QR — файл, камера, ссылка otpauth — со своими параметрами.
+    /// HOTP не принимается: счётчик живёт в приложении, и две копии разойдутся.
+    static func entryMatches(_ e: QRImport.Entry, code: String, at: Date) -> Bool {
+        e.isTOTP && e.params.isSupported && matches(e.secretBase32, code: code, at: at, params: e.params)
     }
     static func normalize(_ s: String) -> String { s.uppercased().filter { !$0.isWhitespace && $0 != "-" } }
 
@@ -465,7 +490,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         o.saveRules = rulesBox.state == .on
         o.savePassword = passwordBox?.state == .on
         o.codeMode = codePopup?.indexOfSelectedItem ?? 0
-        if o.codeMode == 1 { o.secret = verified ? secret : nil; if !verified { o.codeMode = 0 } }
+        if o.codeMode == 1 { o.secret = verified ? secret : nil; o.params = params; if !verified { o.codeMode = 0 } }
         return o
     }
 
@@ -483,11 +508,31 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
 
     func controlTextDidChange(_ obj: Notification) {
         guard let f = secretField, let code = input.code, let at = input.codeAt else { return }
-        secret = TeachDialog.normalize(f.stringValue)
-        verified = TeachDialog.secretMatches(f.stringValue, code: code, at: at)
-        verifyLabel?.stringValue = f.stringValue.isEmpty
-            ? "Секрет примется, только если даёт тот код, который вы только что ввели."
-            : (verified ? "✓ секрет даёт введённый вами код" : "✗ секрет не даёт введённый вами код — проверьте")
+        let raw = f.stringValue.trimmingCharacters(in: .whitespaces)
+        // Ссылка otpauth:// несёт параметры сама.
+        if raw.lowercased().hasPrefix("otpauth://"), let e = (try? QRImport.parse(raw))?.first {
+            if TeachDialog.entryMatches(e, code: code, at: at) {
+                accept(e, source: "из ссылки")
+            } else {
+                verified = false
+                verifyLabel?.stringValue = e.isTOTP ? "✗ секрет из ссылки не даёт введённый вами код"
+                                                    : "✗ это код по счётчику (HOTP) — ocbar его не ведёт"
+            }
+            refresh()
+            return
+        }
+        if let p = TeachDialog.matchParams(raw, code: code, at: at) {
+            secret = TeachDialog.normalize(raw)
+            params = p
+            verified = true
+            verifyLabel?.stringValue = "✓ секрет даёт введённый вами код" + (p.isDefault ? "" : " (\(p.label))")
+        } else {
+            secret = nil
+            verified = false
+            verifyLabel?.stringValue = raw.isEmpty
+                ? "Секрет примется, только если даёт тот код, который вы только что ввели."
+                : "✗ секрет не даёт введённый вами код — проверьте"
+        }
         refresh()
     }
 
@@ -502,10 +547,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             let entries = try QRImport.decode(file: url.path).flatMap { try QRImport.parse($0) }
             // Из нескольких записей нужная находится сама: та, что даёт код,
             // который человек только что ввёл.
-            let fit = entries.filter {
-                $0.isTOTP && $0.algorithm == "SHA1" && $0.period == 30 && $0.digits == code.count
-                    && TeachDialog.secretMatches($0.secretBase32, code: code, at: at)
-            }
+            let fit = entries.filter { TeachDialog.entryMatches($0, code: code, at: at) }
             if let e = fit.first {
                 accept(e, source: "из QR")
             } else {
@@ -522,10 +564,12 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
 
     private func accept(_ e: QRImport.Entry, source: String) {
         secret = TeachDialog.normalize(e.secretBase32)
+        params = e.params
         verified = true
         secretField?.stringValue = ""
         let who = [e.issuer, e.name].filter { !$0.isEmpty }.joined(separator: " · ")
         verifyLabel?.stringValue = "✓ \(source): \(who.isEmpty ? "запись" : who) — даёт введённый вами код"
+            + (e.params.isDefault ? "" : " (\(e.params.label))")
     }
 
     @objc private func scanCamera() {
@@ -587,8 +631,11 @@ enum TeachFlow {
             case 1:
                 if let s = o.secret,
                    KeychainWriter.save(service: service, account: "totp/\(user)", label: "ocbar-TOTP", secret: s) {
-                    Log.info("секрет TOTP проверен по введённому коду и сохранён (\(service) / totp/\(user))")
+                    Log.info("секрет TOTP проверен по введённому коду и сохранён (\(service) / totp/\(user)), \(o.params.label)")
                     result["totp"] = "keychain"
+                    result["totp_algorithm"] = o.params.algorithm
+                    result["totp_digits"] = String(o.params.digits)
+                    result["totp_period"] = String(o.params.period)
                 } else {
                     Log.error("секрет TOTP не сохранился")
                 }
