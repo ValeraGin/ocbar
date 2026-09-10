@@ -44,6 +44,9 @@ final class StatusStore: ObservableObject {
     private let sampleWindow = 30
 
     private let client = OcbarClient.shared
+    // Откуда брать состояние. Подменяется самопроверкой: так видно, ждёт ли
+    // опрос долгого действия, без живого ocbar.
+    private let statusSource: @Sendable () -> Status
     private let queue = DispatchQueue(label: "ru.ocbar.app.poll", qos: .utility)
     private var statusTimer: Timer?
     private var trafficTimer: Timer?
@@ -59,6 +62,7 @@ final class StatusStore: ObservableObject {
 
     // Живой опрос системы.
     init() {
+        statusSource = { OcbarClient.shared.status() }
         refresh()
         retune()
     }
@@ -66,6 +70,7 @@ final class StatusStore: ObservableObject {
     // Витрина (--stage): состояние подставлено, ничего не опрашивается.
     init(preview: Status, samples: [TrafficSample] = [], latency: String? = nil,
          busy: String? = nil, actionNote: String? = nil, helperWarning: String? = nil) {
+        self.statusSource = { preview }
         self.status = preview
         self.samples = samples
         self.latency = latency
@@ -74,6 +79,11 @@ final class StatusStore: ObservableObject {
         self.helperWarning = helperWarning
         self.totals = (7_632_631_260, 169_171_632)
         self.isPreview = true
+    }
+
+    // Самопроверка: состояние из подставленной функции, без таймеров.
+    init(testSource: @escaping @Sendable () -> Status) {
+        self.statusSource = testSource
     }
 
     // Пока меню открыто, опрашиваем чаще: человек видит цифры и ждёт, что
@@ -112,13 +122,14 @@ final class StatusStore: ObservableObject {
     func refresh() {
         guard !isPreview else { return }
         let client = self.client
+        let source = statusSource
         // Пинговать шлюз при каждом опросе (раз в две секунды) незачем:
         // цифра меняется медленнее, чем обновляется меню.
         let wantLatency = detailsOpen && Date().timeIntervalSince(latencyAt) > 10
         if wantLatency { latencyAt = Date() }
         let gateway = status.gateway
         queue.async { [weak self] in
-            let s = client.status()
+            let s = source()
             let ms = wantLatency ? client.latency(host: gateway) : nil
             Task { @MainActor in
                 self?.apply(s)
@@ -173,9 +184,10 @@ final class StatusStore: ObservableObject {
         busy = title
         actionNote = nil
         actionFailed = false
+        let source = statusSource
         queue.async { [weak self] in
             let result = body()
-            let fresh = OcbarClient.shared.status()
+            let fresh = source()
             Task { @MainActor in
                 guard let self else { return }
                 self.busy = nil

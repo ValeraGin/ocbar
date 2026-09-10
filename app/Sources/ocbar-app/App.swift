@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         if CommandLine.arguments.contains("--selftest") {
             var code = SelfTest.run()
+            code += SelfTest.audit()
             code += SelfTest.editorProbe()
             if CommandLine.arguments.contains("--live-actions") { code += SelfTest.liveActions() }
             // Итог по всем частям: строка «selftest: всё OK» выше — только

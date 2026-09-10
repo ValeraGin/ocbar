@@ -13,6 +13,8 @@ enum Notifier {
     static let scheme = "ocbar"
     private static let delegate = Delegate()
     private static var ready = false
+    /// Токен, без которого ocbar://notify не принимается.
+    static var expectedToken: String?
 
     static func setup() {
         guard !ready else { return }
