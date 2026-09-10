@@ -2104,7 +2104,7 @@ cmd_doctor() {
         if proxy_port_open; then ok "Прокси" "работает: SOCKS 127.0.0.1:$pport, pid $(proxy_pid)"
         else bad "Прокси" "openconnect жив (pid $(proxy_pid)), а SOCKS 127.0.0.1:$pport не отвечает"; issues=$((issues+1)); fi
     elif port_open "$pport"; then
-        warn "Порт $pport" "занят кем-то другим — профиль с Mode = proxy не подключится; чужой SOCKS? (networksetup -getsocksfirewallproxy)"
+        warn "Порт $pport" "занят кем-то другим — профиль с Mode = proxy не подключится; кто слушает: lsof -nP -iTCP:$pport -sTCP:LISTEN"
     else
         ok "Порт $pport" "свободен"
     fi
@@ -3315,7 +3315,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
               процессы не гасятся (disconnect, cleanup, supervise)
   -h, --help  эта справка
 
-Конфиги: ~/.config/ocbar/{profiles.conf,zones.conf,networks.conf,autofill.rules}
+Профили: ~/.config/ocbar/profiles/*.ocbar (правила формы — в их [Autofill]);
+старый формат: ~/.config/ocbar/{profiles.conf,zones.conf,networks.conf,autofill.rules}
 USAGE
 }
 

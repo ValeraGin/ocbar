@@ -384,10 +384,9 @@ root-хелпер с беспарольным правилом в `/etc/sudoers.
 будет перезапускать, хотя программы уже нет.
 
 ```bash
-ocbar disconnect
-sudo ocbar uninstall           # приложение и его автозапуск, агент, sudoers, хелпер, /usr/local/libexec/ocbar
+sudo ocbar uninstall           # сам отключает туннель и прокси, снимает свой SOCKS и зоны; затем приложение, агент, sudoers, хелпер, /usr/local/libexec/ocbar
 brew uninstall ocbar           # только после uninstall; из репозитория — просто удалить клон
-sudo rm -rf /usr/local/var/ocbar                      # состояние: uninstall его оставляет
+sudo rm -rf /var/db/ocbar /usr/local/var/ocbar        # состояние: uninstall его оставляет (второй путь — до хелпера 0.8.0)
 rm -rf ~/.config/ocbar ~/Library/Logs/ocbar
 rm -rf "$HOME/Library/Application Support/ocbar"      # выбранный профиль, тумблеры меню
 rm -rf ~/Library/WebKit/ocbar-auth ~/Library/HTTPStorages/ocbar-auth.binarycookies
@@ -397,6 +396,11 @@ rm -f ~/Library/Preferences/ru.ocbar.app.plist ~/Library/Preferences/ocbar-app.p
 
 Из репозитория то же самое — `./bin/ocbar` вместо `ocbar`, без строки с
 `brew`.
+
+> **UPD 2026-09-10:** с 0.3.0 `uninstall` без root отказывает и сам гасит
+> сессию (`disconnect`, туннель, свой системный SOCKS, свои зоны) — отдельный
+> `ocbar disconnect` перед ним больше не нужен. Состояние хелпера теперь в
+> `/var/db/ocbar` (D57).
 
 Секреты в связке ключей удаляются по одной записи за вызов: у каждого
 логина их две — пароль и секрет кода.

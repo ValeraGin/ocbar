@@ -244,10 +244,11 @@ rm -rf "$(brew --repository)/Library/Homebrew/vendor/bundle/ruby/"*/extensions
 | `OCBAR_SHOW=1` | показать окно входа сразу |
 | `OCBAR_CONFIG_DIR` | другой каталог конфигурации целиком |
 | `OCBAR_CONFIG`, `OCBAR_NETWORKS` | отдельные файлы зон и сетей |
-| `OCBAR_STATE_DIR`, `OCBAR_USER_STATE` | каталоги состояния (для прогонов на тестовых данных) |
+| `OCBAR_STATE_DIR`, `OCBAR_USER_STATE` | каталоги состояния (для прогонов на тестовых данных). `OCBAR_STATE_DIR` — только вместе с `--dry-run`: sudo её не пропускает, и CLI при заданной переменной хелпер от root не зовёт |
 | `OCBAR_AUTH`, `OCBAR_BIN` | пути к аутентификатору и к самой программе (для плагина меню) |
 | `OCBAR_NOTIFY=0` | выключить уведомления, не трогая конфигурацию |
 | `OCBAR_LOG_MAX` | порог ротации логов в байтах |
+| `OCBAR_LOG_DIR` | другой каталог журналов (самопроверка пишет во временный) |
 | `OCBAR_RECONNECT_GRACE` | сколько ждать самостоятельного восстановления связи |
 | `OCBAR_RECONNECT_TIMEOUT` | сколько openconnect пытается восстановиться сам |
 | `OCBAR_LOGINS_PER_HOUR` | предохранитель: сколько полных входов в час разрешено |
@@ -430,6 +431,14 @@ ocbar-app --selftest        # строки «редактор: …» откры�
 журнале приложения при запуске строка «уведомления: разрешены / не
 разрешены».
 
+> **UPD 2026-09-10:** приложение принимает `ocbar://notify` только со своим
+> одноразовым токеном: при запуске кладёт его в
+> `~/Library/Application Support/ocbar/notify.token` (права 0600), рядом —
+> `notify.allowed` («1», если уведомления разрешены). Клиент идёт через
+> приложение, только если оно запущено, в `notify.allowed` стоит «1» и токен
+> читается; иначе — запасной путь от «Script Editor». Значит, «Script Editor»
+> теперь означает ещё и «уведомления ocbar не разрешены» (D59).
+
 ### Клавиша ⌥⌘P не работает
 
 Сочетание занято другой программой. Тогда подсказка в меню не показывается,
@@ -441,8 +450,14 @@ ocbar-app --selftest        # строки «редактор: …» откры�
 | Что | Где |
 |---|---|
 | решения супервизора, реконнекты, события сна | `~/Library/Logs/ocbar/supervisor.log` |
-| вывод openconnect | `/usr/local/var/ocbar/openconnect.log` |
-| что сказал шлюз при подключении | `/usr/local/var/ocbar/tunnel.env` |
-| наши зоны и маршруты | `/usr/local/var/ocbar/{zones,routes}.state` |
+| вывод openconnect | `/var/db/ocbar/openconnect.log` |
+| что сказал шлюз при подключении | `/var/db/ocbar/tunnel.env` |
+| наши зоны, маршруты, системный SOCKS | `/var/db/ocbar/{zones,routes,socks}.state` |
 | подробности входа | `OCBAR_VERBOSE=1 ocbar connect --show` |
 | что шлюз предлагает, без учётных данных | `"$(brew --prefix ocbar)/libexec/ocbar-auth" --probe --url <host>/<group>` |
+
+> **UPD 2026-09-10:** с хелпера 0.8.0 состояние — в `/var/db/ocbar`. Раньше
+> оно лежало в `/usr/local/var/ocbar`, а этот каталог на Intel принадлежит
+> пользователю (D57). Переносит `sudo ocbar install`; до него файлы лежат по
+> старому пути, и CLI читает их оттуда. `ocbar doctor` показывает, какой
+> каталог действует.
