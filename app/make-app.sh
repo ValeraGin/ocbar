@@ -10,12 +10,21 @@
 # карантин ему не ставится (docs/06-distribution.md).
 
 set -euo pipefail
-cd "$(dirname "$0")"
+# Каталог скрипта — абсолютным путём и до cd: после cd относительный
+# "$(dirname "$0")" удваивается (app/app/make-icon.swift), и иконка молча
+# уходила в запасную.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE"
 
 DEST="${1:-.build}"
 APP="$DEST/ocbar.app"
+# Версия одна — VERSION в bin/ocbar (D47). Не прочиталась — это поломка
+# сборки, а не повод выпустить бандл с чужой версией.
 VERSION=$(sed -n 's/^VERSION="\(.*\)"/\1/p' ../bin/ocbar | head -1)
-VERSION="${VERSION:-0.1.0}"
+if [ -z "$VERSION" ]; then
+    echo "make-app.sh: не прочитал VERSION из $HERE/../bin/ocbar — бандл не собираю" >&2
+    exit 1
+fi
 
 swift build -c release --disable-sandbox
 BIN=$(swift build -c release --show-bin-path)
@@ -30,7 +39,7 @@ cp "$BIN/ocbar-app" "$APP/Contents/MacOS/ocbar-app"
 # удалась: у установленного через brew приложения иконка должна быть всегда.
 ICON_OK=0
 ICONSET="$(mktemp -d)/AppIcon.iconset"
-if swift "$(dirname "$0")/make-icon.swift" "$ICONSET" >/dev/null 2>&1 \
+if swift "$HERE/make-icon.swift" "$ICONSET" >/dev/null 2>&1 \
    && iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" 2>/dev/null; then
     ICON_OK=1
 elif [ -f Resources/AppIcon.icns ]; then
