@@ -30,6 +30,9 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
     private(set) var code: String?
     private(set) var codeAt: Date?
     var enabled = false
+    // Только для --learn-selftest: считать синтетические события настоящими.
+    // Флаг живёт в изолированном мире, страница его не видит и не меняет.
+    var trustSynthetic = false
     var engineFilledCode = false      // код подставил сам ocbar — спрашивать про него незачем
     var onChange: ((String) -> Void)?
     private let username: String?
@@ -48,7 +51,8 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
     /// Включить или выключить запись на текущей странице — флаг живёт в
     /// изолированном мире, страница его не видит и не меняет.
     func apply(to webView: WKWebView) {
-        webView.evaluateJavaScript("window.__ocbarTeachOn = \(enabled ? "true" : "false"); 0",
+        webView.evaluateJavaScript("window.__ocbarTeachOn = \(enabled ? "true" : "false"); "
+                                   + "window.__ocbarTeachTrustSynthetic = \(trustSynthetic ? "true" : "false"); 0",
                                    in: nil, in: Self.world) { _ in }
     }
 
@@ -125,9 +129,35 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
           if (window.__ocbarTeachReady) return;
           window.__ocbarTeachReady = true;
           if (window.__ocbarTeachOn === undefined) window.__ocbarTeachOn = false;
+          if (window.__ocbarTeachTrustSynthetic === undefined) window.__ocbarTeachTrustSynthetic = false;
         \(LearnSession.selectorJS)
           function visible(e) { return e && e.offsetParent !== null; }
           function typeOf(e) { return (e.getAttribute('type') || 'text').toLowerCase(); }
+          // Настоящие события. Щелчок от страницы (el.click(), dispatchEvent)
+          // приходит с isTrusted = false. Но submit, который страница вызвала
+          // сама (button.click(), form.requestSubmit()), WebKit помечает
+          // isTrusted = true — проверено 2026-09-10. Поэтому отправка формы
+          // считается, только если перед ней был настоящий жест человека:
+          // нажатие мыши или клавиши (Enter) не раньше чем за полторы секунды.
+          var lastGesture = 0;
+          function gesture(e) { if (e.isTrusted) lastGesture = Date.now(); }
+          document.addEventListener('mousedown', gesture, true);
+          document.addEventListener('keydown', gesture, true);
+          function trustedClick(e) { return window.__ocbarTeachTrustSynthetic || e.isTrusted; }
+          function trustedSubmit(e) {
+            return window.__ocbarTeachTrustSynthetic || (e.isTrusted && Date.now() - lastGesture < 1500);
+          }
+          // Поле type=password, которое на деле — поле одноразового кода: у
+          // части порталов код вводится в «пароль». Такой «пароль» нельзя
+          // предлагать сохранить вместо настоящего.
+          function codeLike(e, v) {
+            var ac = (e.getAttribute('autocomplete') || '').toLowerCase().split(/\\s+/);
+            var mode = (e.getAttribute('inputmode') || '').toLowerCase();
+            var len = parseInt(e.getAttribute('maxlength') || '0', 10);
+            var n = (e.getAttribute('name') || '') + ' ' + (e.id || '');
+            return ac.indexOf('one-time-code') >= 0 || mode === 'numeric' || (len > 0 && len <= 8) ||
+                   /otp|totp|one.?time|code|pin/i.test(n) || /^[0-9]{4,8}$/.test(String(v).trim());
+          }
           function defaultButton(form) {
             if (!form) return null;
             var b = form.querySelector('button:not([type]),button[type=submit],input[type=submit],input[type=image]');
@@ -141,7 +171,7 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
               return visible(e) && skip.indexOf(typeOf(e)) < 0 && String(e.value || '') !== '';
             });
             if (!inputs.length && !buttonOnlyOk) return;
-            var pw = inputs.filter(function (e) { return typeOf(e) === 'password'; });
+            var pw = inputs.filter(function (e) { return typeOf(e) === 'password' && !codeLike(e, e.value); });
             var userBefore = null;
             if (pw.length) {
               var before = inputs.filter(function (e) {
@@ -153,7 +183,10 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
             inputs.forEach(function (e) {
               var v = String(e.value), k = 'manual', why = 'вводит человек';
               if (typeOf(e) === 'password') {
-                if (e === pw[0]) { k = 'password'; why = 'поле пароля'; password = v; }
+                if (codeLike(e, v)) {
+                  k = 'totp'; why = 'поле кода с типом password';
+                  if (/^[0-9]{4,8}$/.test(v.trim())) code = v.trim();
+                } else if (e === pw[0]) { k = 'password'; why = 'поле пароля'; password = v; }
               } else if (username && v.trim().toLowerCase() === String(username).trim().toLowerCase()) {
                 k = 'username'; why = 'введён логин профиля';
               } else if (/^[0-9]{4,8}$/.test(v.trim())) {
@@ -172,12 +205,14 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
           // Отправка формы — окно пройдено. submitter — кнопка, которой
           // отправили (стандарт HTML); Enter отправляет кнопкой по умолчанию.
           document.addEventListener('submit', function (e) {
+            if (!trustedSubmit(e)) return;
             snapshot(e.target, e.submitter || null, true);
           }, true);
           // Кнопки вне формы и type=button (одностраничные формы) — по щелчку,
           // но только если в полях что-то введено: иначе это «показать
           // пароль», «назад» и прочее, что окном формы не является.
           document.addEventListener('click', function (e) {
+            if (!trustedClick(e)) return;
             var b = e.target && e.target.closest ? e.target.closest('button,input[type=submit],input[type=image]') : null;
             if (!b) return;
             var isSubmit = b.tagName === 'BUTTON' ? (!b.getAttribute('type') || typeOf(b) === 'submit') : true;
@@ -255,7 +290,17 @@ enum KeychainWriter {
 /// Окно «Запомнить для следующего входа» — после успешного входа, до
 /// подключения туннеля. Без подтверждения не сохраняется ничего.
 final class TeachDialog: NSObject, NSTextFieldDelegate {
-    enum PasswordOffer { case none, save, update, askToKeychain, elsewhere(String) }
+    enum PasswordOffer: Equatable { case none, save, update, askToKeychain, elsewhere(String) }
+
+    /// Галочка пароля по умолчанию. «Сохранить» (пароля ещё нет) —
+    /// включена. «Обновить» — выключена: перезаписать рабочий пароль должен
+    /// решить человек, а записанное могло оказаться не паролем (код в поле
+    /// type=password, подложная отправка формы). «В связку» при вводе
+    /// руками — выключена: человек раньше выбрал вводить сам.
+    static func defaultOn(_ offer: PasswordOffer) -> Bool {
+        if case .save = offer { return true }
+        return false
+    }
     struct Input {
         var profile: String
         var summary: String
@@ -393,7 +438,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             default: break
             }
             let box = NSButton(checkboxWithTitle: title, target: nil, action: nil)
-            if case .askToKeychain = input.passwordOffer { box.state = .off } else { box.state = .on }
+            box.state = Self.defaultOn(input.passwordOffer) ? .on : .off
             stack.addArrangedSubview(box)
             if let note { stack.addArrangedSubview(label(note)) }
             passwordBox = box
@@ -595,6 +640,27 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
 /// После успешного входа: спросить, сохранить выбранное и отдать клиенту
 /// итог без секретов (правила и какие ключи профиля поменять).
 enum TeachFlow {
+    /// Похоже на одноразовый код, а не на пароль: 4–8 цифр.
+    static func looksLikeCode(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        return (4...8).contains(t.count) && t.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    /// Что предложить про пароль. «Новый пароль», похожий на одноразовый
+    /// код, не предлагается ни сохранить, ни тем более обновить: это почти
+    /// наверняка код, введённый в поле type=password.
+    static func passwordOffer(recorded: String?, stored: String, source: String) -> TeachDialog.PasswordOffer {
+        guard let pw = recorded, !pw.isEmpty else { return .none }
+        switch source {
+        case "keepassxc": return .elsewhere("KeePassXC")
+        case "command": return .elsewhere("команды PasswordCommand")
+        default: break
+        }
+        if looksLikeCode(pw) { return .none }
+        if source == "ask" { return .askToKeychain }
+        return stored.isEmpty ? .save : (stored == pw ? .none : .update)
+    }
+
     static func finish(recorder rec: TeachRecorder, outFile: String, portal: String) {
         let env = ProcessInfo.processInfo.environment
         let user = env["OCBAR_USERNAME"] ?? ""
@@ -603,15 +669,10 @@ enum TeachFlow {
         let stored = env["OCBAR_PASSWORD"] ?? ""
         let totpSource = env["OCBAR_TOTP_SOURCE"] ?? "keychain"
 
-        var offer = TeachDialog.PasswordOffer.none
-        if let pw = rec.password {
-            switch pwSource {
-            case "keepassxc": offer = .elsewhere("KeePassXC")
-            case "command": offer = .elsewhere("команды PasswordCommand")
-            case "ask": offer = .askToKeychain
-            default: offer = stored.isEmpty ? .save : (stored == pw ? .none : .update)
-            }
+        if let pw = rec.password, looksLikeCode(pw) {
+            Log.info("записанный «пароль» похож на одноразовый код — сохранить или обновить пароль не предлагаю")
         }
+        let offer = passwordOffer(recorded: rec.password, stored: stored, source: pwSource)
         let offerCode = rec.code != nil && !rec.engineFilledCode && totpSource != "sms"
         let dialog = TeachDialog(.init(profile: env["OCBAR_PROFILE_NAME"] ?? "профиль", summary: rec.summary(),
                                        manualCount: rec.manualCount, passwordOffer: offer, offerCode: offerCode,

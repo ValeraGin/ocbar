@@ -23,6 +23,38 @@ import Foundation
 /// не трогает рабочую сессию входа.
 final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler, NSWindowDelegate {
 
+    /// Скрипт разметки живёт в отдельном мире WebKit, как запись входа
+    /// (TeachRecorder): DOM общий со страницей, а переменные, функции
+    /// `__ocbar*` и обработчик сообщений — свои. Раньше всё это было в мире
+    /// страницы, и портал мог сам прислать «отметку» или подменить
+    /// предзаполнение.
+    static let world = WKContentWorld.world(name: "ocbar-learn")
+
+    /// Выполнить в мире разметки; результат — как у evaluateJavaScript.
+    static func eval(_ webView: WKWebView?, _ js: String, _ cb: ((Any?, Error?) -> Void)? = nil) {
+        webView?.evaluateJavaScript(js, in: nil, in: world) { r in
+            switch r {
+            case .success(let v): cb?(v, nil)
+            case .failure(let e): cb?(nil, e)
+            }
+        }
+    }
+
+    /// Страница для заголовка шага: хост и путь в закодированном виде —
+    /// `%0A` в адресе остаётся тремя символами, а не переводом строки.
+    static func pageLabel(_ u: URL) -> String {
+        (u.host ?? "") + u.path(percentEncoded: true)
+    }
+
+    /// Строка для комментария в файле правил: без управляющих символов и
+    /// разделителей строк. Иначе перевод строки в адресе страницы разрывал
+    /// комментарий, и остаток становился настоящим правилом.
+    static func commentSafe(_ s: String) -> String {
+        String(String.UnicodeScalarView(s.unicodeScalars.filter { sc in
+            !(sc.properties.generalCategory == .control || sc.value == 0x2028 || sc.value == 0x2029 || sc.value == 0x85)
+        }))
+    }
+
     struct Mark {
         let kind: String        // username | password | totp | click | stop
         let selector: String
@@ -88,9 +120,9 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .nonPersistent()
         let controller = WKUserContentController()
-        controller.add(self, name: "ocbarLearn")
+        controller.add(self, contentWorld: Self.world, name: "ocbarLearn")
         controller.addUserScript(WKUserScript(source: Self.js, injectionTime: .atDocumentEnd,
-                                              forMainFrameOnly: true))
+                                              forMainFrameOnly: true, in: Self.world))
         cfg.userContentController = controller
 
         let width: CGFloat = 720, webHeight: CGFloat = 700, barHeight: CGFloat = 104
@@ -172,7 +204,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         webView.load(URLRequest(url: startURL))
-        Log.info("разметка: открыл \(startURL.absoluteString)")
+        Log.info("разметка: открыл \(Log.redact(startURL))")
         Log.debug("номер окна: \(window.windowNumber)")
     }
 
@@ -212,7 +244,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 : "на шаге \(displayNumber(step)) ещё ничего не отмечено (всего отметок: \(marks.count))"
             return
         }
-        webView.evaluateJavaScript(Self.checkScript(for: here.map { $0.selector })) { [weak self] value, _ in
+        Self.eval(webView, Self.checkScript(for: here.map { $0.selector })) { [weak self] value, _ in
             guard let self, let codes = value as? [Int], codes.count == here.count else {
                 self?.status.stringValue = "проверка не удалась"
                 return
@@ -270,7 +302,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         // Щелчок программы — тоже щелчок: пока разметка включена, страница
         // перехватит его и запишет как отметку. Выключаем на время нажатия.
         let js = "window.__ocbarSet(false, \(Self.jsString(kind))); " + Self.passScript(fills: fills, clicks: clicks)
-        webView.evaluateJavaScript(js) { [weak self] value, error in
+        Self.eval(webView, js) { [weak self] value, error in
             guard let self else { return }
             self.passButton.isEnabled = true
             let dict = value as? [String: Any] ?? [:]
@@ -364,6 +396,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
 
     func userContentController(_ controller: WKUserContentController,
                                didReceive message: WKScriptMessage) {
+        guard message.world == Self.world else { return }
         guard let body = message.body as? [String: Any],
               let selector = body["selector"] as? String, !selector.isEmpty else {
             status.stringValue = "не удалось составить селектор — попробуйте щёлкнуть по самому полю"
@@ -409,7 +442,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             marks.removeAll { $0.kind == what && $0.step == step }
         }
         marks.append(Mark(kind: what, selector: selector, hint: hint, step: step))
-        if pages[step] == nil, let u = webView.url { pages[step] = (u.host ?? "") + u.path }
+        if pages[step] == nil, let u = webView.url { pages[step] = Self.pageLabel(u) }
         status.stringValue = kind == "auto"
             ? "распознано как \(title(for: what)): \(selector) — не то? выберите вид слева и щёлкните ещё раз"
             : "отмечено \(title(for: what)): \(selector)"
@@ -417,7 +450,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         if what == "username" || what == "password" || what == "totp" {
             // Поле сразу получает фокус: дальше человек просто печатает, не
             // выключая разметку.
-            webView.evaluateJavaScript("window.__ocbarFocus(\(Self.jsString(selector)))")
+            Self.eval(webView, "window.__ocbarFocus(\(Self.jsString(selector))); 0")
         }
     }
 
@@ -451,7 +484,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     private func showMarks() {
         let sels = marks.filter { $0.step == step }.map(\.selector)
         let json = String(data: (try? JSONSerialization.data(withJSONObject: sels)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
-        webView?.evaluateJavaScript("window.__ocbarShowMarks && window.__ocbarShowMarks(\(json))")
+        Self.eval(webView, "window.__ocbarShowMarks && window.__ocbarShowMarks(\(json)); 0")
     }
 
     /// Предзаполнение: на новом окне формы отметить то, что узнаётся без
@@ -460,7 +493,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     /// человека не перекрываются.
     private func prefill() {
         guard !finished, !marks.contains(where: { $0.step == step }) else { return }
-        webView.evaluateJavaScript("JSON.stringify(window.__ocbarPrefill ? window.__ocbarPrefill() : [])") { [weak self] v, _ in
+        Self.eval(webView, "JSON.stringify(window.__ocbarPrefill ? window.__ocbarPrefill() : [])") { [weak self] v, _ in
             guard let self, !self.marks.contains(where: { $0.step == self.step }),
                   let text = v as? String,
                   let arr = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: String]],
@@ -473,7 +506,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 added.append("\(self.title(for: k)) (\(f["why"] ?? ""))")
             }
             guard !added.isEmpty else { return }
-            if self.pages[self.step] == nil, let u = self.webView.url { self.pages[self.step] = (u.host ?? "") + u.path }
+            if self.pages[self.step] == nil, let u = self.webView.url { self.pages[self.step] = Self.pageLabel(u) }
             Log.info("разметка: предзаполнено на шаге \(self.displayNumber(self.step)): " + added.joined(separator: ", "))
             self.refreshCollected()
             self.status.stringValue = "предзаполнено*: " + added.joined(separator: ", ")
@@ -490,7 +523,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     }
 
     private func applyState() {
-        webView.evaluateJavaScript("window.__ocbarSet(\(marking ? "true" : "false"), \(Self.jsString(kind)))")
+        Self.eval(webView, "window.__ocbarSet(\(marking ? "true" : "false"), \(Self.jsString(kind))); 0")
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -523,6 +556,9 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     static func rulesText(marks: [Mark], pages: [Int: String], portal: String,
                           formHost: String?, date: Date = Date()) -> String {
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        let portal = commentSafe(portal)
+        let formHost = formHost.map(commentSafe)
+        let pages = pages.mapValues(commentSafe)
         var out = "# Правила автозаполнения формы входа, размечены вручную \(df.string(from: date)).\n"
         out += "# Портал: \(portal)\n"
         out += "# Формат и остальные возможности — etc/autofill.rules.example.\n"
@@ -740,8 +776,13 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         if (el && el.nodeType === 1) place(el); else hide();
       }, true);
 
+      // Только настоящий щелчок: синтетическое событие страница может
+      // создать сама и так поставить отметку. __ocbarTrustSynthetic — для
+      // --learn-selftest; живёт в изолированном мире, страница его не видит.
+      window.__ocbarTrustSynthetic = false;
       document.addEventListener('click', function (e) {
         if (!marking) return;
+        if (!e.isTrusted && !window.__ocbarTrustSynthetic) return;
         e.preventDefault(); e.stopPropagation();
         var el = target(e.target);
         if (!el || el.nodeType !== 1) return;
@@ -864,7 +905,7 @@ final class LearnProbe: NSObject, WKNavigationDelegate {
         cfg.websiteDataStore = .nonPersistent()
         let c = WKUserContentController()
         c.addUserScript(WKUserScript(source: LearnSession.pageScript, injectionTime: .atDocumentEnd,
-                                     forMainFrameOnly: true))
+                                     forMainFrameOnly: true, in: LearnSession.world))
         cfg.userContentController = c
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 900, height: 900), configuration: cfg)
         webView.navigationDelegate = self
@@ -889,7 +930,7 @@ final class LearnProbe: NSObject, WKNavigationDelegate {
         guard !reported else { return }
         reported = true
         let js = "JSON.stringify({page: location.host + location.pathname, marks: window.__ocbarPrefill ? window.__ocbarPrefill() : null})"
-        webView.evaluateJavaScript(js) { [weak self] v, error in
+        LearnSession.eval(webView, js) { [weak self] v, error in
             guard let self else { return }
             guard let text = v as? String,
                   let d = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else {
@@ -907,666 +948,3 @@ final class LearnProbe: NSObject, WKNavigationDelegate {
     }
 }
 
-/// Проверка разметки без человека: страница-образец грузится в такой же
-/// WKWebView с тем же внедрённым скриптом, у неё спрашиваются селекторы для
-/// известных элементов, и отдельно проверяется, что щелчок доходит до
-/// приложения через messageHandler. Запускается `--learn-selftest`.
-final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-    private var webView: WKWebView!
-    private let done: (Int32) -> Void
-    private var failures = 0
-    private var clickSelector: String?
-    private var messages = 0
-    private var teach: TeachRecorder?
-
-    /// Две типовые формы: Keycloak (id) и Microsoft (name + кнопка с id).
-    private static let page = """
-    <html><body>
-      <div class="alert alert-error" id="passwordError">Неверный пароль</div>
-      <div id="hiddenStep" style="display:none">поле следующего шага</div>
-      <form>
-        <input type="text" id="username" name="username" autocomplete="username">
-        <input type="password" id="password" name="password">
-        <input type="tel" name="otc" maxlength="6" autocomplete="one-time-code">
-        <button type="submit" id="kc-login"><span id="lbl">Войти</span></button>
-      </form>
-      <form>
-        <input type="email" name="loginfmt">
-        <input type="submit" value="Далее" data-report-event="Signin_Submit">
-      </form>
-      <div id="twostep">
-        <div id="s1err" style="display:none">Неверный пароль</div>
-        <div id="s1">
-          <input type="text" id="s1user"><input type="password" id="s1pass">
-          <button type="button" id="s1next" onclick="document.getElementById('s1').style.display='none'; document.getElementById('s2').style.display='block'">Далее</button>
-        </div>
-        <div id="s2" style="display:none">
-          <input type="text" id="s2otp" maxlength="6">
-          <button type="button" id="s2done" onclick="window.__twoDone = true">Войти</button>
-        </div>
-      </div>
-      <div id="ms">
-        <div id="msf"><input type="text" id="msu"><input type="password" id="msp"></div>
-        <input type="submit" id="msbtn" value="Войти" onclick="window.__msClick()">
-      </div>
-      <div id="teachbox">
-        <form id="tf1" onsubmit="event.preventDefault(); if (document.getElementById('tp').value.indexOf('верный') === 0) { this.style.display = 'none'; document.getElementById('tf2').style.display = 'block'; }">
-          <input type="text" id="tu"><input type="password" id="tp"><button type="button" id="teye">глаз</button><button type="submit" id="tgo">Войти</button>
-        </form>
-        <form id="tf2" style="display:none" onsubmit="event.preventDefault(); this.style.display = 'none'; document.getElementById('tf3').style.display = 'block';">
-          <input type="text" name="totp" id="tc"><input type="text" id="tcap"><input type="submit" id="tok" value="Подтвердить">
-        </form>
-        <form id="tf3" style="display:none" onsubmit="event.preventDefault(); window.__teachDone = true;">
-          <input type="submit" id="tkmsi" value="Да">
-        </form>
-      </div>
-      <form id="pf1"><input id="pfu" autocomplete="username"><input type="password" id="pfp" autocomplete="current-password"><button id="pfb">Войти</button></form>
-      <form id="pf2"><input type="text" name="username" id="u2" autocomplete="on"><input type="password" id="p2" autocomplete="on"><input type="checkbox" id="rm2"><button type="submit" id="b2">Войти</button></form>
-      <form id="pf3"><input type="text" name="totp" id="t3"><input type="submit" id="s3" value="Войти"></form>
-      <form id="pf4"><input type="password" id="a4"><input type="password" id="c4"><button id="d4">Сменить</button></form>
-      <form id="pf5" style="display:none"><input id="h5" autocomplete="username"><button id="k5">Войти</button></form>
-      <form id="pf6"><input id="w6" autocomplete="username webauthn"><button type="submit" id="b6">Далее</button></form>
-      <script>
-        window.__msStage = 0;
-        window.__msClick = function () {
-          var f = document.getElementById('msf');
-          if (f.style.display !== 'none') { f.style.display = 'none'; document.getElementById('msbtn').value = 'Да'; window.__msStage = 1; }
-          else { window.__msStage = 2; }
-        };
-        window.__msReset = function () {
-          document.getElementById('msf').style.display = 'block';
-          ['msu', 'msp'].forEach(function (i) { document.getElementById(i).value = ''; });
-          document.getElementById('msbtn').value = 'Войти';
-          window.__msStage = 0;
-        };
-        window.__teachReset = function () {
-          document.getElementById('tf1').style.display = 'block';
-          document.getElementById('tf2').style.display = 'none';
-          document.getElementById('tf3').style.display = 'none';
-          ['tu', 'tp', 'tc', 'tcap'].forEach(function (i) { document.getElementById(i).value = ''; });
-          window.__teachDone = false;
-        };
-        window.__twoReset = function () {
-          document.getElementById('s1').style.display = 'block';
-          document.getElementById('s2').style.display = 'none';
-          ['s1user', 's1pass', 's2otp'].forEach(function (i) { document.getElementById(i).value = ''; });
-          window.__twoDone = false;
-        };
-      </script>
-    </body></html>
-    """
-
-    init(completion: @escaping (Int32) -> Void) { self.done = completion; super.init() }
-
-    func start() {
-        let cfg = WKWebViewConfiguration()
-        cfg.websiteDataStore = .nonPersistent()
-        let c = WKUserContentController()
-        c.add(self, name: "ocbarLearn")
-        c.addUserScript(WKUserScript(source: LearnSession.pageScript, injectionTime: .atDocumentEnd,
-                                     forMainFrameOnly: true))
-        cfg.userContentController = c
-        let t = TeachRecorder(username: "alice")
-        t.install(into: c)
-        teach = t
-        webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 400), configuration: cfg)
-        webView.navigationDelegate = self
-        webView.loadHTMLString(Self.page, baseURL: URL(string: "https://example.test/"))
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        let cases: [(String, String, String)] = [
-            ("#username", "username", "input[id=username]"),
-            ("#password", "password", "input[id=password]"),
-            ("input[name=otc]", "totp", "input[name=otc]"),
-            ("#lbl", "click", "button[id=kc-login]"),          // щелчок по тексту внутри кнопки
-            ("input[name=loginfmt]", "username", "input[name=loginfmt]"),
-            ("#passwordError", "stop", "div[id=passwordError]"),
-        ]
-        var pending = cases.count
-        for (query, kind, expected) in cases {
-            let js = "window.__ocbarSet(true, \(LearnSession.js(kind))); window.__ocbarSelector(document.querySelector(\(LearnSession.js(query))))"
-            webView.evaluateJavaScript(js) { [weak self] value, error in
-                guard let self else { return }
-                let got = (value as? String) ?? "ошибка: \(error.map { "\($0)" } ?? "нет значения")"
-                if got == expected {
-                    print("  [ OK ] \(kind): \(query) → \(got)")
-                } else {
-                    print("  [FAIL] \(kind): \(query) → \(got), ожидалось \(expected)")
-                    self.failures += 1
-                }
-                pending -= 1
-                if pending == 0 { self.checkGuesses() }
-            }
-        }
-    }
-
-    /// Распознавание вида элемента: в режиме «Авто» человек просто щёлкает,
-    /// а вид определяет страница.
-    private func checkGuesses() {
-        let cases: [(String, String)] = [
-            ("#username", "username"),
-            ("#password", "password"),
-            ("input[name=otc]", "totp"),
-            ("#lbl", "click"),                       // текст внутри кнопки
-            ("input[name=loginfmt]", "username"),
-            ("input[data-report-event=Signin_Submit]", "click"),
-            ("#passwordError", "stop"),
-        ]
-        var pending = cases.count
-        for (query, expected) in cases {
-            let js = "window.__ocbarSet(true, 'auto'); window.__ocbarGuess(document.querySelector(\(LearnSession.js(query))))"
-            webView.evaluateJavaScript(js) { [weak self] value, _ in
-                guard let self else { return }
-                let got = (value as? String) ?? "нет значения"
-                if got == expected {
-                    print("  [ OK ] авто: \(query) → \(got)")
-                } else {
-                    print("  [FAIL] авто: \(query) → \(got), ожидалось \(expected)")
-                    self.failures += 1
-                }
-                pending -= 1
-                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkPrefill { self.checkAlways { self.checkTeach { self.checkClick() } } } } } } }
-            }
-        }
-    }
-
-    /// Щелчок мышью: синтетическое событие должно дойти до приложения и не
-    /// нажать саму кнопку (иначе разметка отправляла бы форму).
-    /// Кнопка «Проверить» в окне разметки: скрытое поле и отсутствующее
-    /// должны различаться, иначе проверка бесполезна.
-    private func checkVerify(_ then: @escaping () -> Void) {
-        let selectors = ["input[id=username]", "button[id=kc-login]", "div[id=hiddenStep]", "div[id=nosuch]"]
-        webView.evaluateJavaScript(LearnSession.checkScript(for: selectors)) { [weak self] value, _ in
-            guard let self else { return }
-            let got = (value as? [Int]) ?? []
-            let want = [2, 2, 1, 0]
-            if got == want {
-                print("  [ OK ] проверка правил на странице: \(got)")
-            } else {
-                print("  [FAIL] проверка правил: \(got), ожидалось \(want)")
-                self.failures += 1
-            }
-            then()
-        }
-    }
-
-    private func eval(_ js: String, _ cb: @escaping (Any?) -> Void) {
-        webView.evaluateJavaScript(js) { v, _ in cb(v) }
-    }
-
-    /// Форма в два окна: сначала логин и пароль, потом отдельное окно с
-    /// кодом. Проверяется трижды: как размеченное пишется в правила (блоками
-    /// по шагам), что движок входа проходит оба окна по этим правилам, и что
-    /// кнопка «Пройти шаг» заполняет и жмёт, а без пароля — не жмёт.
-    private func checkSteps(_ then: @escaping () -> Void) {
-        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
-            if cond { print("  [ OK ] \(name)") }
-            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
-        }
-        typealias M = LearnSession.Mark
-        let marks = [
-            M(kind: "stop", selector: "div[id=s1err]", hint: "", step: 1),
-            M(kind: "username", selector: "input[id=s1user]", hint: "", step: 1),
-            M(kind: "password", selector: "input[id=s1pass]", hint: "", step: 1),
-            M(kind: "click", selector: "button[id=s1next]", hint: "", step: 1),
-            M(kind: "totp", selector: "input[id=s2otp]", hint: "", step: 3),     // шаг 2 пуст: перенумерация
-            M(kind: "click", selector: "button[id=s2done]", hint: "", step: 3),
-        ]
-        let text = LearnSession.rulesText(marks: marks, pages: [1: "idp.test/login", 3: "idp.test/otp"],
-                                          portal: "example.test", formHost: "idp.test")
-        let body = text.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
-            .split(separator: "\n").map(String.init)
-        let want = ["stop  div[id=s1err]", "# шаг 1 — idp.test/login", "fill  username input[id=s1user]",
-                    "fill  password input[id=s1pass]", "click button[id=s1next]", "# шаг 2 — idp.test/otp",
-                    "fill  totp input[id=s2otp]", "click button[id=s2done]"]
-        ok("шаги: правила блоками по окнам, пустой шаг перенумерован", body == want, body.joined(separator: " | "))
-        let single = LearnSession.rulesText(marks: marks.map { var m = $0; m.step = 1; return m },
-                                            pages: [:], portal: "example.test", formHost: nil)
-        ok("шаги: одно окно — без заголовков шагов", !single.contains("# шаг"))
-
-        // Движок входа по размеченным правилам: два прохода — два окна.
-        let run = Autofill.script(rules: Autofill.parse(text: text),
-                                  creds: Credentials(username: "alice", password: "pw", totpSecret: nil),
-                                  totpCode: "123456")
-        eval("window.__ocbarSet(false, 'auto'); window.__twoReset(); 'ok'") { _ in
-            self.eval(run) { r1 in
-                let d1 = r1 as? [String: Any] ?? [:]
-                ok("движок, окно 1: логин и пароль, «Далее»",
-                   (d1["clicked"] as? String) == "button[id=s1next]" && (d1["filled"] as? [String]) == ["username", "password"], "\(d1)")
-                self.eval(run) { r2 in
-                    let d2 = r2 as? [String: Any] ?? [:]
-                    ok("движок, окно 2: код, «Войти»",
-                       (d2["clicked"] as? String) == "button[id=s2done]" && (d2["filled"] as? [String]) == ["totp"], "\(d2)")
-                    self.eval("[window.__twoDone === true, document.getElementById('s1user').value, document.getElementById('s2otp').value]") { r3 in
-                        let a = r3 as? [Any] ?? []
-                        ok("движок прошёл оба окна", a.count == 3 && (a[0] as? Bool) == true
-                           && (a[1] as? String) == "alice" && (a[2] as? String) == "123456", "\(a)")
-                        self.checkPass(ok, then)
-                    }
-                }
-            }
-        }
-    }
-
-    private func checkPass(_ ok: @escaping (String, Bool, String) -> Void, _ then: @escaping () -> Void) {
-        let noPassword = LearnSession.passScript(
-            fills: [("username", "input[id=s1user]", "alice"), ("password", "input[id=s1pass]", nil)],
-            clicks: ["button[id=s1next]"])
-        let step1 = LearnSession.passScript(
-            fills: [("username", "input[id=s1user]", "alice"), ("password", "input[id=s1pass]", "pw")],
-            clicks: ["button[id=s1next]"])
-        let step2 = LearnSession.passScript(fills: [("totp", "input[id=s2otp]", "654321")],
-                                            clicks: ["button[id=s2done]"])
-        eval("window.__twoReset(); 'ok'") { _ in
-            self.eval(noPassword) { p1 in
-                let d = p1 as? [String: Any] ?? [:]
-                ok("«Пройти шаг» без пароля кнопку не жмёт", (d["missing"] as? [String]) == ["password"] && d["clicked"] == nil, "\(d)")
-                self.eval(step1) { p2 in
-                    let d = p2 as? [String: Any] ?? [:]
-                    ok("«Пройти шаг», окно 1: введённое человеком не трогает, пароль заполняет, жмёт «Далее»",
-                       (d["clicked"] as? String) == "button[id=s1next]" && (d["filled"] as? [String]) == ["password"], "\(d)")
-                    self.eval(step2) { p3 in
-                        let d = p3 as? [String: Any] ?? [:]
-                        ok("«Пройти шаг», окно 2: код и «Войти»",
-                           (d["clicked"] as? String) == "button[id=s2done]" && (d["filled"] as? [String]) == ["totp"], "\(d)")
-                        self.eval("[window.__twoDone === true, document.getElementById('s2otp').value]") { r in
-                            let a = r as? [Any] ?? []
-                            ok("форма пройдена кнопкой «Пройти шаг»", a.count == 2 && (a[0] as? Bool) == true
-                               && (a[1] as? String) == "654321", "\(a)")
-                            then()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Щелчок по пустому месту страницы не должен стать правилом: «stop html»
-    /// остановил бы автозаполнение на любой странице — html виден всегда.
-    /// Так и случилось на живом окне 2026-09-10: пара случайных щелчков дала
-    /// отметку «ошибка=html».
-    private func checkRootClick(_ then: @escaping () -> Void) {
-        let before = messages
-        eval("""
-        window.__ocbarSet(true, 'auto');
-        document.body.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
-        document.documentElement.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
-        'ok'
-        """) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                guard let self else { return }
-                if self.messages == before {
-                    print("  [ OK ] щелчок по пустому месту не стал отметкой")
-                } else {
-                    print("  [FAIL] щелчок по пустому месту записан как отметка: \(self.clickSelector ?? "?")")
-                    self.failures += 1
-                }
-                then()
-            }
-        }
-    }
-
-    /// Предзаполнение разметки: что узнаётся без человека и почему. Случай
-    /// «autocomplete=on» повторяет первое окно рабочего портала, снятое
-    /// 2026-09-10: стандарт там молчит, узнаются пароль по типу, логин как
-    /// поле перед паролем и кнопка формы по умолчанию. «name=totp» — второе
-    /// окно того же портала по журналу входа.
-    private func checkPrefill(_ then: @escaping () -> Void) {
-        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
-            if cond { print("  [ OK ] \(name)") }
-            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
-        }
-        let cases: [(String, String, [String])] = [
-            ("предзаполнение: токены autocomplete из стандарта", "#pf1",
-             ["username input[id=pfu] autocomplete=username",
-              "password input[id=pfp] autocomplete=current-password",
-              "click button[id=pfb] кнопка формы по умолчанию"]),
-            ("предзаполнение: autocomplete=on, как на рабочем портале", "#pf2",
-             ["password input[id=p2] type=password",
-              "username input[id=u2] поле перед паролем",
-              "click button[id=b2] кнопка формы по умолчанию"]),
-            ("предзаполнение: окно кода name=totp", "#pf3",
-             ["totp input[id=t3] похоже на поле кода",
-              "click input[id=s3] кнопка формы по умолчанию"]),
-            ("предзаполнение: два поля пароля — не угадываем", "#pf4", []),
-            ("предзаполнение: скрытая форма не смотрится", "#pf5", []),
-            ("предзаполнение: «username webauthn», селектор без пробелов", "#pf6",
-             ["username input[id=w6] autocomplete=username",
-              "click button[id=b6] кнопка формы по умолчанию"]),
-        ]
-        func run(_ i: Int) {
-            guard i < cases.count else { showMarksCheck(); return }
-            let (name, root, want) = cases[i]
-            eval("JSON.stringify(window.__ocbarPrefill(document.querySelector(\(LearnSession.js(root)))))") { v in
-                let arr = ((v as? String).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) }
-                           as? [[String: String]]) ?? []
-                let got = arr.map { "\($0["kind"] ?? "") \($0["selector"] ?? "") \($0["why"] ?? "")" }
-                ok(name, got.count == want.count && Set(got) == Set(want), got.joined(separator: " | "))
-                run(i + 1)
-            }
-        }
-        func showMarksCheck() {
-            eval("""
-            window.__ocbarShowMarks(['input[id=pfu]']); window.__ocbarShowMarks(['input[id=pfp]']);
-            var r = [document.getElementById('pfu').hasAttribute('data-ocbar-mark'),
-                     document.getElementById('pfp').hasAttribute('data-ocbar-mark')];
-            window.__ocbarShowMarks([]); r
-            """) { v in
-                let a = v as? [Any] ?? []
-                ok("подсветка отметок: прежняя снимается, текущая видна",
-                   a.count == 2 && (a[0] as? Bool) == false && (a[1] as? Bool) == true, "\(a)")
-                then()
-            }
-        }
-        run(0)
-    }
-
-    /// Экран без полей и общая кнопка — как у Microsoft: одна и та же кнопка
-    /// «Войти», потом «Да» на «Остаться в системе?». Разметка пишет кнопку
-    /// окна без полей как click!, движок проходит оба экрана — и главное:
-    /// без пароля не нажимает ни одну кнопку, пустой пароль не уходит.
-    private func checkAlways(_ then: @escaping () -> Void) {
-        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
-            if cond { print("  [ OK ] \(name)") }
-            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
-        }
-        typealias M = LearnSession.Mark
-        let marks = [
-            M(kind: "username", selector: "input[id=msu]", hint: "", step: 1),
-            M(kind: "password", selector: "input[id=msp]", hint: "", step: 1),
-            M(kind: "click", selector: "input[id=msbtn]", hint: "", step: 1),
-            M(kind: "click", selector: "input[id=msbtn]", hint: "", step: 2),
-        ]
-        let text = LearnSession.rulesText(marks: marks, pages: [1: "ms.test/login", 2: "ms.test/kmsi"],
-                                          portal: "ms.test", formHost: nil)
-        let body = text.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
-            .split(separator: "\n").map(String.init)
-        ok("экран без полей: кнопка записана как click!",
-           body == ["# шаг 1 — ms.test/login", "fill  username input[id=msu]", "fill  password input[id=msp]",
-                    "click input[id=msbtn]", "# шаг 2 — ms.test/kmsi", "click! input[id=msbtn]"], body.joined(separator: " | "))
-        let forced = LearnSession.rulesText(
-            marks: [M(kind: "username", selector: "input[id=msu]", hint: "", step: 1),
-                    M(kind: "click!", selector: "a[id=other]", hint: "", step: 1)],
-            pages: [:], portal: "ms.test", formHost: nil)
-        ok("вид «Всегда» остаётся click! и на окне с полями", forced.contains("click! a[id=other]"))
-
-        let rules = Autofill.parse(text: text)
-        let full = Autofill.script(rules: rules, creds: Credentials(username: "alice", password: "pw", totpSecret: nil), totpCode: nil)
-        let noPassword = Autofill.script(rules: rules, creds: Credentials(username: "alice", password: nil, totpSecret: nil), totpCode: nil)
-        let pass = LearnSession.passScript(fills: [], clicks: ["input[id=msbtn]"])
-        eval("window.__ocbarSet(false, 'auto'); window.__msReset(); 'ok'") { _ in
-            self.eval(full) { _ in
-                self.eval(full) { _ in
-                    self.eval("window.__msStage") { st in
-                        ok("движок: «Войти», затем «Да» на экране без полей", (st as? Int) == 2, "стадия \(st ?? "?")")
-                        self.eval("window.__msReset(); 'ok'") { _ in
-                            self.eval(noPassword) { r in
-                                let d = r as? [String: Any] ?? [:]
-                                self.eval(noPassword) { _ in
-                                    self.eval("[window.__msStage, document.getElementById('msu').value]") { v in
-                                        let a = v as? [Any] ?? []
-                                        ok("без пароля ни одна кнопка не нажата, пустой пароль не ушёл",
-                                           a.count == 2 && (a[0] as? Int) == 0 && (a[1] as? String) == "alice"
-                                           && d["clicked"] == nil && (d["waiting"] as? String) == "input[id=msp]", "\(a) \(d)")
-                                        self.eval("window.__msReset(); window.__msClick(); 'ok'") { _ in
-                                            self.eval(pass) { _ in
-                                                self.eval("window.__msStage") { st2 in
-                                                    ok("«Пройти шаг» на экране без полей жмёт кнопку", (st2 as? Int) == 2, "стадия \(st2 ?? "?")")
-                                                    then()
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Запись входа при настоящем входе (TeachRecorder). Изоляция: страница
-    /// не видит обработчик и не может включить запись сама. Запись: ошибся
-    /// паролем, нажал «показать пароль», ввёл верный, потом код и капчу, потом
-    /// «Да» — должно получиться ровно три окна. Движок по записанному
-    /// проходит форму, а на пустой капче (fill manual) останавливается.
-    private func checkTeach(_ then: @escaping () -> Void) {
-        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
-            if cond { print("  [ OK ] \(name)") }
-            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
-        }
-        guard let rec = teach else { ok("запись входа установлена", false); then(); return }
-        checkCameraQR(ok)
-
-        // Секрет TOTP принимается только по введённому коду.
-        let rfc = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
-        let t0 = Date(timeIntervalSince1970: 1_111_111_109)
-        let c0 = TOTP.code(secretBase32: rfc, at: t0) ?? ""
-        ok("секрет TOTP: даёт введённый код — принят", TeachDialog.secretMatches(rfc, code: c0, at: t0.addingTimeInterval(20)))
-        ok("секрет TOTP: запись с пробелами и строчными — тот же секрет",
-           TeachDialog.secretMatches("gezd gnbv gy3t qojq gezd gnbv gy3t qojq", code: c0, at: t0))
-        ok("секрет TOTP: чужой секрет — отвергнут", !TeachDialog.secretMatches("JBSWY3DPEHPK3PXP", code: c0, at: t0))
-        ok("секрет TOTP: код трёхминутной давности — отвергнут", !TeachDialog.secretMatches(rfc, code: c0, at: t0.addingTimeInterval(180)))
-        // Параметры кода (RFC 6238): запись со своими параметрами из ссылки,
-        // параметры голого секрета — по введённому коду, HOTP — нет.
-        let s256 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA"
-        let s512 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA"
-        let p256 = TOTPParams(algorithm: "SHA256", digits: 8, period: 60)
-        let c256 = TOTP.code(secretBase32: s256, at: t0, params: p256) ?? ""
-        if let e = (try? QRImport.parse("otpauth://totp/VPN:alice?secret=\(s256)&algorithm=SHA256&digits=8&period=60"))?.first {
-            ok("параметры: ссылка otpauth с SHA256, 8 цифр, 60 с — запись подходит",
-               TeachDialog.entryMatches(e, code: c256, at: t0.addingTimeInterval(40)), e.params.label)
-        } else { ok("параметры: ссылка otpauth разобрана", false, "") }
-        let p512 = TOTPParams(algorithm: "SHA512", digits: 8, period: 60)
-        let c512 = TOTP.code(secretBase32: s512, at: t0, params: p512) ?? ""
-        let found = TeachDialog.matchParams(s512, code: c512, at: t0)
-        ok("параметры: у голого секрета определены по введённому коду", found == p512, found?.label ?? "не определены")
-        if let h = (try? QRImport.parse("otpauth://hotp/VPN:alice?secret=\(rfc)&counter=1"))?.first {
-            ok("параметры: HOTP не принимается", !TeachDialog.entryMatches(h, code: c0, at: t0), "")
-        }
-        ok("параметры: MD5 не поддерживается", !TOTPParams(algorithm: "MD5").isSupported, "")
-        let line = KeychainWriter.line(service: "ru.ocbar.client", account: "alice", label: "ocbar-VPN-password", secret: "a b\"") ?? ""
-        ok("связка: значение идёт шестнадцатеричной строкой, не в открытом виде",
-           line.contains("-X 61206222") && !line.contains("a b"), line)
-        ok("связка: имя сервиса с пробелом отвергнуто",
-           KeychainWriter.line(service: "ru ocbar", account: "alice", label: "x", secret: "p") == nil)
-
-        rec.enabled = false
-        rec.apply(to: webView)                       // флаг в изолированном мире — выключен
-        rec.enabled = true                           // приложение готово принять, но страница не включит
-        eval("""
-        window.__ocbarSet(false, 'auto'); window.__teachReset();
-        var seen = typeof (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ocbarTeach);
-        window.__ocbarTeachOn = true;
-        document.getElementById('tu').value = 'alice'; document.getElementById('tp').value = 'верный';
-        document.getElementById('tgo').click();
-        seen
-        """) { seen in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                ok("изоляция: страница не видит обработчик записи", (seen as? String) == "undefined", "\(seen ?? "?")")
-                ok("изоляция: страница не включает запись сама", rec.steps.isEmpty, "\(rec.steps.count) окон")
-                rec.apply(to: self.webView)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.checkTeachCapture(rec, ok, then) }
-            }
-        }
-    }
-
-    /// QR с камеры — без камеры: кадр собирается в памяти так, как его отдала
-    /// бы камера (BGRA 1280×720, QR экспорта Google Authenticator на две
-    /// записи наклонён и смещён), и идёт тем же путём, что настоящие кадры.
-    private func checkCameraQR(_ ok: (String, Bool, String) -> Void) {
-        let ours = Data((0..<20).map { UInt8(truncatingIfNeeded: $0 &* 7 &+ 3) })
-        let other = Data((0..<20).map { UInt8(truncatingIfNeeded: $0 &* 13 &+ 1) })
-        let payload = Self.migrationPayload([(other, "someone@example.com", "Другое"), (ours, "alice", "VPN")])
-        let at = Date()
-        let code = TOTP.code(secretBase32: QRImport.base32Encode(ours), at: at) ?? ""
-        guard let frame = Self.cameraFrame(qr: payload) else { ok("камера: кадр собран", false, ""); return }
-        let found = QRCameraScanner.payloads(pixelBuffer: frame)
-        ok("камера: QR найден на кадре 1280×720, наклонён и смещён", found == [payload], "строк: \(found.count)")
-        let entries = found.flatMap { (try? QRImport.parse($0)) ?? [] }
-        ok("камера: экспорт Google Authenticator разобран, записей две", entries.count == 2, "\(entries.count)")
-        let fit = entries.filter { QRCameraWindow.fits($0, code: code, at: at) }
-        ok("камера: нужная запись выбрана по введённому коду", fit.count == 1 && fit.first?.name == "alice",
-           fit.map(\.name).joined(separator: ", "))
-        let empty = Self.cameraFrame(qr: nil).map { QRCameraScanner.payloads(pixelBuffer: $0) } ?? ["?"]
-        ok("камера: кадр без QR — пусто", empty.isEmpty, "\(empty)")
-    }
-
-    /// Экспорт Google Authenticator: otpauth-migration с protobuf внутри —
-    /// ровно то, что показывает «Перенос аккаунтов → Экспорт».
-    static func migrationPayload(_ items: [(Data, String, String)]) -> String {
-        func varint(_ value: Int) -> Data {
-            var v = value, d = Data()
-            repeat { var b = UInt8(v & 0x7f); v >>= 7; if v != 0 { b |= 0x80 }; d.append(b) } while v != 0
-            return d
-        }
-        func bytes(_ n: Int, _ b: Data) -> Data { varint(n << 3 | 2) + varint(b.count) + b }
-        func number(_ n: Int, _ v: Int) -> Data { varint(n << 3) + varint(v) }
-        var payload = Data()
-        for (secret, name, issuer) in items {
-            let p = bytes(1, secret) + bytes(2, Data(name.utf8)) + bytes(3, Data(issuer.utf8))
-                + number(4, 1) + number(5, 1) + number(6, 2)
-            payload += bytes(1, p)
-        }
-        payload += number(2, 1) + number(3, 1) + number(4, 0) + number(5, 0)
-        let b64 = payload.base64EncodedString()
-        return "otpauth-migration://offline?data=" + (b64.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? b64)
-    }
-
-    /// Кадр, как его отдаёт камера: BGRA 1280×720, серый фон, QR в белой
-    /// рамке, как на экране телефона, наклонён и не по центру.
-    static func cameraFrame(qr payload: String?) -> CVPixelBuffer? {
-        var pb: CVPixelBuffer?
-        let attrs = [kCVPixelBufferCGImageCompatibilityKey: true, kCVPixelBufferCGBitmapContextCompatibilityKey: true] as CFDictionary
-        guard CVPixelBufferCreate(nil, 1280, 720, kCVPixelFormatType_32BGRA, attrs, &pb) == kCVReturnSuccess,
-              let buf = pb else { return nil }
-        var img = CIImage(color: CIColor(red: 0.35, green: 0.37, blue: 0.40)).cropped(to: CGRect(x: 0, y: 0, width: 1280, height: 720))
-        if let payload, let f = CIFilter(name: "CIQRCodeGenerator") {
-            f.setValue(Data(payload.utf8), forKey: "inputMessage")
-            f.setValue("M", forKey: "inputCorrectionLevel")
-            if var q = f.outputImage {
-                q = q.samplingNearest().transformed(by: CGAffineTransform(scaleX: 320 / q.extent.width, y: 320 / q.extent.width))
-                q = q.composited(over: CIImage(color: .white).cropped(to: q.extent.insetBy(dx: -24, dy: -24)))
-                let r = q.transformed(by: CGAffineTransform(rotationAngle: 0.14))
-                img = r.transformed(by: CGAffineTransform(translationX: 760 - r.extent.minX, y: 150 - r.extent.minY)).composited(over: img)
-            }
-        }
-        CIContext().render(img, to: buf)
-        return buf
-    }
-
-    private func checkTeachCapture(_ rec: TeachRecorder, _ ok: @escaping (String, Bool, String) -> Void,
-                                   _ then: @escaping () -> Void) {
-        let human = """
-        window.__teachReset();
-        var u = document.getElementById('tu'), p = document.getElementById('tp');
-        u.value = 'alice'; p.value = 'не "тот" пароль';
-        document.getElementById('teye').click();
-        document.getElementById('tgo').click();
-        p.value = 'верный "пароль" с пробелом';
-        document.getElementById('tgo').click();
-        document.getElementById('tc').value = '123456';
-        document.getElementById('tcap').value = 'xk3p';
-        document.getElementById('tok').click();
-        document.getElementById('tkmsi').click();
-        String(window.__teachDone)
-        """
-        eval(human) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                let st = rec.steps
-                let shape = st.map { s in s.fields.map { "\($0.kind) \($0.selector)" }.joined(separator: ", ") + " → " + (s.button ?? "-") }
-                ok("запись: три окна — «глаз» и повтор после ошибки не плодят шаги",
-                   shape == ["username input[id=tu], password input[id=tp] → button[id=tgo]",
-                             "totp input[id=tc], manual input[id=tcap] → input[id=tok]",
-                             " → input[id=tkmsi]"], shape.joined(separator: " | "))
-                ok("запись: логин узнан по совпадению с логином профиля",
-                   st.first?.fields.first?.why == "введён логин профиля", "")
-                ok("запись: сохранится последний, верный пароль", rec.password == "верный \"пароль\" с пробелом", "")
-                ok("запись: введённый код запомнен для проверки секрета", rec.code == "123456", "")
-                let text = rec.rulesText(portal: "example.test")
-                let body = text.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
-                    .split(separator: "\n").map(String.init)
-                let want = ["# шаг 1 — example.test/", "fill  username input[id=tu]", "fill  password input[id=tp]",
-                            "click button[id=tgo]", "# шаг 2 — example.test/", "fill  totp input[id=tc]",
-                            "fill  manual input[id=tcap]", "click input[id=tok]", "# шаг 3 — example.test/",
-                            "click! input[id=tkmsi]"]
-                ok("запись: правила — окна по порядку, признаки ошибки из встроенного набора впереди",
-                   Array(body.drop { $0.hasPrefix("stop") }) == want && body.prefix { $0.hasPrefix("stop") }.count >= 3,
-                   body.joined(separator: " | "))
-                let run = Autofill.script(rules: Autofill.parse(text: text),
-                                          creds: Credentials(username: "alice", password: "верный \"пароль\" с пробелом", totpSecret: nil),
-                                          totpCode: "123456")
-                // Сначала на странице видна ошибка входа: встроенные признаки,
-                // добавленные к записанному, должны остановить движок — иначе
-                // пароль ушёл бы снова. Потом ошибку убираем и проходим форму.
-                self.eval("window.__teachReset(); document.getElementById('passwordError').style.display = ''; 'ok'") { _ in
-                  self.eval(run) { r0 in
-                    let d0 = r0 as? [String: Any] ?? [:]
-                    ok("движок по записанному: видна ошибка входа — стоит, пароль не уходит",
-                       d0["stopped"] != nil && d0["clicked"] == nil, "\(d0)")
-                    self.eval("window.__teachReset(); document.getElementById('passwordError').style.display = 'none'; 'ok'") { _ in
-                    self.eval(run) { r1 in
-                        let d1 = r1 as? [String: Any] ?? [:]
-                        self.eval(run) { r2 in
-                            let d2 = r2 as? [String: Any] ?? [:]
-                            ok("движок по записанному: окно 1 пройдено", (d1["clicked"] as? String) == "button[id=tgo]", "\(d1)")
-                            ok("движок по записанному: на пустой капче стоит и ждёт человека",
-                               d2["clicked"] == nil && (d2["waiting"] as? String) == "input[id=tcap]", "\(d2)")
-                            self.eval("document.getElementById('tcap').value = 'xk3p'; document.getElementById('tok').click(); 'ok'") { _ in
-                                self.eval(run) { _ in
-                                    self.eval("String(window.__teachDone)") { done in
-                                        ok("движок по записанному: после человека — «Да» на экране без полей",
-                                           (done as? String) == "true", "\(done ?? "?")")
-                                        rec.enabled = false
-                                        rec.apply(to: self.webView)
-                                        rec.forgetSecrets()
-                                        self.eval("document.getElementById('passwordError').style.display = ''; 'ok'") { _ in then() }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    }
-                  }
-                }
-            }
-        }
-    }
-
-    private func checkClick() {
-        webView.evaluateJavaScript("""
-        window.__ocbarSet(true, 'click');
-        window.__ocbarSubmitted = false;
-        document.querySelector('#kc-login').addEventListener('click', function(){ window.__ocbarSubmitted = true; });
-        document.querySelector('#lbl').dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
-        'ok'
-        """) { _, _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                guard let self else { return }
-                if self.clickSelector == "button[id=kc-login]" {
-                    print("  [ OK ] щелчок дошёл до приложения: \(self.clickSelector ?? "")")
-                } else {
-                    print("  [FAIL] щелчок не дошёл (получено: \(self.clickSelector ?? "ничего"))")
-                    self.failures += 1
-                }
-                self.webView.evaluateJavaScript("window.__ocbarSubmitted") { v, _ in
-                    if (v as? Bool) == false {
-                        print("  [ OK ] кнопка при этом не нажалась")
-                    } else {
-                        print("  [FAIL] щелчок разметки нажал кнопку — форма ушла бы")
-                        self.failures += 1
-                    }
-                    print(self.failures == 0 ? "learn-selftest: всё OK" : "learn-selftest: провалов \(self.failures)")
-                    self.done(self.failures == 0 ? 0 : 1)
-                }
-            }
-        }
-    }
-
-    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        messages += 1
-        clickSelector = (message.body as? [String: Any])?["selector"] as? String
-    }
-}

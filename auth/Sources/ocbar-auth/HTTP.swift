@@ -101,7 +101,7 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
             req.httpMethod = "GET"
             headers(&req)
             let r = try once(req)
-            Log.debug("GET \(target.absoluteString) → \(r.status)\(r.location.map { " Location: \($0)" } ?? "")")
+            Log.debug("GET \(Log.redact(target)) → \(r.status)\(r.location.map { " Location: \(Log.redact($0))" } ?? "")")
             if (301...308).contains(r.status), let loc = r.location,
                let next = URL(string: loc, relativeTo: target)?.absoluteURL {
                 try requireSecure(next)
@@ -126,7 +126,7 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
             headers(&req)
 
             let r = try once(req)
-            Log.debug("POST \(target.absoluteString) → \(r.status), \(r.body.count) байт")
+            Log.debug("POST \(Log.redact(target)) → \(r.status), \(r.body.count) байт")
             if (301...308).contains(r.status), let loc = r.location,
                let next = URL(string: loc, relativeTo: target)?.absoluteURL {
                 // Тело этого POST содержит sso-token. Уйти по редиректу на
@@ -138,7 +138,9 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
             }
             guard r.status == 200 else {
                 if let s = String(data: r.body, encoding: .utf8), !s.isEmpty {
-                    Log.debug("тело ответа: \(s.prefix(600))")
+                    // Сначала mask, потом обрезка: обрезанный тег с токеном
+                    // mask уже не узнал бы.
+                    Log.debug("тело ответа: \(mask(s).prefix(600))")
                 }
                 throw ProtocolError.http(r.status)
             }

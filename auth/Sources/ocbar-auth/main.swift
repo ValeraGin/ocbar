@@ -4,11 +4,7 @@ import Foundation
 // ocbar-auth — аутентификатор Cisco AnyConnect в режиме single-sign-on-v2.
 // Автор: ValeraGin — Ignatkovich Valery. Лицензия MIT.
 //
-// Режимы:
-//   (по умолчанию)  пройти SSO, напечатать JSON {session_token, server_cert_hash, url}
-//   --probe         шаги 1–3 протокола без окна и учётных данных
-//   --dump-script   напечатать JS автозаполнения по правилам
-//   --selftest      TOTP по векторам RFC 6238 и разбор XML
+// Режимы и опции — в usage() ниже: справка там же, где разбор аргументов.
 //
 // Секреты — только через окружение: OCBAR_USERNAME, OCBAR_PASSWORD,
 // OCBAR_TOTP_SECRET (base32) или OCBAR_TOTP_CODE (уже посчитанный).
@@ -52,29 +48,55 @@ func usage() -> String {
     """
     ocbar-auth --url https://host/group [опции]
 
-      --probe               шаги init без окна: что предлагает шлюз
-      --dump-script         напечатать JS автозаполнения (с плейсхолдерами)
-      --selftest            проверить TOTP (RFC 6238) и разбор XML
+    Без режима — вход: init у шлюза, окно SSO, auth-reply; в stdout JSON
+    {session_token, server_cert_hash, url, post_url, host}.
+
+    Режимы:
+      --probe               шаги init без окна: что предлагает шлюз (с --json — JSON)
+      --dump-script         напечатать JS автозаполнения по --rules или встроенному
+                            набору (данные — плейсхолдеры); с --fill-hosts —
+                            вместе с проверкой хоста
+      --selftest            самопроверка без WebKit и сети: TOTP (RFC 6238),
+                            разбор XML, лимиты автозаполнения, журнал, QR, хосты
+                            и cookie, пароль при записи входа
+      --learn-selftest      самопроверка разметки, записи входа и движка на
+                            странице-образце в WebView вне экрана; окон не открывает
       --import-qr FILE      прочитать TOTP-секрет из QR (в том числе экспорт
                             Google Authenticator); печатает метаданные и код
                             для сверки, сам секрет — только с --print-secret
-      --print-secret        вывести секрет в stdout (для ocbar secret import)
-      --list                показать все записи в QR и выйти
-      --select ПОДСТРОКА    выбрать запись по issuer/имени (иначе — первая TOTP)
-      --learn               режим обучения: открыть форму входа и показать
-                            мышью, где логин, пароль, код и кнопка, — правила
-                            составятся сами (--out куда записать); форма в
-                            несколько окон проходится кнопкой «Пройти шаг»
+        --list              показать все записи в QR и выйти
+        --select ПОДСТРОКА  выбрать запись по issuer/имени; подходит несколько —
+                            отказ (код 1). Без --select при нескольких записях
+                            TOTP — тоже отказ: молча брать первую нельзя
+        --print-secret      вывести секрет в stdout (для ocbar secret import)
+        --print-params      вывести «TOTP|HOTP алгоритм цифры период» записи —
+                            решить, годится ли она, до того как класть секрет
+      --totp-now            напечатать текущий код из OCBAR_TOTP_SECRET с
+                            параметрами OCBAR_TOTP_*; OCBAR_TOTP_AT — момент (unix)
+      --learn               разметка: открыть форму входа и показать мышью, где
+                            логин, пароль, код и кнопка, — правила составятся
+                            сами; форма в несколько окон проходится кнопкой
+                            «Пройти шаг»
+        --out FILE          куда записать правила (иначе — в stdout)
       --learn-probe         открыть форму входа без окна и напечатать, что
                             предзаполнение разметки узнало бы; ничего не жмёт
-      --out FILE            файл для --learn (иначе печать в stdout)
-      --teach-out FILE      при входе показать галочку «Запомнить, как я вхожу»;
-                            после входа предложить сохранить правила, пароль и
-                            источник кода, итог (без секретов) — в FILE
+      --teach-dialog-shot FILE   снимок окна «Запомнить для следующего входа?»
+                            в PNG, без показа и без записи в связку ключей
+      --camera-window-shot FILE  снимок окна камеры в PNG; камера не включается
+      -h, --help            эта справка
+
+    Опции входа:
+      --teach-out FILE      показать галочку «Запомнить, как я вхожу»; после входа
+                            предложить сохранить правила, пароль и источник кода,
+                            итог (без секретов) — в FILE
       --teach-on            галочка включена сразу
-      --rules FILE          правила автозаполнения (см. etc/autofill.rules)
+      --rules FILE          правила автозаполнения; формат —
+                            etc/autofill.rules.example; без файла — встроенный набор
       --no-autofill         не заполнять форму
-      --fill-hosts a,b      заполнять только на этих хостах (иначе — на любом)
+      --fill-hosts a,b      заполнять только на этих хостах и их поддоменах
+                            (IdpHosts). Без него — только на хостах цепочки
+                            входа: шлюз, куда он перенаправил при старте входа,
+                            и куда человек перешёл сам. Всегда только по https
       --device-id ID        значение <device-id> (по умолчанию mac-intel)
       --useragent UA        User-Agent (по умолчанию AnyConnect Windows 4.10.06079)
       --version V           версия клиента в <version> (по умолчанию 4.10.06079)
@@ -83,9 +105,12 @@ func usage() -> String {
       --always-show         показать окно сразу
       --no-window           никогда не показывать окно: если вход требует
                             человека, выйти с кодом 5, ничего не показав
-      --insecure            не проверять TLS-сертификат шлюза
+      --insecure            не проверять TLS-сертификат шлюза — только хоста
+                            шлюза; страницы провайдера входа, где вводится
+                            пароль, проверяются всегда
       --json                --probe в JSON
-      --verbose             подробный лог в stderr
+      --verbose, -v         подробный журнал в stderr (токены скрыты, адреса
+                            страниц — без query)
 
     Окружение: OCBAR_USERNAME, OCBAR_PASSWORD, OCBAR_TOTP_SECRET | OCBAR_TOTP_CODE;
     параметры кода для секрета — OCBAR_TOTP_ALGORITHM (SHA1|SHA256|SHA512),
@@ -149,28 +174,6 @@ func parseArgs() -> Args {
 
 func out(_ s: String) { FileHandle.standardOutput.write(Data((s + "\n").utf8)) }
 
-/// Прячет значения токенов в отладочной печати. Тело auth-reply содержит
-/// рабочий session-token, а супервизор пишет весь вывод в журнал, который
-/// живёт до ротации.
-func mask(_ s: String) -> String {
-    var out = s
-    for tag in ["session-token", "sso-token", "session-id"] {
-        // Ищем заново на каждой итерации: строка меняется, старые индексы
-        // после замены недействительны.
-        while let open = out.range(of: "<\(tag)>"),
-              let close = out.range(of: "</\(tag)>", range: open.upperBound..<out.endIndex),
-              open.upperBound < close.lowerBound {
-            let n = out.distance(from: open.upperBound, to: close.lowerBound)
-            guard n > 0 else { break }
-            out.replaceSubrange(open.upperBound..<close.lowerBound, with: "\(n) символов скрыто")
-            // Дальше искать нечего: следующий поиск найдёт уже замаскированное
-            // и n станет нулём, поэтому выходим сразу.
-            break
-        }
-    }
-    return out
-}
-
 func jsonString(_ obj: Any) -> String {
     let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data("{}".utf8)
     return String(data: data, encoding: .utf8) ?? "{}"
@@ -211,7 +214,7 @@ func runInit(_ a: Args, http: HTTPClient) throws -> InitResult {
         (data, postURL) = try http.post(postURL, body: body)
     }
     if a.verbose, let s = String(data: data, encoding: .utf8) {
-        Log.debug("ответ init:\n\(s)")
+        Log.debug("ответ init:\n\(mask(s))")
     }
     let req = try VPNProtocol.parseAuthRequest(data)
     return InitResult(groupURL: groupURL, postURL: postURL, hops: hops, raw: data, request: req,
@@ -291,6 +294,27 @@ if args.selfTest {
         out("  разбор complete: token=\(c.sessionToken) hash=\(c.serverCertHash)  \(ok ? "OK" : "FAIL")")
         if !ok { failed += 1 }
     } catch { out("  FAIL: \(error)"); failed += 1 }
+    failed += AuthSelfTest.run()
+    // Справка: каждый флаг из parseArgs описан, и описан правдиво. Новый
+    // флаг — сюда же.
+    out("Справка --help:")
+    let help = usage()
+    let flags = ["--url", "--useragent", "--version", "--device-id", "--rules", "--timeout", "--show-after",
+                 "--always-show", "--no-window", "--no-autofill", "--fill-hosts", "--probe", "--dump-script",
+                 "--selftest", "--import-qr", "--print-secret", "--print-params", "--list", "--totp-now",
+                 "--learn", "--learn-selftest", "--learn-probe", "--teach-out", "--teach-on",
+                 "--teach-dialog-shot", "--camera-window-shot", "--out", "--select", "--json", "--insecure",
+                 "--verbose", "-v", "--help", "-h"]
+    let missing = flags.filter { f in
+        help.range(of: "(^|[\\s,])" + NSRegularExpression.escapedPattern(for: f) + "($|[\\s,])", options: .regularExpression) == nil
+    }
+    let helpOK = missing.isEmpty
+        && help.contains("etc/autofill.rules.example")
+        && help.contains("подходит несколько")
+        && !help.contains("иначе — первая TOTP") && !help.contains("иначе — на любом")
+        && help.contains("только хоста")
+    out("  все флаги описаны, --select отказывает при нескольких, --rules → etc/autofill.rules.example  \(helpOK ? "OK" : "FAIL \(missing)")")
+    if !helpOK { failed += 1 }
     out(failed == 0 ? "selftest: всё OK" : "selftest: провалов \(failed)")
     exit(failed == 0 ? 0 : 1)
 }
@@ -362,7 +386,8 @@ if let qr = args.importQR {
 if args.dumpScript {
     let rules: [AutofillRule] = args.rulesFile.map { Autofill.parse(file: $0) } ?? Autofill.defaultRules
     let creds = Credentials(username: "USERNAME", password: "PASSWORD", totpSecret: nil)
-    out(Autofill.script(rules: rules, creds: creds, totpCode: "TOTP"))
+    let allowed = args.fillHosts.isEmpty ? nil : FillScope(explicit: args.fillHosts, gatewayHosts: []).jsAllowed
+    out(Autofill.script(rules: rules, creds: creds, totpCode: "TOTP", allowed: allowed))
     exit(0)
 }
 
@@ -537,7 +562,7 @@ DispatchQueue.global().async {
                 opts.totpSecret = secret    // считаем в момент заполнения
             }
         }
-        opts.cookieDomain = r.postURL.host
+        opts.gatewayHosts = [r.postURL.host, r.groupURL.host].compactMap { $0 }
         opts.fillHosts = args.fillHosts
         opts.teach = args.teachOut != nil && !args.noWindow
         opts.teachOn = args.teachOn
