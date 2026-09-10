@@ -168,6 +168,20 @@ ocproxy_bin() {
 
 # Привилегированная операция → хелпер. stdin пробрасывается как есть.
 priv() {
+    # Самопроверка подкладывает заглушку хелпера: настоящий хелпер она не
+    # зовёт никогда — ни от root, ни с --dry-run. Заглушка работает от
+    # пользователя, sudo здесь нет.
+    if [ -n "${OCBAR_SELFTEST_HELPER:-}" ]; then
+        local -a dr=(); [ "$DRY_RUN" = 1 ] && dr=(--dry-run)
+        OCBAR_STATE_DIR="$STATE_DIR" "$OCBAR_SELFTEST_HELPER" "${dr[@]+"${dr[@]}"}" "$@"
+        return
+    fi
+    # sudo сбрасывает окружение: хелпер от root работал бы по настоящему
+    # каталогу состояния, а не по подставленному. «Изолированный» запуск с
+    # OCBAR_STATE_DIR так однажды чуть не снял маршрут живого туннеля.
+    if [ "$DRY_RUN" != 1 ] && [ -n "${OCBAR_STATE_DIR:-}" ]; then
+        die "задан OCBAR_STATE_DIR ($OCBAR_STATE_DIR), а хелпер от root его не увидит — не зову; для опытов есть --dry-run"
+    fi
     local h; h=$(helper_path) || die "не найден ocbar-helper (ни $HELPER_INSTALLED, ни в libexec/ рядом)"
     if [ "$DRY_RUN" = 1 ]; then
         printf '  %s$ sudo ocbar-helper %s%s\n' "$c_dim" "$*" "$c_off"
@@ -1521,7 +1535,11 @@ cmd_status() {
         warn "Связь" "не отвечает $(( $(date +%s) - $(cat "$LINK_LOST") )) с — openconnect восстанавливает сессию сам"
     fi
     [ -n "$woke" ] && warn "Сон" "мак просыпался после подключения ($(date -r "$woke" '+%H:%M')) — $(sup_alive && echo 'супервизор проверит туннель сам' || echo 'супервизор не работает, проверьте доступ')"
-    [ -f "$NEEDS_LOGIN" ] && warn "Автоподключение" "остановлено: нужен вход — ocbar connect"
+    if [ -f "$NEEDS_LOGIN" ]; then warn "Автоподключение" "остановлено: нужен вход — ocbar connect"; fi
+    # Показ состояния — не проверка: код 0 при любом состоянии. Ложное условие
+    # последней строкой давало 1, и следом с кодом 1 выходили connect, pause и
+    # resume — они зовут status в конце, а приложение видело «не получилось».
+    return 0
 }
 
 # ---------------------------------------------------------------- routes ----
@@ -1552,9 +1570,17 @@ cmd_routes() {
             if is_off "$2" "$ROUTES_OFF"; then cmd_routes add "$2"; else cmd_routes del "$2"; fi ;;
         apply)
             [ "$(tun_state)" = connected ] || die "туннель не поднят"
-            while read -r n; do [ -n "$n" ] && priv route-add "$n"; done <<< "$(active_networks)" ;;
+            while read -r n; do if [ -n "$n" ]; then priv route-add "$n"; fi; done <<< "$(active_networks)" ;;
         clear)
-            while read -r n; do [ -n "$n" ] && priv route-del "$n"; done <<< "$(read_networks)" ;;
+            # Хелпер от root — только при живом туннеле. Без туннеля маршрутов
+            # туннеля в системе нет, а route-del снял бы совпавшую сеть чужого
+            # VPN. Следы упавшей сессии убирает ocbar cleanup.
+            case "$(tun_state)" in
+                connected|paused)
+                    while read -r n; do if [ -n "$n" ]; then priv route-del "$n"; fi; done <<< "$(read_networks)" ;;
+                *)  info "туннель не поднят — маршрутов туннеля нет, снимать нечего"
+                    if [ -s "$ROUTES_STATE" ]; then info "  в $ROUTES_STATE остались записи прошлой сессии — ocbar cleanup"; fi ;;
+            esac ;;
         *) die "routes: status | add <CIDR> | del <CIDR> | toggle <CIDR> | apply | clear" ;;
     esac
 }
@@ -1600,7 +1626,13 @@ cmd_dns() {
     case "${1:-status}" in
         status) cmd_dns_status ;;
         apply)  cmd_dns_apply ;;
-        clear)  priv dns-clear ;;
+        clear)
+            # Как routes clear: хелпер от root — только если есть что снимать.
+            if [ -n "$(manifest_zones)" ] || { case "$(tun_state)" in connected|paused) true ;; *) false ;; esac; }; then
+                priv dns-clear
+            else
+                info "наших зон в $RESOLVER_DIR нет — снимать нечего"
+            fi ;;
         init)   cmd_dns_init "${2:-}" "${3:-}" ;;
         on|add)
             valid_zone "${2:-}" || die "dns on <зона>"
@@ -1635,8 +1667,9 @@ cmd_profiles() {
         if [ -n "$f" ]; then url=$(pf_get "$f" Connection Url); else url=$(profile_get "$p" url); fi
         printf '  %s %s %s %s  %s\n' "$([ "$p" = "$d" ] && echo '*' || echo ' ')" \
             "$(pad "$p" 18)" "$(pad "$nm" 20)" "$url" "$au"
-        [ -n "$ds" ] && printf '      %s%s%s\n' "$c_dim" "$ds" "$c_off"
+        if [ -n "$ds" ]; then printf '      %s%s%s\n' "$c_dim" "$ds" "$c_off"; fi
     done <<< "$(profiles_summary)"
+    return 0
 }
 
 # ------------------------------------------------------------- песочница ----
@@ -1887,24 +1920,26 @@ no_pause_in_proxy() {
 
 cmd_pause() {
     no_pause_in_proxy
-    require_fresh_helper
+    # Сначала состояние, потом версия хелпера: без сессии хелпер не нужен
+    # вовсе, и спрашивать его незачем.
     case "$(tun_state)" in
         paused)    info "уже на паузе"; return 0 ;;
         connected) ;;
         *) die "туннель не поднят — паузить нечего" ;;
     esac
+    require_fresh_helper
     priv suspend
     [ "$DRY_RUN" = 1 ] || { log "пауза"; notify "ocbar: пауза" "Маршруты и зоны сняты, туннель и вход сохранены"; cmd_status; }
 }
 
 cmd_resume() {
     no_pause_in_proxy
-    require_fresh_helper
     case "$(tun_state)" in
         paused) ;;
         connected) info "паузы нет, всё уже на месте"; return 0 ;;
         *) die "туннель не поднят — возобновлять нечего" ;;
     esac
+    require_fresh_helper
     priv resume
     [ "$DRY_RUN" = 1 ] || { log "возобновлено"; notify "ocbar: возобновлено" "Маршруты и зоны вернулись"; report_health || true; cmd_status; }
 }
@@ -2203,13 +2238,16 @@ cmd_supervisor() {
         status)
             if launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then ok "LaunchAgent" "загружен"; else warn "LaunchAgent" "не загружен"; fi
             sup_alive && ok "Процесс" "pid $(cat "$SUP_PID")" || skip "Процесс" "не работает"
-            [ -f "$SUP_LOG" ] && { info ""; info "Последние записи:"; tail -5 "$SUP_LOG" | sed 's/^/  /'; } ;;
+            if [ -f "$SUP_LOG" ]; then info ""; info "Последние записи:"; tail -5 "$SUP_LOG" | sed 's/^/  /'; fi ;;
         start)
             [ -f "$AGENT_PLIST" ] || die "нет $AGENT_PLIST — sudo ocbar install"
             launchctl bootstrap "gui/$uid" "$AGENT_PLIST" && ok "агент загружен" ;;
         stop)
-            launchctl bootout "gui/$uid/$AGENT_LABEL" 2>/dev/null
-            info "агент выгружен (туннель это переживёт: openconnect в своей сессии)" ;;
+            if launchctl bootout "gui/$uid/$AGENT_LABEL" 2>/dev/null; then
+                info "агент выгружен (туннель это переживёт: openconnect в своей сессии)"
+            else
+                info "агент не был загружен"
+            fi ;;
         restart)
             if launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then
                 launchctl kickstart -k "gui/$uid/$AGENT_LABEL" && ok "агент перезапущен"
