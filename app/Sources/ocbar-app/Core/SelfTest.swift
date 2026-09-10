@@ -404,6 +404,15 @@ extension SelfTest {
             check("редактор: выбран второй профиль", shows("Бета"))
             check("редактор: разметка доступна после выбора другого профиля", ProfileEditorView.probeLearnEnabled == true,
                   "кнопка " + (ProfileEditorView.probeLearnEnabled.map { $0 ? "доступна" : "серая" } ?? "не отрисована"))
+            // Файл открытого профиля записал кто-то другой (разметка, ocbar
+            // rules): правок в редакторе нет — он должен перечитать файл сам.
+            try? "[Connection]\nName = Бета-2\nUrl = vpn.example.test/b\n\n[Routes]\n10.0.0.0/8\n\n[Auth]\nPassword = ask\nTotp = off\n"
+                .write(toFile: tmp + "/profiles/b.ocbar", atomically: true, encoding: .utf8)
+            let checksBefore = ProfileEditorView.probeDiskChecks
+            settle(3.5)
+            check("редактор: файл, изменённый на диске, перечитан", shows("Бета-2"),
+                  "сверок с диском \(ProfileEditorView.probeDiskChecks - checksBefore), последняя: «\(ProfileEditorView.probeDiskNote)»; поля: "
+                  + views(NSTextField.self).map(\.stringValue).filter { $0.contains("Бета") }.joined(separator: ", "))
         } else {
             check("редактор: список профилей найден", false)
         }
