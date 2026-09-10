@@ -46,7 +46,7 @@ ZONES_OFF="$USER_STATE/zones.disabled"
 # хелпер не участвует, поэтому и состояние живёт в пользовательском каталоге.
 PROXY_ENV="$USER_STATE/proxy.env"        # STATE, PID, PORT, URL, SINCE, IP4…
 PROXY_PID="$USER_STATE/proxy.pid"        # пишет сам openconnect (--pid-file)
-LOG_DIR="$HOME/Library/Logs/ocbar"
+LOG_DIR="${OCBAR_LOG_DIR:-$HOME/Library/Logs/ocbar}"   # OCBAR_LOG_DIR — для самопроверки
 SUP_LOG="$LOG_DIR/supervisor.log"
 PROXY_LOG="$LOG_DIR/openconnect-proxy.log"
 
@@ -116,19 +116,46 @@ rotate_log() { # файл [предел байт] [сколько хранить
     log "лог превысил $((max/1024)) КБ — предыдущий сохранён как $(basename "$f").1"
 }
 
-# Уведомление системы. Если приложение меню-бара запущено — через него, по
-# URL-схеме ocbar://notify: тогда уведомление приходит с именем и иконкой
-# ocbar, а не от «Script Editor». Без приложения — osascript, как раньше.
+# Уведомление системы. Через приложение меню-бара (URL-схема ocbar://notify,
+# D50) — только если оно запущено, система разрешила ему уведомления и есть
+# его токен. Приложение при запуске кладёт в USER_STATE notify.token (0600,
+# одна строка hex; адрес без верного токена оно отбрасывает — чужие
+# программы и страницы в браузере не покажут уведомление от имени ocbar) и
+# notify.allowed («1» — разрешены). Иначе — osascript: раньше при запрещённых
+# уведомлениях клиент считал уведомление доставленным, и «нужен вход» молча
+# пропадал.
+notify_token() {
+    local f="$USER_STATE/notify.token" t=""
+    [ -f "$f" ] && [ -O "$f" ] || return 0
+    case "$(stat -f %Lp "$f" 2>/dev/null)" in 600|400) ;; *) return 0 ;; esac
+    IFS= read -r t < "$f" || true
+    t=${t%$'\r'}
+    case "$t" in ''|*[!0-9a-fA-F]*) return 0 ;; esac
+    [ "${#t}" -ge 16 ] || return 0
+    printf '%s' "$t"
+}
+# Куда пойдёт уведомление: «app <адрес>» или «osascript». Решение отдельно от
+# показа, чтобы самопроверка проверяла его, ничего не показывая.
+# OCBAR_SELFTEST_APP=1|0 подменяет «запущено ли приложение» — только для неё.
+notify_route() { # заголовок, текст
+    local running="${OCBAR_SELFTEST_APP:-}" allowed tok url=""
+    if [ -z "$running" ]; then if [ -n "$(app_pid)" ]; then running=1; else running=0; fi; fi
+    allowed=$(head -1 "$USER_STATE/notify.allowed" 2>/dev/null | tr -d '[:space:]' || true)
+    tok=$(notify_token)
+    if [ "$running" = 1 ] && [ "$allowed" = 1 ] && [ -n "$tok" ]; then
+        url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2], "token": sys.argv[3]}))' "$1" "$2" "$tok" 2>/dev/null || true)
+    fi
+    if [ -n "$url" ]; then printf 'app %s\n' "$url"; else printf 'osascript\n'; fi
+}
 # Текст передаётся аргументом, а не подстановкой в текст скрипта: иначе
 # кавычки в сообщении ломают osascript.
 notify() { # заголовок, текст
     [ "${OCBAR_NOTIFY:-1}" = 1 ] || return 0
     [ "$NOTIFY_ENABLED" = 0 ] && return 0
-    if [ -n "$(app_pid)" ]; then
-        local url
-        url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2]}))' "$1" "$2" 2>/dev/null)
-        [ -n "$url" ] && open -g "$url" >/dev/null 2>&1 && return 0
-    fi
+    local r; r=$(notify_route "$1" "$2")
+    case "$r" in
+        "app "*) if open -g "${r#app }" >/dev/null 2>&1; then return 0; fi ;;
+    esac
     osascript - "$1" "$2" >/dev/null 2>&1 <<'AS' || true
 on run argv
     display notification (item 2 of argv) with title (item 1 of argv)
@@ -183,6 +210,20 @@ ocproxy_bin() {
 
 # Привилегированная операция → хелпер. stdin пробрасывается как есть.
 priv() {
+    # Самопроверка подкладывает заглушку хелпера: настоящий хелпер она не
+    # зовёт никогда — ни от root, ни с --dry-run. Заглушка работает от
+    # пользователя, sudo здесь нет.
+    if [ -n "${OCBAR_SELFTEST_HELPER:-}" ]; then
+        local -a dr=(); [ "$DRY_RUN" = 1 ] && dr=(--dry-run)
+        OCBAR_STATE_DIR="$STATE_DIR" "$OCBAR_SELFTEST_HELPER" "${dr[@]+"${dr[@]}"}" "$@"
+        return
+    fi
+    # sudo сбрасывает окружение: хелпер от root работал бы по настоящему
+    # каталогу состояния, а не по подставленному. «Изолированный» запуск с
+    # OCBAR_STATE_DIR так однажды чуть не снял маршрут живого туннеля.
+    if [ "$DRY_RUN" != 1 ] && [ -n "${OCBAR_STATE_DIR:-}" ]; then
+        die "задан OCBAR_STATE_DIR ($OCBAR_STATE_DIR), а хелпер от root его не увидит — не зову; для опытов есть --dry-run"
+    fi
     local h; h=$(helper_path) || die "не найден ocbar-helper (ни $HELPER_INSTALLED, ни в libexec/ рядом)"
     if [ "$DRY_RUN" = 1 ]; then
         printf '  %s$ sudo ocbar-helper %s%s\n' "$c_dim" "$*" "$c_off"
@@ -203,9 +244,16 @@ priv() {
 #                 [имя]  url = host/group  name = …  user = …  mode = split|full
 #                        auth = sso|password  useragent = …  keychain_service = …
 #                        csd_wrapper = /путь  rules = /путь  totp = auto|keepassxc|off
+# Метка порядка байтов в начале файла (её ставят некоторые редакторы). awk и
+# read видят её частью первой строки: «[Connection]» переставал быть
+# заголовком, и профиль терял Url. Возврат каретки (файл из Windows) — туда же.
+BOM=$'\357\273\277'
+
 profile_get() { # имя ключ
     [ -f "$PROFILES" ] || return 0
-    awk -v s="[$1]" -v k="$2" '
+    awk -v s="[$1]" -v k="$2" -v bom="$BOM" '
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
         $0 == s { inside = 1; next }
         /^\[/   { inside = 0 }
         inside && $0 ~ "^[ \t]*" k "[ \t]*=" { sub("^[^=]*=[ \t]*", ""); sub("[ \t]+$", ""); print; exit }
@@ -228,8 +276,9 @@ profile_file() { # имя → путь файла или пусто
 # Значение ключа из указанной секции. Регистр ключа не важен.
 pf_get() { # файл секция ключ
     [ -f "$1" ] || return 0
-    awk -v want="$2" -v key="$3" '
+    awk -v want="$2" -v key="$3" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
         /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
         /^[ \t]*[#;]/ { next }
         {
@@ -245,8 +294,9 @@ pf_get() { # файл секция ключ
 # Все строки секции как есть (для [Routes]) или пары «ключ значение» (для [DNS]).
 pf_section() { # файл секция
     [ -f "$1" ] || return 0
-    awk -v want="$2" '
+    awk -v want="$2" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
         /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
         /^[ \t]*[#;]/ { next }
         {
@@ -266,37 +316,63 @@ pf_section() { # файл секция
 # «ключ значение» их ломает.
 pf_section_raw() { # файл секция [1 — вместе с комментариями: заголовки шагов формы]
     [ -f "$1" ] || return 0
-    awk -v want="$2" -v keep="${3:-0}" '
+    awk -v want="$2" -v keep="${3:-0}" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
         /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
         /^[ \t]*[#;]/ { if (keep != 1) next }
         { line = trim($0); if (line != "" && tolower(sec) == tolower(want)) print line }
     ' "$1"
 }
 
-# Заменить секцию файла целиком: старая секция (с комментариями) убирается,
-# новая дописывается в конец. Остальные секции не трогаются.
+# Заменить секцию файла целиком: старая секция убирается, новая дописывается
+# в конец. Остальные секции не трогаются — вместе с комментариями, стоящими
+# вплотную над заголовком следующей секции: они про неё, а не про заменяемую
+# (раньше пропадали). Пустые строки в хвосте файла не копятся, CRLF и BOM
+# при записи уходят. Код возврата честный: запись не удалась — 1.
 pf_replace_section() { # файл секция содержимое(stdin)
     local f="$1" sec="$2" body; body=$(cat)
     local tmp="$f.tmp"
-    awk -v want="$sec" '
+    awk -v want="$sec" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
-        /^[ \t]*\[/ { s = trim($0); gsub(/^\[|\]$/, "", s); skip = (tolower(s) == tolower(want)); if (skip) next }
-        !skip { print }
-    ' "$f" | awk 'NR==1 || !(prev == "" && $0 == "") { print } { prev = $0 }' > "$tmp"
+        # пустые строки печатаются только перед непустой — хвост не копится
+        function out(line) { while (pend > 0) { print ""; pend-- } print line }
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
+        /^[ \t]*\[/ {
+            if (skip) {
+                k = nb; while (k > 0 && buf[k] ~ /^[ \t]*[#;]/) k--
+                if (k < nb) {
+                    if (k > 0 && buf[k] ~ /^[ \t]*$/ && pend == 0) pend = 1
+                    for (i = k + 1; i <= nb; i++) out(buf[i])
+                }
+                nb = 0
+            }
+            s = trim($0); gsub(/^\[|\]$/, "", s); skip = (tolower(s) == tolower(want))
+            if (skip) next
+            out($0); next
+        }
+        skip { buf[++nb] = $0; next }
+        /^[ \t]*$/ { pend++; next }
+        { out($0) }
+    ' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
     if [ -n "$body" ]; then
-        { [ -s "$tmp" ] && [ -n "$(tail -c1 "$tmp")" ] && printf '\n'; printf '\n[%s]\n%s\n' "$sec" "$body"; } >> "$tmp"
+        { if [ -s "$tmp" ]; then printf '\n'; fi; printf '[%s]\n%s\n' "$sec" "$body"; } >> "$tmp" || { rm -f "$tmp"; return 1; }
     fi
     cp -f "$f" "$f.bak" 2>/dev/null || true
-    mv "$tmp" "$f"; chmod 600 "$f" 2>/dev/null || true
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    chmod 600 "$f" 2>/dev/null || true
+    return 0
 }
 
 # Поставить ключ в секции профиля: заменить, если есть, добавить в конец
 # секции, если нет, завести секцию, если нет и её. Прошлая версия — .bak.
 pf_set_key() { # файл секция ключ значение
     local f="$1" tmp="$1.tmp"
-    awk -v want="$2" -v key="$3" -v val="$4" '
+    awk -v want="$2" -v key="$3" -v val="$4" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
         /^[ \t]*\[/ {
             if (insec && !done) { print key " = " val; done = 1 }
             printf "%s", blank; blank = ""
@@ -313,9 +389,11 @@ pf_set_key() { # файл секция ключ значение
             if (insec && !done) { print key " = " val; done = 1 }
             printf "%s", blank
             if (!seen) { print ""; print "[" want "]"; print key " = " val }
-        }' "$f" > "$tmp"
+        }' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
     cp -f "$f" "$f.bak" 2>/dev/null || true
-    mv "$tmp" "$f"; chmod 600 "$f" 2>/dev/null || true
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    chmod 600 "$f" 2>/dev/null || true
+    return 0
 }
 
 profile_files() { [ -d "$PROFILE_DIR" ] && ls "$PROFILE_DIR"/*.ocbar 2>/dev/null | while read -r f; do basename "$f" .ocbar; done || true; }
@@ -323,13 +401,15 @@ profile_files() { [ -d "$PROFILE_DIR" ] && ls "$PROFILE_DIR"/*.ocbar 2>/dev/null
 # Глобальные ключи из шапки profiles.conf (до первой секции).
 global_get() {
     [ -f "$PROFILES" ] || return 0
-    awk -v k="$1" '/^\[/{exit} $0 ~ "^[ \t]*" k "[ \t]*=" {sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
+    awk -v k="$1" -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/\r$/, "") }
+        /^\[/{exit} $0 ~ "^[ \t]*" k "[ \t]*=" {sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
 }
 
 profile_default() {
     # 1) явный default в старом profiles.conf
     if [ -f "$PROFILES" ]; then
-        local d; d=$(awk '/^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t\r]+$",""); print; exit}' "$PROFILES")
+        local d; d=$(awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/\r$/, "") }
+            /^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES")
         [ -n "$d" ] && { printf '%s' "$d"; return 0; }
     fi
     # 2) файл-профиль с именем default, 3) единственный файл-профиль
@@ -345,27 +425,42 @@ profile_list() {
     # Завершающий `true` обязателен: без него отсутствие profiles.conf делает
     # код группы ненулевым, а с pipefail это рушит весь конвейер — и
     # profile_exists начинает врать «профиля нет» при существующем профиле.
-    { profile_files; [ -f "$PROFILES" ] && sed -n 's/^\[\(.*\)\]$/\1/p' "$PROFILES"; true; } 2>/dev/null \
+    { profile_files
+      [ -f "$PROFILES" ] && awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/\r$/, "") }
+          /^\[.*\]$/ { s = $0; sub(/^\[/, "", s); sub(/\]$/, "", s); print s }' "$PROFILES"
+      true; } 2>/dev/null \
         | awk 'NF && !seen[$0]++'
 }
 
-# "имя|name|auth" по всем профилям за один проход: раньше это было два
-# вызова awk на каждый профиль, то есть шестнадцать процессов на восемь строк.
+# "имя|название|auth|описание" по всем профилям, по строке на профиль.
+# Приложение режет строку по «|» на четыре поля, поэтому «|» внутри поля
+# заменяется на «¦»: иначе черта в названии сдвигала описание в чужое поле.
+# Каждое имя — один раз, профиль-файл важнее одноимённой секции
+# profiles.conf (тот же порядок, что у load_profile): раньше профиль из
+# файла и из profiles.conf выдавался дважды, и меню показывало всё вдвое.
 profiles_summary() {
-    local n f
+    local n f files nm au ds; files=$(profile_files)
     while read -r n; do
         [ -n "$n" ] || continue
-        f=$(profile_file "$n")
-        [ -n "$f" ] && printf '%s|%s|%s|%s\n' "$n" "$(pf_get "$f" Connection Name)" "$(pf_get "$f" Connection Auth)" "$(pf_get "$f" Connection Description)"
-    done <<< "$(profile_files)"
+        f=$(profile_file "$n"); [ -n "$f" ] || continue
+        nm=$(pf_get "$f" Connection Name); au=$(pf_get "$f" Connection Auth); ds=$(pf_get "$f" Connection Description)
+        printf '%s|%s|%s|%s\n' "${n//\|/¦}" "${nm//\|/¦}" "${au//\|/¦}" "${ds//\|/¦}"
+    done <<< "$files"
     [ -f "$PROFILES" ] || return 0
-    awk '
-        function val(line,   v) { v = line; sub("^[^=]*=[ \t]*", "", v); sub("[ \t\r]+$", "", v); return v }
-        /^\[/ { if (cur != "") print cur "|" nm "|" au "|" ds; cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; ds = ""; next }
+    OCBAR_SUMMARY_SKIP="$files" awk -v bom="$BOM" '
+        function val(line,   v) { v = line; sub("^[^=]*=[ \t]*", "", v); sub("[ \t]+$", "", v); return v }
+        function clean(x) { gsub(/\|/, "¦", x); return x }
+        function flush() {
+            if (cur != "" && !(cur in skip) && !seen[cur]++) print clean(cur) "|" clean(nm) "|" clean(au) "|" clean(ds)
+        }
+        BEGIN { n = split(ENVIRON["OCBAR_SUMMARY_SKIP"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") skip[a[i]] = 1 }
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
+        /^\[/ { flush(); cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; ds = ""; next }
         /^[ \t]*name[ \t]*=/        { if (nm == "") nm = val($0) }
         /^[ \t]*auth[ \t]*=/        { if (au == "") au = val($0) }
         /^[ \t]*description[ \t]*=/ { if (ds == "") ds = val($0) }
-        END { if (cur != "") print cur "|" nm "|" au "|" ds }
+        END { flush() }
     ' "$PROFILES"
 }
 profile_exists() { profile_list | grep -Fxq "$1"; }
@@ -563,6 +658,7 @@ read_zones() {
     [ -f "$ZONES_CONF" ] || return 0
     local zone dns port
     while read -r zone dns port _; do
+        zone=${zone#"$BOM"}; zone=${zone%$'\r'}; dns=${dns%$'\r'}; port=${port%$'\r'}
         case "${zone:-}" in ''|\#*) continue ;; esac
         [ -n "${dns:-}" ] || { warn "строка без DNS пропущена: $zone" >&2; continue; }
         valid_zone "$zone" || { warn "недопустимое имя зоны, пропущено: $zone" >&2; continue; }
@@ -586,6 +682,7 @@ read_networks() {
     [ -f "$NETWORKS_CONF" ] || return 0
     local n
     while read -r n _; do
+        n=${n#"$BOM"}; n=${n%$'\r'}
         case "${n:-}" in ''|\#*) continue ;; esac
         valid_cidr "$n" || { warn "некорректная сеть в networks.conf: $n" >&2; continue; }
         # Сеть с маской короче /8 уводит в туннель почти весь трафик. Это
@@ -653,7 +750,8 @@ tunnel_iface() {
     local d; d=$(env_get TUNDEV)
     if [ -n "$d" ] && [ "$(env_get STATE)" = connected ]; then printf '%s' "$d"; return 0; fi
     local n; n=$(read_networks | head -1)
-    [ -n "$n" ] && route_via "$n"
+    if [ -n "$n" ]; then route_via "$n"; fi
+    return 0
 }
 # Куда реально пойдёт трафик этой сети. Раньше здесь разбирался вывод
 # netstat, и это было неверно дважды: бралась не та колонка (у строк с
@@ -862,9 +960,24 @@ set_totp_params() { # алгоритм цифры период
     local k v d kv
     for kv in "TotpAlgorithm $1 SHA1" "TotpDigits $2 6" "TotpPeriod $3 30"; do
         read -r k v d <<< "$kv"
-        if [ "$v" != "$d" ] || [ -n "$(pf_get "$P_FILE" Auth "$k")" ]; then pf_set_key "$P_FILE" Auth "$k" "$v"; fi
+        if [ "$v" != "$d" ] || [ -n "$(pf_get "$P_FILE" Auth "$k")" ]; then pf_set_key "$P_FILE" Auth "$k" "$v" || return 1; fi
     done
     P_TOTP_ALG="$1"; P_TOTP_DIGITS="$2"; P_TOTP_PERIOD="$3"
+    return 0
+}
+
+# Параметры кода из записи QR («TOTP алгоритм цифры период») — в профиль.
+# Отдельно от import-qr, чтобы проверялось без связки ключей (_qr-apply).
+# Секрет к этому моменту уже в связке: ошибка записи профиля — предупреждение
+# с тем, что поставить руками, а не обрыв.
+qr_apply_params() { # строка --print-params
+    local _k _a _d _p; read -r _k _a _d _p <<< "$1"
+    if ! set_totp_params "$_a" "$_d" "$_p"; then
+        warn "параметры кода" "профиль ${P_FILE:-} не записался — поставьте в [Auth]: TotpAlgorithm = $_a, TotpDigits = $_d, TotpPeriod = $_p"
+        return 0
+    fi
+    if [ "$_a/$_d/$_p" != "SHA1/6/30" ]; then ok "параметры кода" "$_a, $_d цифр, $_p с — записаны в профиль [$P_NAME]"; fi
+    return 0
 }
 
 cmd_secret() {
@@ -915,9 +1028,7 @@ cmd_secret() {
             if printf 'add-generic-password -U -s %s -a %s -l %s -w %s\n' \
                    "$P_SVC" "totp/$P_USER" "ocbar-TOTP-$P_USER" "$secret" | security -i >/dev/null 2>&1; then
                 ok "секрет сохранён в Keychain ($P_SVC / totp/$P_USER)"
-                local _k _a _d _p; read -r _k _a _d _p <<< "$qp"
-                set_totp_params "$_a" "$_d" "$_p"
-                [ "$_a/$_d/$_p" = "SHA1/6/30" ] || ok "параметры кода" "$_a, $_d цифр, $_p с — записаны в профиль [$P_NAME]"
+                qr_apply_params "$qp"
             else
                 secret=""; die "не удалось сохранить в Keychain"
             fi
@@ -1077,7 +1188,7 @@ do_connect() { # профиль уже загружен
             switch=1 ;;
         starting)  die "openconnect уже запускается — подожди или ocbar disconnect" ;;
     esac
-    [ "${P_KIND:-tunnel}" = proxy ] && proxy_precheck
+    if [ "${P_KIND:-tunnel}" = proxy ]; then proxy_precheck "$switch"; fi
     # Хвосты от прошлой сессии — убрать до подключения.
     if [ "$switch" = 0 ] && { [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; }; then
         info "остались следы прошлой сессии — убираю"
@@ -1099,7 +1210,9 @@ do_connect() { # профиль уже загружен
     # Что человек решил сохранить после входа — применяем здесь, в
     # родительской оболочке: authenticate работает в подстановке, и её
     # вывод — строка с токеном.
-    [ -n "$TEACH_OUT" ] && { apply_teach "$TEACH_OUT"; rm -f "$TEACH_OUT"; }
+    # «|| true» — не для кода возврата (он и так 0): в этом контексте set -e
+    # не обрывает apply_teach на непредвиденной ошибке после удачного входа.
+    if [ -n "$TEACH_OUT" ]; then apply_teach "$TEACH_OUT" || true; rm -f "$TEACH_OUT"; fi
     # 5 — «нужен человек»: не ошибка, а решение, которое принимает не скрипт.
     [ "$rc" = 5 ] && return 5
     [ "$rc" = 0 ] || return "$rc"
@@ -1115,6 +1228,12 @@ do_connect() { # профиль уже загружен
         info "подключён профиль [$cur] — отключаю, чтобы подключить [$P_NAME]"
         log "смена профиля: $cur → $P_NAME"
         session_stop
+        # Новый ocproxy сядет на тот же порт — ждём, пока старый его отпустит.
+        if [ "${P_KIND:-tunnel}" = proxy ]; then
+            local w=0
+            while port_open "$P_PROXY_PORT" && [ $w -lt 10 ]; do sleep 0.5; w=$((w+1)); done
+            if port_open "$P_PROXY_PORT"; then die "порт 127.0.0.1:$P_PROXY_PORT не освободился после отключения [$cur]"; fi
+        fi
     fi
     if [ "${P_KIND:-tunnel}" = proxy ]; then
         proxy_start "$connect_url" "$hash" "$token"
@@ -1147,6 +1266,11 @@ do_connect() { # профиль уже загружен
 apply_teach() { # файл
     local f="$1"
     [ -s "$f" ] && [ -n "${P_FILE:-}" ] || return 0
+    # Битый итог — предупреждение, профиль не трогаем, подключение идёт дальше.
+    if ! /usr/bin/python3 -c 'import json,sys; assert isinstance(json.load(open(sys.argv[1])), dict)' "$f" >/dev/null 2>&1; then
+        warn "запомненное" "итог окна входа не разобрался — профиль не тронут; повторите: ocbar connect --teach"
+        return 0
+    fi
     local get='import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))'
     local rules totp pwmode
     rules=$(/usr/bin/python3 -c "$get" "$f" rules 2>/dev/null || true)
@@ -1162,16 +1286,25 @@ apply_teach() { # файл
         ( cmd_rules import "$t" "$P_NAME" ) || warn "правила формы" "не сохранились — повторите: ocbar connect --teach"
         rm -f "$t"
     fi
+    # Профиль может быть не на запись (чужой каталог, файл root) — это
+    # предупреждение с тем, что поставить руками, а не обрыв после входа.
     case "$totp" in
-        keychain) pf_set_key "$P_FILE" Auth Totp keychain
-                  set_totp_params "${ta:-SHA1}" "${td:-6}" "${tp:-30}"
-                  ok "код второго фактора" "секрет в связке ключей, проверен по введённому коду — Totp = keychain$(totp_params_label)" ;;
-        sms)      pf_set_key "$P_FILE" Auth Totp sms
-                  ok "код второго фактора" "приходит по SMS — Totp = sms: вводите вы, молчаливого переподключения не будет" ;;
+        keychain)
+            if pf_set_key "$P_FILE" Auth Totp keychain && set_totp_params "${ta:-SHA1}" "${td:-6}" "${tp:-30}"; then
+                ok "код второго фактора" "секрет в связке ключей, проверен по введённому коду — Totp = keychain$(totp_params_label)"
+            else
+                warn "код второго фактора" "секрет в связке ключей, но профиль $P_FILE не записался — поставьте в [Auth]: Totp = keychain"
+            fi ;;
+        sms)
+            if pf_set_key "$P_FILE" Auth Totp sms; then
+                ok "код второго фактора" "приходит по SMS — Totp = sms: вводите вы, молчаливого переподключения не будет"
+            else
+                warn "код второго фактора" "профиль $P_FILE не записался — поставьте в [Auth]: Totp = sms"
+            fi ;;
     esac
     if [ "$pwmode" = keychain ]; then
-        pf_set_key "$P_FILE" Auth Password keychain
-        ok "пароль" "в связке ключей — Password = keychain"
+        if pf_set_key "$P_FILE" Auth Password keychain; then ok "пароль" "в связке ключей — Password = keychain"
+        else warn "пароль" "в связке ключей, но профиль $P_FILE не записался — поставьте в [Auth]: Password = keychain"; fi
     fi
     return 0
 }
@@ -1190,15 +1323,20 @@ session_stop() {
 # поднимает на них локальный SOCKS (docs/09-proxy-mode.md). Ни интерфейса,
 # ни маршрутов, ни /etc/resolver — поэтому хелпер не участвует, всё идёт от
 # пользователя, а openconnect берётся из Homebrew.
-proxy_precheck() {
+proxy_precheck() { # [1 — переключение с живой сессии]
     if ! ocproxy_bin >/dev/null; then
-        [ "$DRY_RUN" = 1 ] && { warn "ocproxy" "не найден — brew install ocproxy" >&2; return 0; }
-        die "прокси-режим: нет ocproxy — brew install ocproxy (в формулу он не входит: нужен только этому режиму)"
+        [ "$DRY_RUN" = 1 ] || die "прокси-режим: нет ocproxy — brew install ocproxy (в формулу он не входит: нужен только этому режиму)"
+        warn "ocproxy" "не найден — brew install ocproxy" >&2
     fi
     openconnect_bin >/dev/null || die "нет openconnect — brew install openconnect"
     if port_open "$P_PROXY_PORT"; then
+        # Порт держит наша же прокси-сессия, которую переключение сейчас
+        # остановит, — это не помеха. Раньше проверка шла до остановки старой
+        # сессии, и два прокси-профиля на одном порту не переключались вовсе.
+        if [ "${1:-0}" = 1 ] && proxy_alive && [ "$(proxy_port)" = "$P_PROXY_PORT" ]; then return 0; fi
         die "порт 127.0.0.1:$P_PROXY_PORT уже занят (чужой SOCKS? ocbar doctor покажет) — укажите другой в профиле, [Proxy] Port"
     fi
+    return 0
 }
 
 proxy_start() { # url servercert cookie
@@ -1263,16 +1401,37 @@ cmd_proxy_tun() {
         printf 'STATE=connected\nIP4=%s\nDNS=%s\nGATEWAY=%s\nMTU=%s\nDEF_DOMAIN=%s\nSINCE=%s\n' \
             "${INTERNAL_IP4_ADDRESS:-}" "${INTERNAL_IP4_DNS:-}" "${VPNGATEWAY:-}" \
             "${INTERNAL_IP4_MTU:-}" "${CISCO_DEF_DOMAIN:-}" "$(date +%s)"
+        # Номер будущего ocproxy: exec заменит этот процесс, pid останется.
+        # По нему уборка гасит только свой ocproxy, а не любой на этом порту.
+        printf 'OCPROXY_PID=%s\n' "$$"
         [ -f "$envf" ] && grep -E '^(PORT|URL|STARTED|PROFILE|SYS_PROXY)=' "$envf" || true
     } > "$envf.tmp" && mv "$envf.tmp" "$envf"
     exec "$ocp" -D "$port"
 }
 
+# ocproxy этой сессии: номер записал _proxy-tun перед exec. Сверяем имя —
+# номер переживает перезагрузку и достаётся кому попало. Искать по командной
+# строке нельзя: так гасился любой «ocproxy -D <порт>» в системе, в том
+# числе чужой, и даже из самопроверки.
+our_ocproxy_pid() {
+    local p; p=$(penv_get OCPROXY_PID)
+    case "$p" in ''|*[!0-9]*) return 0 ;; esac
+    case "$(ps -p "$p" -o comm= 2>/dev/null)" in *ocproxy) printf '%s' "$p" ;; esac
+    return 0
+}
+
 proxy_stop() {
-    local p port; p=$(proxy_pid); port=$(proxy_port)
+    local p; p=$(proxy_pid)
     # Сначала снять системный SOCKS: иначе между остановкой и снятием система
     # смотрит в мёртвый порт.
     socks_clear_all
+    if [ "$DRY_RUN" = 1 ]; then
+        # --dry-run процессы не гасит и состояние не трогает — только говорит.
+        if proxy_alive; then info "[dry-run] kill -INT $p (openconnect прокси-режима)"; fi
+        local od; od=$(our_ocproxy_pid)
+        if [ -n "$od" ]; then info "[dry-run] kill $od (ocproxy этой сессии)"; fi
+        return 0
+    fi
     if proxy_alive; then
         info "останавливаю openconnect прокси-режима (pid $p)"
         kill -INT "$p" 2>/dev/null || true
@@ -1281,12 +1440,16 @@ proxy_stop() {
         if ps -p "$p" >/dev/null 2>&1; then info "не вышел за 10 с — SIGKILL"; kill -KILL "$p" 2>/dev/null || true; fi
     fi
     # ocproxy — дочерний процесс openconnect и по закрытию VPNFD выходит сам.
-    # Если не вышел — это наш SOCKS на нашем порту, гасим.
-    local o; o=$(pgrep -f "ocproxy -D $port\$" 2>/dev/null | head -1 || true)
-    if [ -n "$o" ]; then sleep 1; pgrep -f "ocproxy -D $port\$" >/dev/null 2>&1 && { kill "$o" 2>/dev/null || true; }; fi
+    # Не вышел — гасим, но только свой.
+    local o; o=$(our_ocproxy_pid)
+    if [ -n "$o" ]; then sleep 1; o=$(our_ocproxy_pid); fi
+    if [ -n "$o" ]; then kill "$o" 2>/dev/null || true; sleep 0.5; fi
     rm -f "$PROXY_PID" 2>/dev/null || true
     if [ -f "$PROXY_ENV" ]; then
-        { printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)"; grep -E '^(PORT|URL|STARTED|PROFILE|SYS_PROXY)=' "$PROXY_ENV" || true; } > "$PROXY_ENV.tmp"
+        # Номер ocproxy остаётся в файле, только если процесс ещё жив.
+        local keep='^(PORT|URL|STARTED|PROFILE|SYS_PROXY)='
+        if [ -n "$(our_ocproxy_pid)" ]; then keep='^(PORT|URL|STARTED|PROFILE|SYS_PROXY|OCPROXY_PID)='; fi
+        { printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)"; grep -E "$keep" "$PROXY_ENV" || true; } > "$PROXY_ENV.tmp"
         mv "$PROXY_ENV.tmp" "$PROXY_ENV"
     fi
     log "прокси остановлен"
@@ -1319,8 +1482,11 @@ helper_supports_socks() {
 # видит; об этом говорим и записываем причину для меню.
 socks_apply() {
     [ "$(penv_get SYS_PROXY)" = on ] || return 0
-    helper_supports_socks || { warn "Системный SOCKS" "хелпер старее CLI и не умеет socks-set — sudo $SELF_ENTRY install"; return 0; }
-    local svc; svc=$(active_service "$(active_iface)" 2>/dev/null || true)
+    # В самопроверке хелпер — заглушка (версию не спрашиваем), а активный
+    # сервис подставлен: у машины без сети его может не быть вовсе.
+    { [ -n "${OCBAR_SELFTEST_HELPER:-}" ] || helper_supports_socks; } \
+        || { warn "Системный SOCKS" "хелпер старее CLI и не умеет socks-set — sudo $SELF_ENTRY install"; return 0; }
+    local svc; svc=${OCBAR_SELFTEST_SERVICE:-$(active_service "$(active_iface)" 2>/dev/null || true)}
     [ -n "$svc" ] || { warn "Системный SOCKS" "не нашёл активный сетевой сервис"; return 0; }
     socks_state_services | grep -Fxq -- "$svc" && return 0
     local err; err=$(mktemp "${TMPDIR:-/tmp}/ocbar-socks.XXXXXX")
@@ -1361,13 +1527,21 @@ socks_ensure() { [ "$(penv_get SYS_PROXY)" = on ] && socks_apply >/dev/null || t
 # Следы прокси-сессии без живого процесса: файл состояния, осиротевший ocproxy.
 proxy_cleanup() {
     proxy_alive && return 0
-    local did=0 port; port=$(proxy_port)
     if [ -n "$(proxy_pid)" ] || [ "$(penv_get STATE)" = connected ] || [ "$(penv_get STATE)" = starting ]; then
-        info "прокси: процесса нет, а состояние говорит $(penv_get STATE) — помечаю отключённым"
-        proxy_stop >/dev/null; did=1
+        if [ "$DRY_RUN" = 1 ]; then
+            info "[dry-run] прокси: процесса нет, а состояние говорит $(penv_get STATE) — пометил бы отключённым"
+            proxy_stop
+        else
+            info "прокси: процесса нет, а состояние говорит $(penv_get STATE) — помечаю отключённым"
+            proxy_stop >/dev/null
+        fi
+        return 0
     fi
-    local o; o=$(pgrep -f "ocproxy -D $port\$" 2>/dev/null | head -1 || true)
-    [ -n "$o" ] && { info "осиротевший ocproxy на порту $port (pid $o) — гашу"; kill "$o" 2>/dev/null || true; did=1; }
+    local o; o=$(our_ocproxy_pid)
+    if [ -n "$o" ]; then
+        if [ "$DRY_RUN" = 1 ]; then info "[dry-run] kill $o (осиротевший ocproxy этой сессии)"
+        else info "осиротевший ocproxy этой сессии (pid $o) — гашу"; kill "$o" 2>/dev/null || true; fi
+    fi
     return 0
 }
 
@@ -1536,7 +1710,11 @@ cmd_status() {
         warn "Связь" "не отвечает $(( $(date +%s) - $(cat "$LINK_LOST") )) с — openconnect восстанавливает сессию сам"
     fi
     [ -n "$woke" ] && warn "Сон" "мак просыпался после подключения ($(date -r "$woke" '+%H:%M')) — $(sup_alive && echo 'супервизор проверит туннель сам' || echo 'супервизор не работает, проверьте доступ')"
-    [ -f "$NEEDS_LOGIN" ] && warn "Автоподключение" "остановлено: нужен вход — ocbar connect"
+    if [ -f "$NEEDS_LOGIN" ]; then warn "Автоподключение" "остановлено: нужен вход — ocbar connect"; fi
+    # Показ состояния — не проверка: код 0 при любом состоянии. Ложное условие
+    # последней строкой давало 1, и следом с кодом 1 выходили connect, pause и
+    # resume — они зовут status в конце, а приложение видело «не получилось».
+    return 0
 }
 
 # ---------------------------------------------------------------- routes ----
@@ -1567,9 +1745,17 @@ cmd_routes() {
             if is_off "$2" "$ROUTES_OFF"; then cmd_routes add "$2"; else cmd_routes del "$2"; fi ;;
         apply)
             [ "$(tun_state)" = connected ] || die "туннель не поднят"
-            while read -r n; do [ -n "$n" ] && priv route-add "$n"; done <<< "$(active_networks)" ;;
+            while read -r n; do if [ -n "$n" ]; then priv route-add "$n"; fi; done <<< "$(active_networks)" ;;
         clear)
-            while read -r n; do [ -n "$n" ] && priv route-del "$n"; done <<< "$(read_networks)" ;;
+            # Хелпер от root — только при живом туннеле. Без туннеля маршрутов
+            # туннеля в системе нет, а route-del снял бы совпавшую сеть чужого
+            # VPN. Следы упавшей сессии убирает ocbar cleanup.
+            case "$(tun_state)" in
+                connected|paused)
+                    while read -r n; do if [ -n "$n" ]; then priv route-del "$n"; fi; done <<< "$(read_networks)" ;;
+                *)  info "туннель не поднят — маршрутов туннеля нет, снимать нечего"
+                    if [ -s "$ROUTES_STATE" ]; then info "  в $ROUTES_STATE остались записи прошлой сессии — ocbar cleanup"; fi ;;
+            esac ;;
         *) die "routes: status | add <CIDR> | del <CIDR> | toggle <CIDR> | apply | clear" ;;
     esac
 }
@@ -1615,7 +1801,13 @@ cmd_dns() {
     case "${1:-status}" in
         status) cmd_dns_status ;;
         apply)  cmd_dns_apply ;;
-        clear)  priv dns-clear ;;
+        clear)
+            # Как routes clear: хелпер от root — только если есть что снимать.
+            if [ -n "$(manifest_zones)" ] || { case "$(tun_state)" in connected|paused) true ;; *) false ;; esac; }; then
+                priv dns-clear
+            else
+                info "наших зон в $RESOLVER_DIR нет — снимать нечего"
+            fi ;;
         init)   cmd_dns_init "${2:-}" "${3:-}" ;;
         on|add)
             valid_zone "${2:-}" || die "dns on <зона>"
@@ -1650,8 +1842,9 @@ cmd_profiles() {
         if [ -n "$f" ]; then url=$(pf_get "$f" Connection Url); else url=$(profile_get "$p" url); fi
         printf '  %s %s %s %s  %s\n' "$([ "$p" = "$d" ] && echo '*' || echo ' ')" \
             "$(pad "$p" 18)" "$(pad "$nm" 20)" "$url" "$au"
-        [ -n "$ds" ] && printf '      %s%s%s\n' "$c_dim" "$ds" "$c_off"
+        if [ -n "$ds" ]; then printf '      %s%s%s\n' "$c_dim" "$ds" "$c_off"; fi
     done <<< "$(profiles_summary)"
+    return 0
 }
 
 # ------------------------------------------------------------- песочница ----
@@ -1946,24 +2139,26 @@ no_pause_in_proxy() {
 
 cmd_pause() {
     no_pause_in_proxy
-    require_fresh_helper
+    # Сначала состояние, потом версия хелпера: без сессии хелпер не нужен
+    # вовсе, и спрашивать его незачем.
     case "$(tun_state)" in
         paused)    info "уже на паузе"; return 0 ;;
         connected) ;;
         *) die "туннель не поднят — паузить нечего" ;;
     esac
+    require_fresh_helper
     priv suspend
     [ "$DRY_RUN" = 1 ] || { log "пауза"; notify "ocbar: пауза" "Маршруты и зоны сняты, туннель и вход сохранены"; cmd_status; }
 }
 
 cmd_resume() {
     no_pause_in_proxy
-    require_fresh_helper
     case "$(tun_state)" in
         paused) ;;
         connected) info "паузы нет, всё уже на месте"; return 0 ;;
         *) die "туннель не поднят — возобновлять нечего" ;;
     esac
+    require_fresh_helper
     priv resume
     [ "$DRY_RUN" = 1 ] || { log "возобновлено"; notify "ocbar: возобновлено" "Маршруты и зоны вернулись"; report_health || true; cmd_status; }
 }
@@ -2018,9 +2213,19 @@ cmd_supervise() {
     # неверных подряд блокируют учётную запись. Больше этого числа входов за
     # час супервизор не делает — ждёт человека.
     local logins_max="${OCBAR_LOGINS_PER_HOUR:-6}" logins_win_start=0 logins=0
+    # Счётчик живёт в файле: exec после правки скрипта и перезапуск агента
+    # launchd иначе обнуляли бы предохранитель посреди шторма входов.
+    local logins_file="$USER_STATE/supervisor.logins" _ws="" _lg="" _now
+    _now=$(date +%s)
+    if [ -f "$logins_file" ] && read -r _ws _lg < "$logins_file"; then :; fi
+    case "${_ws:-x}${_lg:-x}" in
+        *[!0-9]*) ;;
+        *) if [ "$_now" -ge "$_ws" ] && [ $((_now - _ws)) -lt 3600 ]; then logins_win_start=$_ws; logins=$_lg; fi ;;
+    esac
     local last_wake last_iface backoff=5 next_try=0 n=0 desired st now wake iface
-    local probe_bad_since=0 last_probe_log=0
+    local probe_bad_since=0 last_probe_log=0 no_net=0
     last_wake=$(wake_ts); last_iface=$(primary_iface)
+    [ -n "$last_iface" ] || no_net=1
 
     # Хвосты от прошлой сессии (аварийное завершение, перезагрузка) убирает
     # только connect. Если профиль снят, зоны и маршруты висели бы вечно.
@@ -2034,7 +2239,11 @@ cmd_supervise() {
         if [ "$(stat -f %m "$SELF" 2>/dev/null || echo 0)" != "$self_mtime" ]; then
             log "скрипт изменился — перезапускаю себя (exec)"
             trap - INT TERM EXIT
-            exec "$SELF" supervise "$@"
+            # --dry-run main снял с аргументов — вернуть явно: иначе после
+            # правки файла супервизор «для опыта» становился настоящим.
+            local -a again=(supervise)
+            [ "$DRY_RUN" = 1 ] && again+=(--dry-run)
+            exec "$SELF" "${again[@]}" "$@"
         fi
         desired=$(cat "$DESIRED" 2>/dev/null || true)
         st=$(tunnel_state)
@@ -2043,18 +2252,32 @@ cmd_supervise() {
             log "событие: пробуждение ($(date -r "$wake" '+%H:%M:%S' 2>/dev/null))"; last_wake="$wake"; next_try=0; backoff=5
             [ "$DRY_RUN" = 1 ] || sleep 3   # сети нужно время после сна
         fi
-        if [ "$iface" != "$last_iface" ]; then
-            log "событие: смена интерфейса $last_iface → ${iface:-нет}"
-            last_iface="$iface"; probe_bad_since=0; next_try=0; backoff=5
-            # Восстановиться по старому локальному адресу openconnect не сможет
-            # («Can't assign requested address» в логе), поэтому ждать смысла
-            # нет: сразу закрываем сессию и заходим заново. Прокси-режим — тот
-            # же openconnect, та же беда, перезапуск процесса целиком.
-            if [ "$st" = connected ] && [ -n "$desired" ]; then
-                log "смена интерфейса — восстановление по старому адресу невозможно, переподключаюсь"
-                session_stop >>"$SUP_LOG" 2>&1 || true
-                st=down; next_try=0
+        if [ -z "$iface" ]; then
+            # Сети нет вовсе (Wi-Fi пропал на пару минут). Это не смена
+            # интерфейса: рвать сессию незачем, а вход без сети только сжёг
+            # бы попытку из часового лимита. Ждём, пока сеть вернётся.
+            if [ "$no_net" = 0 ]; then log "событие: сети нет (${last_iface:-интерфейс} пропал) — жду, сессию не трогаю"; no_net=1; fi
+        elif [ "$no_net" = 1 ] || [ "$iface" != "$last_iface" ]; then
+            if [ "$iface" = "$last_iface" ]; then
+                log "событие: сеть вернулась тем же интерфейсом ($iface) — продолжаю"
+                probe_bad_since=0; next_try=0; backoff=5
+            elif [ -z "$last_iface" ]; then
+                log "событие: сеть появилась ($iface)"
+                next_try=0; backoff=5
+            else
+                log "событие: смена интерфейса $last_iface → $iface"
+                probe_bad_since=0; next_try=0; backoff=5
+                # Восстановиться по старому локальному адресу openconnect не
+                # сможет («Can't assign requested address» в логе), поэтому
+                # ждать смысла нет: сразу закрываем сессию и заходим заново.
+                # Прокси-режим — тот же openconnect, та же беда.
+                if [ "$st" = connected ] && [ -n "$desired" ]; then
+                    log "смена интерфейса — восстановление по старому адресу невозможно, переподключаюсь"
+                    session_stop >>"$SUP_LOG" 2>&1 || true
+                    st=down; next_try=0
+                fi
             fi
+            no_net=0; last_iface="$iface"
         fi
 
         # Отсчёт потери связи имеет смысл только в connected. Иначе после
@@ -2062,8 +2285,19 @@ cmd_supervise() {
         # «ждём три часа» и мгновенно порвёт живую сессию.
         [ "$st" = connected ] || { probe_bad_since=0; rm -f "$LINK_LOST" 2>/dev/null || true; }
 
+        # Системный SOCKS смотрит в порт прокси. Прокси нет — ждём вход, пауза
+        # между попытками, упёрлись в лимит входов — снять его, а не держать
+        # мак без интернета до следующего удачного входа.
+        if ! proxy_alive; then socks_cleanup >>"$SUP_LOG" 2>&1 || true; fi
+
         if [ -n "$desired" ]; then
-            if [ "$st" = paused ]; then
+            if [ "$no_net" = 1 ]; then
+                # Без сети ни проба, ни вход смысла не имеют: проба провалится
+                # на здоровой сессии, вход сожжёт попытку. Меню покажет
+                # «связь пропала», пока сеть не вернётся.
+                probe_bad_since=0
+                if [ "$st" = connected ] && [ ! -f "$LINK_LOST" ]; then printf '%s\n' "$now" > "$LINK_LOST"; fi
+            elif [ "$st" = paused ]; then
                 # На паузе DNS шлюза недостижим по определению — проверять
                 # туннель его опросом нельзя, живость процесса и есть критерий.
                 backoff=5
@@ -2139,6 +2373,7 @@ cmd_supervise() {
                         notify "ocbar: слишком много входов" "Автоподключение приостановлено, чтобы не заблокировать учётную запись"
                         last_probe_log=$now
                     fi
+                    [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
                     sleep 5; continue
                 fi
                 if [ -f "$NEEDS_LOGIN" ]; then
@@ -2150,6 +2385,7 @@ cmd_supervise() {
                     sleep 5; continue
                 fi
                 logins=$((logins + 1))
+                printf '%s %s\n' "$logins_win_start" "$logins" > "$logins_file" 2>/dev/null || true
                 log "туннель не поднят, профиль $desired — подключаю молча (вход $logins/$logins_max за час)"
                 local crc=0
                 ( export OCBAR_SILENT=1; load_profile "$desired" && do_connect ) >>"$SUP_LOG" 2>&1 || crc=$?
@@ -2282,13 +2518,16 @@ cmd_supervisor() {
         status)
             if launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then ok "LaunchAgent" "загружен"; else warn "LaunchAgent" "не загружен"; fi
             sup_alive && ok "Процесс" "pid $(cat "$SUP_PID")" || skip "Процесс" "не работает"
-            [ -f "$SUP_LOG" ] && { info ""; info "Последние записи:"; tail -5 "$SUP_LOG" | sed 's/^/  /'; } ;;
+            if [ -f "$SUP_LOG" ]; then info ""; info "Последние записи:"; tail -5 "$SUP_LOG" | sed 's/^/  /'; fi ;;
         start)
             [ -f "$AGENT_PLIST" ] || die "нет $AGENT_PLIST — sudo ocbar install"
             launchctl bootstrap "gui/$uid" "$AGENT_PLIST" && ok "агент загружен" ;;
         stop)
-            launchctl bootout "gui/$uid/$AGENT_LABEL" 2>/dev/null
-            info "агент выгружен (туннель это переживёт: openconnect в своей сессии)" ;;
+            if launchctl bootout "gui/$uid/$AGENT_LABEL" 2>/dev/null; then
+                info "агент выгружен (туннель это переживёт: openconnect в своей сессии)"
+            else
+                info "агент не был загружен"
+            fi ;;
         restart)
             if launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then
                 launchctl kickstart -k "gui/$uid/$AGENT_LABEL" && ok "агент перезапущен"
@@ -2344,29 +2583,90 @@ cmd_uninstall() {
 
 # --------------------------------------------------------- самопроверка ----
 # Проверяет разбор и выдачу на подставленных конфигах: ни сети, ни
-# привилегий, ни живого туннеля. Всё уводится во временный каталог
-# переменными OCBAR_CONFIG_DIR, OCBAR_USER_STATE и OCBAR_STATE_DIR, поэтому
-# запускать безопасно в любой момент, в том числе на рабочей машине.
+# привилегий, ни живого туннеля. Конфиг, состояние, каталог состояния
+# хелпера и журнал уводятся во временный каталог (OCBAR_CONFIG_DIR,
+# OCBAR_USER_STATE, OCBAR_STATE_DIR, OCBAR_LOG_DIR); хелпер подменён
+# заглушкой (OCBAR_SELFTEST_HELPER) — настоящий не зовётся ни от root, ни с
+# --dry-run; уведомления выключены. Гасятся только поддельные процессы самой
+# проверки, порт прокси — свой, а не 11080. Отрицательные проверки профиля
+# идут через _check-profile, а не через connect: поломка валидации не
+# доведёт до входа. Поэтому запускать безопасно в любой момент, в том числе
+# на рабочей машине с живой сессией.
 cmd_selftest() {
-    local tmp fails=0 total=0 out
+    local tmp fails=0 total=0 skipped=0 out rc port bad qa tok oc ours foreign lp
+    local -a pids=()
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-selftest.XXXXXX") || die "нет временного каталога"
-    mkdir -p "$tmp/profiles" "$tmp/state" "$tmp/var" "$tmp/other/profiles"
+    mkdir -p "$tmp/profiles" "$tmp/state" "$tmp/var" "$tmp/logs" "$tmp/other/profiles" "$tmp/fake" "$tmp/foreign"
+    # Заглушка хелпера: пишет вызов в журнал и ведёт socks.state, как настоящий.
+    cat > "$tmp/helper" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$*" >> "$OCBAR_STATE_DIR/helper.log"
+[ "${1:-}" = --dry-run ] && shift
+m="$OCBAR_STATE_DIR/socks.state"
+case "${1:-}" in
+    version)     echo "ocbar-helper selftest" ;;
+    socks-set)   printf '%s %s\n' "$2" "$3" >> "$m" ;;
+    socks-clear) if [ "${OCBAR_STUB_KEEP_SOCKS:-0}" != 1 ] && [ -f "$m" ]; then grep -Fv "$2 " "$m" > "$m.tmp" || true; mv "$m.tmp" "$m"; fi ;;
+esac
+exit 0
+STUB
+    chmod +x "$tmp/helper"
 
-    run() { OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" "$SELF" "$@" 2>&1; }
+    run() { OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" OCBAR_LOG_DIR="$tmp/logs" \
+            OCBAR_CONFIG="$tmp/zones.conf" OCBAR_NETWORKS="$tmp/networks.conf" \
+            OCBAR_SELFTEST_HELPER="$tmp/helper" OCBAR_NOTIFY=0 "$SELF" "$@" 2>&1; }
     has()  { # имя, что искать, где
         total=$((total+1))
-        if printf '%s' "$3" | grep -Fq -- "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «$2»"; fi
+        if printf '%s' "$3" | grep -Fq -- "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «${2}»"; fi
     }
     hasnt() {
         total=$((total+1))
-        if printf '%s' "$3" | grep -Fq -- "$2"; then fails=$((fails+1)); bad "$1" "нашлось «$2», а не должно"; else ok "$1"; fi
+        if printf '%s' "$3" | grep -Fq -- "$2"; then fails=$((fails+1)); bad "$1" "нашлось «${2}», а не должно"; else ok "$1"; fi
     }
     # Через регулярное выражение: интерфейс в строке маршрута зависит от
     # таблицы маршрутизации машины, и сравнивать её целиком нельзя.
     matches() {
         total=$((total+1))
-        if printf '%s' "$3" | grep -Eq "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "не подошло /$2/"; fi
+        if printf '%s' "$3" | grep -Eq -- "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "не подошло /${2}/"; fi
     }
+    is() { # имя, ожидаемое, фактическое — точно
+        total=$((total+1))
+        if [ "$2" = "$3" ]; then ok "$1"; else fails=$((fails+1)); bad "$1" "ждали «${2}», получили «${3}»"; fi
+    }
+    same() { # имя, файл, эталон — побайтно
+        total=$((total+1))
+        if cmp -s "$2" "$3"; then ok "$1"; else
+            fails=$((fails+1)); bad "$1" "не совпало с эталоном:"
+            # «|| true»: diff при расхождении даёт 1, и под pipefail провал
+            # одной проверки обрывал бы всю самопроверку.
+            diff "$3" "$2" 2>&1 | head -20 | sed 's/^/        /' || true
+        fi
+    }
+    check() { local name="$1"; shift; total=$((total+1)); if "$@"; then ok "$name"; else fails=$((fails+1)); bad "$name"; fi; }
+    omit() { skipped=$((skipped+1)); skip "$1" "пропущено: $2"; }
+    # Жив ли процесс (зомби — не жив). Поддельные процессы — сироты, их
+    # подбирает launchd, поэтому зомби не задерживаются.
+    alive() { case "$(ps -p "$1" -o stat= 2>/dev/null)" in ''|Z*) return 1 ;; *) return 0 ;; esac; }
+    gone()  { local i=0; while alive "$1" && [ $i -lt 30 ]; do sleep 0.1; i=$((i+1)); done; ! alive "$1"; }
+    # Фоновый процесс-сирота; печатает свой номер. Каждый живёт не дольше
+    # двух минут, даже если проверка оборвётся.
+    spawn() { ( "$@" </dev/null >/dev/null 2>&1 & printf '%s' "$!" ); }
+    # Поддельный процесс с нужным именем: ps -o comm= показывает argv[0].
+    # SIGINT возвращён по умолчанию — фоновым процессам скрипта его ставят в
+    # «игнорировать», а openconnect гасится именно им.
+    fake() { spawn /usr/bin/perl -e '$SIG{INT} = "DEFAULT"; exec { $ARGV[0] } @ARGV[1 .. $#ARGV]' /bin/sleep "$1" 120; }
+    listen() { spawn /usr/bin/python3 -c 'import signal, socket, sys
+signal.alarm(120)
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("127.0.0.1", int(sys.argv[1]))); s.listen(8)
+while True:
+    c, _ = s.accept(); c.close()' "$1"; }
+    # «Чужой» ocproxy: командная строка «…/ocproxy -D <порт>» — ровно то,
+    # что прежняя уборка искала pgrep -f и гасила.
+    printf '#!/bin/bash\n# пустышка чужого ocproxy для проверки уборки\nfor i in $(seq 1 120); do sleep 1; done\n' > "$tmp/foreign/ocproxy"
+    chmod +x "$tmp/foreign/ocproxy"
+    # Свой порт для прокси-профилей: 11080 может держать живая сессия.
+    port=$((21000 + RANDOM % 20000)); while port_open "$port"; do port=$((port + 1)); done
 
     cat > "$tmp/profiles/t.ocbar" <<'PROFILE'
 [Connection]
@@ -2391,7 +2691,7 @@ Check = wiki.example.test:443
 PROFILE
 
     info "ocbar selftest ($VERSION)"
-    out=$(run status --short)
+    out=$(run status --short || true)
     has "состояние без туннеля" "state=down" "$out"
     has "профиль в списке" "profile_list=t|Проба||" "$out"
     has "профиль по умолчанию" "default=t" "$out"
@@ -2402,161 +2702,307 @@ PROFILE
     has "предупреждение о широкой сети" "уводит в туннель почти весь трафик" "$out"
     has "зона профиля" "zone=example.test 192.0.2.10 - on" "$out"
     hasnt "зона с нечисловым адресом отброшена" "zone=bad.test" "$out"
+    # Код выхода: connect, pause и resume зовут status в конце, и приложение
+    # судит об успехе по коду.
+    rc=0; run status >/dev/null || rc=$?
+    is "status: код 0" 0 "$rc"
+    : > "$tmp/state/needs-login"; rc=0; run status >/dev/null || rc=$?; rm -f "$tmp/state/needs-login"
+    is "status: код 0 и при флаге «нужен вход»" 0 "$rc"
+    rc=0; run profiles >/dev/null || rc=$?
+    is "profiles: код 0, когда у последнего профиля нет описания" 0 "$rc"
+
+    # profiles.conf с BOM и CRLF, секция с именем профиля-файла, «|» в названии.
+    printf '\357\273\277[old]\r\nurl = vpn.example.test/o\r\nname = Старый|формат\r\n\r\n[t]\r\nurl = vpn.example.test/dup\r\n' > "$tmp/profiles.conf"
+    out=$(run status --short || true)
+    is "profile_list: профиль-файл и одноимённая секция — одна строка" 1 "$(printf '%s\n' "$out" | grep -c '^profile_list=t|' || true)"
+    has "profile_list: «|» в названии заменён на «¦»" "profile_list=old|Старый¦формат||" "$out"
+    matches "profiles.conf с BOM и CRLF: адрес без мусора" '^Url += vpn\.example\.test/o$' "$(run export old)"
+    rm -f "$tmp/profiles.conf"
+    printf '\357\273\277[Connection]\r\nName = БОМ\r\nUrl = vpn.example.test/bom\r\n\r\n[Routes]\r\n10.20.0.0/16\r\n' > "$tmp/profiles/bom.ocbar"
+    out=$(run export bom || true)
+    matches "профиль-файл с BOM и CRLF: Url из первой секции" '^Url += vpn\.example\.test/bom$' "$out"
+    has "профиль-файл с BOM и CRLF: сеть на месте" "10.20.0.0/16" "$out"
+    rm -f "$tmp/profiles/bom.ocbar"
 
     # Переключатели без туннеля меняют только состояние — привилегий не надо.
-    run routes del 10.11.12.0/24 >/dev/null
+    run routes del 10.11.12.0/24 >/dev/null || true
     matches "сеть выключается" "route=10\.11\.12\.0/24 .* off" "$(run status --short)"
-    run routes add 10.11.12.0/24 >/dev/null
+    run routes add 10.11.12.0/24 >/dev/null || true
     matches "сеть возвращается" "route=10\.11\.12\.0/24 .* on" "$(run status --short)"
-    run dns off example.test >/dev/null
+    run dns off example.test >/dev/null || true
     has "зона выключается" "zone=example.test 192.0.2.10 - off" "$(run status --short)"
-    run dns on example.test >/dev/null
+    run dns on example.test >/dev/null || true
     has "зона возвращается" "zone=example.test 192.0.2.10 - on" "$(run status --short)"
+    # Снять маршруты и зоны без туннеля — нечего: хелпер от root не зовётся.
+    : > "$tmp/var/helper.log"
+    run routes clear >/dev/null || true
+    run dns clear >/dev/null || true
+    is "routes clear и dns clear без туннеля хелпер не зовут" "" "$(cat "$tmp/var/helper.log")"
+    printf 'example.test\n' > "$tmp/var/zones.state"
+    run dns clear >/dev/null || true
+    has "dns clear при наших зонах зовёт хелпер" "dns-clear" "$(cat "$tmp/var/helper.log")"
+    rm -f "$tmp/var/zones.state"; : > "$tmp/var/helper.log"
 
     has "пути в version --all" "config_dir=$tmp" "$(run version --all)"
     has "профиль в списке profiles" "Проба" "$(run profiles)"
 
     # Экспорт и импорт: файл, выданный наружу, должен читаться обратно.
-    run export t "$tmp/out.ocbar" >/dev/null
+    run export t "$tmp/out.ocbar" >/dev/null || true
     out=$(cat "$tmp/out.ocbar" 2>/dev/null || true)
     has "экспорт: секция сетей" "[Routes]" "$out"
     has "экспорт: сеть на месте" "10.11.12.0/24" "$out"
     has "экспорт: проверка доступа" "wiki.example.test:443" "$out"
-    cp "$tmp/out.ocbar" "$tmp/other/profiles/copy.ocbar"
+    cp "$tmp/out.ocbar" "$tmp/other/profiles/copy.ocbar" 2>/dev/null || true
     has "экспортированный профиль читается" "Проба" \
-        "$(OCBAR_CONFIG_DIR="$tmp/other" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" "$SELF" profiles 2>&1)"
+        "$(OCBAR_CONFIG_DIR="$tmp/other" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" OCBAR_LOG_DIR="$tmp/logs" \
+           OCBAR_SELFTEST_HELPER="$tmp/helper" OCBAR_NOTIFY=0 "$SELF" profiles 2>&1)"
 
     # Неверные значения должны отвергаться, а не молча менять поведение.
+    # Только загрузкой профиля: через connect поломка валидации дошла бы до входа.
     make_bad() { printf '[Connection]\nName = Плохой\nUrl = vpn.example.test/g\n%s\n' "$1" > "$tmp/profiles/bad.ocbar"; }
     make_bad "Mode = никак"
-    has "неизвестный режим отвергнут" "Mode = tunnel или proxy" "$(run status bad 2>&1; run connect bad 2>&1)"
+    has "неизвестный режим отвергнут" "Mode = tunnel или proxy" "$(run _check-profile bad)"
     make_bad "$(printf '\n[Proxy]\nPort = 80')"
-    has "порт вне диапазона отвергнут" "вне диапазона" "$(run connect bad 2>&1)"
+    has "порт вне диапазона отвергнут" "вне диапазона" "$(run _check-profile bad)"
     make_bad "$(printf '\n[Auth]\nPassword = ниоткуда')"
-    has "неизвестный источник пароля отвергнут" "password = auto" "$(run connect bad 2>&1)"
-    make_bad "$(printf '\n[Auth]\nPassword = ask\nTotp = off')"
-    has "пароль от человека виден в secret status" "вводит человек" "$(run secret status bad 2>&1)"
+    has "неизвестный источник пароля отвергнут" "password = auto" "$(run _check-profile bad)"
+    # Точная строка: при Totp = off «вводит человек» есть и в строке кода, и
+    # общий шаблон не заметил бы потерю строки пароля.
+    make_bad "$(printf '\n[Auth]\nPassword = ask\nTotp = keychain\nKeychainService = ocbar.selftest.invalid')"
+    matches "secret status: «пароль — вводит человек» (Totp = keychain)" '\[ !! \] пароль +вводит человек \(password = ask\)$' "$(run secret status bad)"
     rm -f "$tmp/profiles/bad.ocbar"
 
     # Прокси-режим: без сети и без ocproxy проверяется всё, кроме самого
-    # openconnect — команда запуска, программа туннеля, состояние, уборка.
-    printf '[Connection]\nName = Прокси\nUrl = vpn.example.test/g\nUser = tester\nMode = proxy\n\n[Proxy]\nPort = 11080\nSystemProxy = on\n\n[Auth]\nTotp = off\n' > "$tmp/profiles/px.ocbar"
+    # openconnect — команда запуска, программа туннеля, состояние, уборка,
+    # системный SOCKS, переключение. Порт — свой.
+    printf '[Connection]\nName = Прокси\nUrl = vpn.example.test/g\nUser = tester\nMode = proxy\n\n[Proxy]\nPort = %s\nSystemProxy = on\n\n[Auth]\nTotp = off\n' "$port" > "$tmp/profiles/px.ocbar"
     printf 'px\n' > "$tmp/state/desired"      # выбранный профиль — как после connect
-    out=$(run status --short 2>&1)
+    out=$(run status --short || true)
     has "режим прокси в status" "profile_mode=proxy" "$out"
     has "галочка системного SOCKS в status" "system_proxy=on" "$out"
-    out=$(run connect --dry-run px 2>&1)
+    has "порт профиля в status" "proxy_port=$port" "$out"
+    out=$(OCBAR_OCPROXY=/usr/bin/true run connect --dry-run px || true)
     has "прокси: openconnect со --script-tun" "--script-tun" "$out"
     has "прокси: программа туннеля — ocbar" "_proxy-tun" "$out"
     hasnt "прокси: хелпер не зовётся" "tunnel-start" "$out"
-    has "прокси: ocproxy на порту профиля" "ocproxy -D 11080" "$out"
+    has "прокси: порт профиля доходит до ocproxy" "ocproxy -D $port " "$out"
+    printf 'PORT=%s\n' "$port" > "$tmp/state/proxy.env"
     out=$(VPNFD=3 INTERNAL_IP4_ADDRESS=10.9.8.7 INTERNAL_IP4_DNS=10.0.0.1 OCBAR_OCPROXY=/usr/bin/true \
-          OCBAR_PROXY_PORT=11080 run _proxy-tun 2>&1; cat "$tmp/state/proxy.env" 2>/dev/null)
+          OCBAR_PROXY_PORT="$port" run _proxy-tun || true; cat "$tmp/state/proxy.env" 2>/dev/null || true)
     has "программа туннеля пишет адрес" "IP4=10.9.8.7" "$out"
     has "программа туннеля пишет DNS шлюза" "DNS=10.0.0.1" "$out"
     has "программа туннеля отмечает connected" "STATE=connected" "$out"
-    has "программа туннеля без openconnect отказывает" "нет VPNFD" "$(run _proxy-tun 2>&1)"
-    out=$(run cleanup --dry-run 2>&1; cat "$tmp/state/proxy.env")
-    has "уборка: состояние без процесса помечено отключённым" "STATE=disconnected" "$out"
-    has "пауза без сессии отказывает" "паузить нечего" "$(run pause 2>&1)"
-    rm -f "$tmp/profiles/px.ocbar" "$tmp/state/proxy.env" "$tmp/state/desired"
+    matches "программа туннеля пишет номер ocproxy" '^OCPROXY_PID=[0-9]+$' "$out"
+    has "программа туннеля без openconnect отказывает" "нет VPNFD" "$(run _proxy-tun)"
+    # Уборка: состояние без процесса, чужой ocproxy на том же порту.
+    foreign=$(spawn "$tmp/foreign/ocproxy" -D "$port"); pids+=("$foreign")
+    run cleanup --dry-run >/dev/null || true
+    check "уборка --dry-run: чужой «ocproxy -D ${port}» жив" alive "$foreign"
+    has "уборка --dry-run: состояние не тронуто" "STATE=connected" "$(cat "$tmp/state/proxy.env")"
+    run cleanup >/dev/null || true
+    check "уборка: чужой «ocproxy -D ${port}» жив" alive "$foreign"
+    has "уборка: состояние без процесса помечено отключённым" "STATE=disconnected" "$(cat "$tmp/state/proxy.env")"
+    ours=$(fake "$tmp/fake/ocproxy"); pids+=("$ours")
+    printf 'STATE=disconnected\nPORT=%s\nOCPROXY_PID=%s\n' "$port" "$ours" > "$tmp/state/proxy.env"
+    run cleanup --dry-run >/dev/null || true
+    check "уборка --dry-run: свой осиротевший ocproxy не гасится" alive "$ours"
+    run cleanup >/dev/null || true
+    check "уборка: свой осиротевший ocproxy гасится" gone "$ours"
+    # Живая прокси-сессия (поддельная): openconnect, свой ocproxy, порт занят.
+    lp=$(listen "$port"); pids+=("$lp")
+    rc=0; while ! port_open "$port" && [ $rc -lt 30 ]; do sleep 0.1; rc=$((rc+1)); done
+    oc=$(fake "$tmp/fake/openconnect"); pids+=("$oc")
+    ours=$(fake "$tmp/fake/ocproxy"); pids+=("$ours")
+    printf '%s\n' "$oc" > "$tmp/state/proxy.pid"
+    printf 'STATE=connected\nPORT=%s\nPROFILE=px\nSYS_PROXY=on\nOCPROXY_PID=%s\n' "$port" "$ours" > "$tmp/state/proxy.env"
+    printf '[Connection]\nName = Прокси 2\nUrl = vpn.example.test/g2\nUser = tester\nMode = proxy\n\n[Proxy]\nPort = %s\n\n[Auth]\nTotp = off\n' "$port" > "$tmp/profiles/px2.ocbar"
+    out=$(OCBAR_OCPROXY=/usr/bin/true run connect --dry-run px2 || true)
+    hasnt "переключение прокси-профилей: порт своей сессии не помеха" "уже занят" "$out"
+    has "переключение прокси-профилей: сначала отключение старого" "сначала отключение профиля [px]" "$out"
+    : > "$tmp/var/helper.log"
+    OCBAR_SELFTEST_SERVICE="Selftest LAN" run _selftest-fn socks_apply >/dev/null || true
+    has "системный SOCKS: socks-set на активный сервис и порт профиля" "socks-set Selftest LAN $port" "$(cat "$tmp/var/helper.log")"
+    run _selftest-fn socks_clear_all >/dev/null || true
+    has "системный SOCKS: socks-clear снимает свой" "socks-clear Selftest LAN" "$(cat "$tmp/var/helper.log")"
+    is "системный SOCKS: в манифесте пусто" "" "$(cat "$tmp/var/socks.state" 2>/dev/null)"
+    OCBAR_SELFTEST_SERVICE="Selftest LAN" run _selftest-fn socks_apply >/dev/null || true
+    : > "$tmp/var/helper.log"
+    run _selftest-fn proxy_stop >/dev/null || true
+    check "proxy_stop: openconnect остановлен" gone "$oc"
+    check "proxy_stop: свой ocproxy остановлен" gone "$ours"
+    check "proxy_stop: чужой «ocproxy -D ${port}» жив" alive "$foreign"
+    has "proxy_stop: системный SOCKS снят" "socks-clear Selftest LAN" "$(cat "$tmp/var/helper.log")"
+    has "proxy_stop: состояние disconnected" "STATE=disconnected" "$(cat "$tmp/state/proxy.env")"
+    has "журнал — во временном каталоге" "прокси остановлен" "$(cat "$tmp/logs/supervisor.log" 2>/dev/null)"
+    has "порт занят не нами — прокси-профиль отказывает" "уже занят" "$(OCBAR_OCPROXY=/usr/bin/true run connect --dry-run px2)"
+    # Супервизор: прокси мёртв, ждём вход — свой системный SOCKS снимается не
+    # только при старте, но и в цикле (заглушка его «не снимает», и каждое
+    # снятие видно в журнале).
+    : > "$tmp/state/needs-login"; printf 'Selftest LAN %s\n' "$port" > "$tmp/var/socks.state"; : > "$tmp/var/helper.log"
+    OCBAR_STUB_KEEP_SOCKS=1 run supervise --dry-run --iterations=1 >/dev/null || true
+    is "супервизор: при «нужен вход» свой системный SOCKS снимается и в цикле" 2 "$(grep -c 'socks-clear' "$tmp/var/helper.log" || true)"
+    has "пауза без сессии отказывает" "паузить нечего" "$(run pause)"
+    rm -f "$tmp/profiles/px.ocbar" "$tmp/profiles/px2.ocbar" "$tmp/state/proxy.env" "$tmp/state/proxy.pid" \
+          "$tmp/state/desired" "$tmp/state/needs-login" "$tmp/var/socks.state"
 
     # Правила автозаполнения в самом профиле: селектор с «=» должен пережить
     # разбор, импорт — заменить секцию и не тронуть остальное, экспорт —
     # унести правила с собой.
     has "без правил — встроенные" "autofill=builtin" "$(run status --short)"
     printf '\n[Autofill]\nstop div.alert-error\nfill username input[name=username]\nclick button[type=submit]\n' >> "$tmp/profiles/t.ocbar"
-    out=$(run rules show t 2>&1)
+    out=$(run rules show t || true)
     has "правила из профиля" "inline" "$out"
     has "селектор с «=» цел" "fill username input[name=username]" "$out"
     has "источник правил в status" "autofill=inline" "$(run status --short)"
     printf 'fill password input[type=password]\nclick! a.other-way\n' > "$tmp/new.rules"
-    run rules import "$tmp/new.rules" t >/dev/null
+    run rules import "$tmp/new.rules" t >/dev/null || true
     out=$(cat "$tmp/profiles/t.ocbar")
     has "импорт: новое правило на месте" "click! a.other-way" "$out"
     hasnt "импорт: старое правило убрано" "input[name=username]" "$out"
     has "импорт: остальные секции целы" "wiki.example.test:443" "$out"
-    has "импорт: резервная копия" "input[name=username]" "$(cat "$tmp/profiles/t.ocbar.bak")"
+    has "импорт: резервная копия" "input[name=username]" "$(cat "$tmp/profiles/t.ocbar.bak" 2>/dev/null)"
     printf 'fill nothing x\n' > "$tmp/bad.rules"
-    has "непонятное правило отвергнуто" "не приняты" "$(run rules import "$tmp/bad.rules" t 2>&1)"
-    has "экспорт уносит правила" "[Autofill]" "$(run export t 2>&1)"
-    run rules clear t >/dev/null
+    has "непонятное правило отвергнуто" "не приняты" "$(run rules import "$tmp/bad.rules" t)"
+    has "экспорт уносит правила" "[Autofill]" "$(run export t)"
+    run rules clear t >/dev/null || true
     hasnt "секция убирается" "[Autofill]" "$(cat "$tmp/profiles/t.ocbar")"
+    # [Autofill] в середине файла: импорт переносит её в конец, а всё
+    # остальное — вместе с комментарием над следующей секцией — побайтно цело.
+    printf '[Connection]\nName = Середина\nUrl = vpn.example.test/m\n\n[Autofill]\nfill username input[id=u]\n\n# проверка доступа\n[Health]\nCheck = h:443\n\n[Proxy]\nPort = %s\n' "$port" > "$tmp/profiles/m.ocbar"
+    run rules import "$tmp/new.rules" m >/dev/null || true
+    printf '[Connection]\nName = Середина\nUrl = vpn.example.test/m\n\n# проверка доступа\n[Health]\nCheck = h:443\n\n[Proxy]\nPort = %s\n\n[Autofill]\nfill password input[type=password]\nclick! a.other-way\n' "$port" > "$tmp/want"
+    same "импорт в середину: остальное побайтно цело, [Autofill] в конце" "$tmp/profiles/m.ocbar" "$tmp/want"
+    run rules clear m >/dev/null || true
+    printf '[Connection]\nName = Середина\nUrl = vpn.example.test/m\n\n# проверка доступа\n[Health]\nCheck = h:443\n\n[Proxy]\nPort = %s\n' "$port" > "$tmp/want"
+    same "rules clear: соседние секции побайтно целы" "$tmp/profiles/m.ocbar" "$tmp/want"
+    cp "$tmp/profiles/m.ocbar" "$tmp/m.before"; cp "$tmp/profiles/m.ocbar.bak" "$tmp/m.before.bak"
+    run rules import "$tmp/bad.rules" m >/dev/null || true
+    same "отвергнутые правила: профиль не тронут" "$tmp/profiles/m.ocbar" "$tmp/m.before"
+    same "отвергнутые правила: .bak не тронут" "$tmp/profiles/m.ocbar.bak" "$tmp/m.before.bak"
+    rm -f "$tmp/profiles/m.ocbar" "$tmp/profiles/m.ocbar.bak"
 
     # Форма в несколько окон: заголовки шагов из разметки доживают до
     # профиля, шапка файла разметки — нет.
     printf '# Правила автозаполнения формы входа, размечены вручную 2026-09-10.\n# Портал: x\n\n# шаг 1 — idp.test/login\nfill  username input[id=u]\nclick button[id=next]\n# шаг 2 — idp.test/otp\nfill  totp input[id=otp]\nclick button[id=go]\n' > "$tmp/steps.rules"
-    out=$(run rules import "$tmp/steps.rules" t 2>&1)
+    out=$(run rules import "$tmp/steps.rules" t || true)
     has "шаги формы: импорт считает окна" "окон формы: 2" "$out"
     out=$(cat "$tmp/profiles/t.ocbar")
     has "шаги формы: заголовок окна в профиле" "# шаг 2 — idp.test/otp" "$out"
     hasnt "шаги формы: шапка разметки в профиль не попадает" "размечены вручную" "$out"
-    has "шаги формы: rules show показывает окна" "# шаг 1" "$(run rules show t 2>&1)"
+    has "шаги формы: rules show показывает окна" "# шаг 1" "$(run rules show t)"
     has "шаги формы: правила действуют из профиля" "autofill=inline" "$(run status --short)"
-    has "шаги формы: экспорт уносит заголовки" "# шаг 2" "$(run export t 2>&1)"
-    run rules clear t >/dev/null
+    has "шаги формы: экспорт уносит заголовки" "# шаг 2" "$(run export t)"
+    run rules clear t >/dev/null || true
     # Правка ключа профиля: заменить, добавить в секцию, завести секцию.
     printf '[Connection]\nName = Ключи\nUrl = vpn.example.test/k\nUser = tester\n\n[Auth]\nTotp = off\nKeychainService = svc\n\n[Health]\nCheck = h:443\n' > "$tmp/k.ocbar"
-    pf_set_key "$tmp/k.ocbar" Auth Totp sms
-    pf_set_key "$tmp/k.ocbar" Auth Password keychain
-    pf_set_key "$tmp/k.ocbar" Proxy Port 12080
+    pf_set_key "$tmp/k.ocbar" Auth Totp sms || true
+    pf_set_key "$tmp/k.ocbar" Auth Password keychain || true
+    pf_set_key "$tmp/k.ocbar" Proxy Port 12080 || true
     out=$(cat "$tmp/k.ocbar")
     has "ключ профиля заменяется" "Totp = sms" "$out"
     hasnt "старое значение ключа убрано" "Totp = off" "$out"
     matches "новый ключ — в своей секции" "KeychainService = svc.Password = keychain" "$(printf '%s' "$out" | tr '\n' '.')"
-    has "секция заводится, если её нет" "[Proxy]" "$out"
+    matches "новая секция: заголовок и ключ подряд" '\[Proxy\]\.Port = 12080(\.|$)' "$(printf '%s' "$out" | tr '\n' '.')"
     has "остальные секции целы" "Check = h:443" "$out"
     # Итог «Запомнить, как я вхожу» применяется к профилю.
     printf '[Connection]\nName = Учусь\nUrl = vpn.example.test/l\nUser = tester\n\n[Auth]\nTotp = auto\n' > "$tmp/profiles/l.ocbar"
     printf '%s' '{"rules": "stop  div.alert-error\n# шаг 1 — idp.test/login\nfill  username input[id=u]\nfill  password input[id=p]\nclick button[id=go]\n# шаг 2 — idp.test/otp\nfill  totp input[id=c]\nfill  manual input[id=cap]\nclick input[id=ok]", "totp": "sms", "password": ""}' > "$tmp/teach.json"
-    out=$(OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" OCBAR_SELFTEST_TEACH="$tmp/teach.json" "$SELF" _apply-teach l 2>&1)
+    OCBAR_SELFTEST_TEACH="$tmp/teach.json" run _apply-teach l >/dev/null || true
     has "запомненное: правила в профиле" "fill  manual input[id=cap]" "$(cat "$tmp/profiles/l.ocbar")"
     has "запомненное: Totp = sms" "Totp = sms" "$(cat "$tmp/profiles/l.ocbar")"
-    has "Totp = sms виден в secret status" "приходит по SMS" "$(run secret status l 2>&1)"
-    rm -f "$tmp/profiles/l.ocbar" "$tmp/k.ocbar"
+    has "Totp = sms виден в secret status" "приходит по SMS" "$(run secret status l)"
+    printf '%s' '{"rules": "", "totp": "", "password": "keychain"}' > "$tmp/pw.json"
+    OCBAR_SELFTEST_TEACH="$tmp/pw.json" run _apply-teach l >/dev/null || true
+    matches "запомненное: Password = keychain" '^Password = keychain$' "$(cat "$tmp/profiles/l.ocbar")"
+    cp "$tmp/profiles/l.ocbar" "$tmp/l.before"
+    printf '{"totp": "sms", ' > "$tmp/broken.json"
+    rc=0; OCBAR_SELFTEST_TEACH="$tmp/broken.json" run _apply-teach l >/dev/null || rc=$?
+    is "запомненное: битый итог — код 0" 0 "$rc"
+    same "запомненное: битый итог — профиль не тронут" "$tmp/profiles/l.ocbar" "$tmp/l.before"
+    if [ "$(id -u)" = 0 ]; then
+        omit "запомненное: профиль не на запись" "под root права каталога не мешают записи"
+    else
+        printf '%s' '{"rules": "fill  username input[id=u]", "totp": "sms", "password": "keychain"}' > "$tmp/ro.json"
+        chmod 500 "$tmp/profiles"
+        rc=0; out=$(OCBAR_SELFTEST_TEACH="$tmp/ro.json" run _apply-teach l) || rc=$?
+        chmod 700 "$tmp/profiles"
+        is "запомненное: профиль не на запись — код 0 (вход не рвётся)" 0 "$rc"
+        has "запомненное: профиль не на запись — предупреждение" "не записался" "$out"
+        same "запомненное: профиль не на запись — файл цел" "$tmp/profiles/l.ocbar" "$tmp/l.before"
+    fi
+    rm -f "$tmp/profiles/l.ocbar" "$tmp/k.ocbar" "$tmp/k.ocbar.bak"
     # Параметры кода (RFC 6238): читаются, проверяются, уезжают с экспортом,
     # решают судьбу записи из QR и доходят до расчёта кода.
     printf '[Connection]\nName = Параметры\nUrl = vpn.example.test/p\nUser = tester\n\n[Auth]\nTotp = keychain\nTotpAlgorithm = sha256\nTotpDigits = 8\nTotpPeriod = 60\n' > "$tmp/profiles/p.ocbar"
     # Два профиля-файла без умолчания: раньше profile_default возвращал 1, и
     # set -e молча обрывал и список, и connect без имени.
-    has "два профиля без умолчания: список виден целиком" "Параметры" "$(run profiles 2>&1)"
-    has "два профиля без умолчания: connect без имени объясняет" "нет профиля" "$(run connect 2>&1)"
-    out=$(run export p 2>&1)
+    has "два профиля без умолчания: список виден целиком" "Параметры" "$(run profiles)"
+    has "два профиля без умолчания: профиль без имени объясняет" "нет профиля" "$(run _check-profile)"
+    out=$(run export p || true)
     has "параметры кода: экспорт уносит алгоритм" "TotpAlgorithm   = SHA256" "$out"
     has "параметры кода: экспорт уносит период" "TotpPeriod      = 60" "$out"
-    local bad
     for bad in "TotpAlgorithm = MD5" "TotpDigits = 9" "TotpPeriod = 5"; do
         make_bad "$(printf '\n[Auth]\n%s' "$bad")"
-        has "параметры кода: «${bad}» отвергнуто" "${bad%% *}" "$(run connect bad 2>&1)"
+        has "параметры кода: «${bad}» отвергнуто" "${bad%% *}" "$(run _check-profile bad)"
     done
     rm -f "$tmp/profiles/bad.ocbar"
-    has "QR: HOTP отвергнут" "по счётчику" "$(run _qr-check p 'HOTP SHA1 6 30' 2>&1)"
-    has "QR: MD5 отвергнут" "не поддерживается" "$(run _qr-check p 'TOTP MD5 6 30' 2>&1)"
-    has "QR: SHA256, 8 цифр, 60 с — принято для профиля-файла" "ok" "$(run _qr-check p 'TOTP SHA256 8 60' 2>&1)"
+    has "QR: HOTP отвергнут" "по счётчику" "$(run _qr-check p 'HOTP SHA1 6 30')"
+    has "QR: MD5 отвергнут" "не поддерживается" "$(run _qr-check p 'TOTP MD5 6 30')"
+    has "QR: SHA256, 8 цифр, 60 с — принято для профиля-файла" "ok" "$(run _qr-check p 'TOTP SHA256 8 60')"
     printf 'default = old\n\n[old]\nurl = vpn.example.test/o\n' > "$tmp/profiles.conf"
-    has "QR: нестандартные параметры в старый формат не пишутся" "старого формата" "$(run _qr-check old 'TOTP SHA256 8 60' 2>&1)"
-    has "QR: обычная запись в старый формат — принята" "ok" "$(run _qr-check old 'TOTP SHA1 6 30' 2>&1)"
+    has "QR: нестандартные параметры в старый формат не пишутся" "старого формата" "$(run _qr-check old 'TOTP SHA256 8 60')"
+    has "QR: обычная запись в старый формат — принята" "ok" "$(run _qr-check old 'TOTP SHA1 6 30')"
     rm -f "$tmp/profiles.conf"
+    # Применение параметров из QR — тем же кодом, что у import-qr, но без
+    # связки ключей.
+    printf '[Connection]\nName = QR\nUrl = vpn.example.test/q\nUser = tester\n\n[Auth]\nTotp = keychain\n' > "$tmp/profiles/q.ocbar"
+    run _qr-apply q 'TOTP SHA512 7 45' >/dev/null || true
+    out=$(cat "$tmp/profiles/q.ocbar")
+    has "QR: алгоритм кода — в профиль" "TotpAlgorithm = SHA512" "$out"
+    has "QR: цифры — в профиль" "TotpDigits = 7" "$out"
+    has "QR: период — в профиль" "TotpPeriod = 45" "$out"
+    run _qr-apply q 'TOTP SHA1 6 30' >/dev/null || true
+    has "QR: обычная запись ставится поверх прежней" "TotpAlgorithm = SHA1" "$(cat "$tmp/profiles/q.ocbar")"
+    rm -f "$tmp/profiles/q.ocbar" "$tmp/profiles/q.ocbar.bak"
     printf '%s' '{"rules": "", "totp": "keychain", "password": "", "totp_algorithm": "SHA512", "totp_digits": "8", "totp_period": "30"}' > "$tmp/teach2.json"
-    OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" OCBAR_SELFTEST_TEACH="$tmp/teach2.json" "$SELF" _apply-teach p >/dev/null 2>&1
+    OCBAR_SELFTEST_TEACH="$tmp/teach2.json" run _apply-teach p >/dev/null || true
     out=$(cat "$tmp/profiles/p.ocbar")
     has "запомненное: алгоритм кода в профиле" "TotpAlgorithm = SHA512" "$out"
     has "запомненное: период по умолчанию — поверх прежнего" "TotpPeriod = 30" "$out"
     hasnt "запомненное: прежний период убран" "TotpPeriod = 60" "$out"
-    local qa
     if qa=$(auth_path); then
         has "расчёт кода: SHA256, 8 цифр — вектор RFC 6238" "46119246" \
             "$(OCBAR_TOTP_SECRET=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA OCBAR_TOTP_ALGORITHM=SHA256 OCBAR_TOTP_DIGITS=8 OCBAR_TOTP_AT=59 "$qa" --totp-now 2>&1)"
+    else
+        omit "расчёт кода: SHA256, 8 цифр — вектор RFC 6238" "не найден ocbar-auth (OCBAR_AUTH или auth/.build/release)"
     fi
     rm -f "$tmp/profiles/p.ocbar"
     printf '[Connection]\nName = Код\nUrl = vpn.example.test/c\nUser = tester\n\n[Auth]\nTotp = command\nTotpCommand = echo 123456\n' > "$tmp/profiles/c.ocbar"
-    has "secret code: свежий код из источника профиля" "123456" "$(run secret code c 2>&1)"
+    has "secret code: свежий код из источника профиля" "123456" "$(run secret code c)"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Уведомления: через приложение — только с его токеном и разрешением
+    # системы; иначе osascript, иначе «нужен вход» пропал бы молча.
+    tok=0123456789abcdef0123456789abcdef
+    printf '%s\n' "$tok" > "$tmp/state/notify.token"; chmod 600 "$tmp/state/notify.token"
+    printf '1\n' > "$tmp/state/notify.allowed"
+    out=$(OCBAR_SELFTEST_APP=1 run _notify-route 'ocbar: нужен вход' 'Сессия & «истекла»' || true)
+    matches "уведомление: через приложение, с токеном" "^app ocbar://notify\?title=[^&]+&body=[^&]+&token=${tok}\$" "$out"
+    is "уведомление: приложение не запущено — osascript" osascript "$(OCBAR_SELFTEST_APP=0 run _notify-route t b)"
+    printf '0\n' > "$tmp/state/notify.allowed"
+    is "уведомление: уведомления запрещены — osascript" osascript "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
+    printf '1\n' > "$tmp/state/notify.allowed"; chmod 644 "$tmp/state/notify.token"
+    is "уведомление: токен с правами 0644 — osascript" osascript "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
+    rm -f "$tmp/state/notify.token" "$tmp/state/notify.allowed"
+    is "уведомление: токена нет — osascript" osascript "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
+
+    if [ ${#pids[@]} -gt 0 ]; then kill "${pids[@]}" 2>/dev/null || true; fi
     rm -rf "$tmp"
     info "----------------------------------------"
-    if [ "$fails" = 0 ]; then info "selftest: всё OK ($total проверок)"; return 0; fi
-    info "selftest: провалов $fails из $total"; return 1
+    local tail=""
+    if [ "$skipped" -gt 0 ]; then tail=", пропущено: $skipped"; fi
+    if [ "$fails" = 0 ]; then info "selftest: всё OK ($total проверок$tail)"; return 0; fi
+    info "selftest: провалов $fails из $total$tail"; return 1
 }
 
 # ------------------------------------------------------------ правила ----
@@ -2572,7 +3018,7 @@ rules_source_label() {
 effective_rules_body() {
     if [ "${P_RULES_SRC:-}" = inline ]; then pf_section_raw "$P_FILE" Autofill 1
     elif [ -n "${P_RULES:-}" ] && [ -f "$P_RULES" ]; then
-        awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$P_RULES"
+        awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$P_RULES"
     fi
 }
 # Правило: stop <селектор> | fill username|password|totp <селектор> | click[!] <селектор>
@@ -2603,19 +3049,19 @@ cmd_rules() {
             # В профиль переносятся правила и заголовки окон формы («# шаг N»,
             # их пишет разметка); шапка файла разметки и прочие комментарии — нет.
             local body bad=0 line
-            body=$(awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^$/ { next } /^# *шаг / { print; next } /^[#;]/ { next } { print }' "$src")
+            body=$(awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^$/ { next } /^# *шаг / { print; next } /^[#;]/ { next } { print }' "$src")
             while IFS= read -r line; do
                 case "$line" in ''|\#*) continue ;; esac
                 valid_rule "$line" || { bad=1; warn "непонятное правило" "$line"; }
             done <<< "$body"
             [ "$bad" = 0 ] || die "правила не приняты — формат: stop <сел> | fill username|password|totp <сел> | click[!] <сел>"
-            printf '%s\n' "$body" | pf_replace_section "$P_FILE" Autofill
+            printf '%s\n' "$body" | pf_replace_section "$P_FILE" Autofill || die "не удалось записать $P_FILE"
             local nsteps; nsteps=$(printf '%s\n' "$body" | grep -c '^# *шаг ' || true)
             ok "правила в профиле [$P_NAME]" "$(printf '%s\n' "$body" | grep -vc '^#' || true) правил$( [ "${nsteps:-0}" -gt 1 ] && printf ', окон формы: %s' "$nsteps"), прошлая версия — $(basename "$P_FILE").bak" ;;
         clear)
             load_profile "${2:-}"
             [ -n "$P_FILE" ] || die "профиль [$P_NAME] старого формата"
-            printf '' | pf_replace_section "$P_FILE" Autofill
+            printf '' | pf_replace_section "$P_FILE" Autofill || die "не удалось записать $P_FILE"
             ok "секция [Autofill] убрана из [$P_NAME]" "действуют $( [ -f "$RULES_FILE" ] && echo "правила из $RULES_FILE" || echo "встроенные правила")" ;;
         *) die "rules: show [профиль] | import <файл> [профиль] | clear [профиль]" ;;
     esac
@@ -2779,7 +3225,8 @@ cmd_version() {
     [ "${1:-}" = "--all" ] || { printf 'ocbar %s\n' "$VERSION"; return 0; }
     local h a oc
     printf 'ocbar=%s\nocbar_path=%s\n' "$VERSION" "$SELF_ENTRY"
-    if h=$(helper_path); then
+    # В самопроверке хелпер подменён заглушкой — настоящий не спрашиваем.
+    if [ -z "${OCBAR_SELFTEST_HELPER:-}" ] && h=$(helper_path); then
         printf 'helper=%s\nhelper_path=%s\nhelper_nopasswd=%s\n' \
             "$("$h" version 2>/dev/null | awk '{print $2}')" "$h" \
             "$(helper_nopasswd && echo 1 || echo 0)"
@@ -2803,10 +3250,13 @@ usage() {
     cat <<'USAGE'
 ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супервизор.
 
-  ocbar connect [профиль] [--show] [--teach]   подключиться; --teach — войти руками, а ocbar
-                                      запомнит форму и предложит сохранить пароль и код;
-                                      другим профилем при живой сессии — переключение;
-                                      Mode = proxy в профиле — SOCKS через ocproxy, без root
+  ocbar connect [профиль] [--show] [--teach] [-v]
+                                      подключиться; --show — показать окно входа;
+                                      --teach — войти руками, а ocbar запомнит форму
+                                      и предложит сохранить пароль и код; -v — подробный
+                                      журнал входа; другим профилем при живой сессии —
+                                      переключение; Mode = proxy в профиле — SOCKS
+                                      через ocproxy, без root
   ocbar disconnect                    отключиться
   ocbar pause                         «как будто выключен»: снять маршруты и зоны,
                                       туннель и вход оставить живыми
@@ -2816,18 +3266,23 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar profiles                      список профилей
   ocbar import <файл.ocbar> [имя]     добавить профиль одним файлом
   ocbar export <профиль> [файл]       выгрузить профиль (и перевести в новый формат)
-  ocbar routes add|del|toggle <CIDR>  маршруты в туннель на лету; apply | clear
+  ocbar routes [status]               состояние (то же, что ocbar status)
+  ocbar routes on|off|toggle <CIDR>   сеть в туннель на лету (add|del — то же);
+                                      apply — все включённые; clear — снять все
   ocbar dns status|apply|clear        зоны /etc/resolver; on|off|toggle <зона>
   ocbar dns init <файл> <DNS|vpn>     создать zones.conf из списка доменов
   ocbar secret set-password|set-totp|status|code [профиль]   Keychain; code — текущий код
   ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
-  ocbar learn [профиль] [--probe]     разметить форму входа мышью (--probe — без
+  ocbar learn [профиль] [--probe] [--out <файл>]
+                                      разметить форму входа мышью (--probe — без
                                       окна: что предзаполнение узнает само); правила
-                                      автозаполнения для своего портала —
-                                      в секцию [Autofill] самого профиля
-  ocbar rules show|import|clear       правила автозаполнения профиля
+                                      ложатся в секцию [Autofill] самого профиля,
+                                      с --out — в указанный файл
+  ocbar rules show [профиль]          правила автозаполнения профиля
+  ocbar rules import <файл> [профиль] положить правила из файла в [Autofill]
+  ocbar rules clear [профиль]         убрать [Autofill] из профиля
   ocbar app [start|stop|status]       приложение меню-бара; autostart on|off
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
@@ -2835,11 +3290,15 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar selftest                      проверка разбора на подставленных конфигах
   ocbar cleanup                       мусор от прошлой сессии
   ocbar supervise                     цикл реконнекта (его запускает LaunchAgent)
-  ocbar supervisor status|restart     состояние и перезапуск агента супервизора
+  ocbar supervisor status|start|stop|restart
+                                      агент супервизора: состояние, загрузить,
+                                      выгрузить (туннель это переживёт), перезапустить
   sudo ocbar install [--trust]        хелпер, sudoers, LaunchAgent (один раз)
   sudo ocbar uninstall
 
-  --dry-run   печатать привилегированные команды вместо выполнения
+  --dry-run   печатать привилегированные команды вместо выполнения;
+              процессы не гасятся (disconnect, cleanup, supervise)
+  -h, --help  эта справка
 
 Конфиги: ~/.config/ocbar/{profiles.conf,zones.conf,networks.conf,autofill.rules}
 USAGE
@@ -2874,6 +3333,19 @@ case "${1:-}" in
     _proxy-tun) cmd_proxy_tun ;;
     _apply-teach) shift; load_profile "${1:-}"; apply_teach "${OCBAR_SELFTEST_TEACH:-}" ;;   # для selftest
     _qr-check) shift; load_profile "${1:-}"; qr_entry_check "${2:-}"; echo ok ;;             # для selftest
+    # Загрузка и проверка профиля без входа: отрицательные проверки selftest
+    # идут сюда, а не в connect — при поломке валидации дело не дойдёт до входа.
+    _check-profile) shift; load_profile "${1:-}"; echo ok ;;
+    _notify-route) shift; notify_route "${1:-}" "${2:-}" ;;                                   # для selftest
+    _qr-apply) shift; load_profile "${1:-}"; qr_entry_check "${2:-}"; qr_apply_params "${2:-}" ;;  # для selftest
+    # Уборка прокси и системный SOCKS изнутри — только для selftest и только с
+    # заглушкой хелпера: настоящий хелпер отсюда не зовётся.
+    _selftest-fn)
+        shift; [ -n "${OCBAR_SELFTEST_HELPER:-}" ] || die "_selftest-fn — только для selftest (нет OCBAR_SELFTEST_HELPER)"
+        case "${1:-}" in
+            socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
+            *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup" ;;
+        esac ;;
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
     version)    shift; cmd_version "${1:-}" ;;
