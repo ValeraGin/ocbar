@@ -283,29 +283,54 @@ pf_section_raw() { # файл секция [1 — вместе с коммент
     ' "$1"
 }
 
-# Заменить секцию файла целиком: старая секция (с комментариями) убирается,
-# новая дописывается в конец. Остальные секции не трогаются.
+# Заменить секцию файла целиком: старая секция убирается, новая дописывается
+# в конец. Остальные секции не трогаются — вместе с комментариями, стоящими
+# вплотную над заголовком следующей секции: они про неё, а не про заменяемую
+# (раньше пропадали). Пустые строки в хвосте файла не копятся, CRLF и BOM
+# при записи уходят. Код возврата честный: запись не удалась — 1.
 pf_replace_section() { # файл секция содержимое(stdin)
     local f="$1" sec="$2" body; body=$(cat)
     local tmp="$f.tmp"
-    awk -v want="$sec" '
+    awk -v want="$sec" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
-        /^[ \t]*\[/ { s = trim($0); gsub(/^\[|\]$/, "", s); skip = (tolower(s) == tolower(want)); if (skip) next }
-        !skip { print }
-    ' "$f" | awk 'NR==1 || !(prev == "" && $0 == "") { print } { prev = $0 }' > "$tmp"
+        # пустые строки печатаются только перед непустой — хвост не копится
+        function out(line) { while (pend > 0) { print ""; pend-- } print line }
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
+        /^[ \t]*\[/ {
+            if (skip) {
+                k = nb; while (k > 0 && buf[k] ~ /^[ \t]*[#;]/) k--
+                if (k < nb) {
+                    if (k > 0 && buf[k] ~ /^[ \t]*$/ && pend == 0) pend = 1
+                    for (i = k + 1; i <= nb; i++) out(buf[i])
+                }
+                nb = 0
+            }
+            s = trim($0); gsub(/^\[|\]$/, "", s); skip = (tolower(s) == tolower(want))
+            if (skip) next
+            out($0); next
+        }
+        skip { buf[++nb] = $0; next }
+        /^[ \t]*$/ { pend++; next }
+        { out($0) }
+    ' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
     if [ -n "$body" ]; then
-        { [ -s "$tmp" ] && [ -n "$(tail -c1 "$tmp")" ] && printf '\n'; printf '\n[%s]\n%s\n' "$sec" "$body"; } >> "$tmp"
+        { if [ -s "$tmp" ]; then printf '\n'; fi; printf '[%s]\n%s\n' "$sec" "$body"; } >> "$tmp" || { rm -f "$tmp"; return 1; }
     fi
     cp -f "$f" "$f.bak" 2>/dev/null || true
-    mv "$tmp" "$f"; chmod 600 "$f" 2>/dev/null || true
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    chmod 600 "$f" 2>/dev/null || true
+    return 0
 }
 
 # Поставить ключ в секции профиля: заменить, если есть, добавить в конец
 # секции, если нет, завести секцию, если нет и её. Прошлая версия — .bak.
 pf_set_key() { # файл секция ключ значение
     local f="$1" tmp="$1.tmp"
-    awk -v want="$2" -v key="$3" -v val="$4" '
+    awk -v want="$2" -v key="$3" -v val="$4" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
         /^[ \t]*\[/ {
             if (insec && !done) { print key " = " val; done = 1 }
             printf "%s", blank; blank = ""
@@ -322,9 +347,11 @@ pf_set_key() { # файл секция ключ значение
             if (insec && !done) { print key " = " val; done = 1 }
             printf "%s", blank
             if (!seen) { print ""; print "[" want "]"; print key " = " val }
-        }' "$f" > "$tmp"
+        }' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
     cp -f "$f" "$f.bak" 2>/dev/null || true
-    mv "$tmp" "$f"; chmod 600 "$f" 2>/dev/null || true
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    chmod 600 "$f" 2>/dev/null || true
+    return 0
 }
 
 profile_files() { [ -d "$PROFILE_DIR" ] && ls "$PROFILE_DIR"/*.ocbar 2>/dev/null | while read -r f; do basename "$f" .ocbar; done || true; }
@@ -890,9 +917,10 @@ set_totp_params() { # алгоритм цифры период
     local k v d kv
     for kv in "TotpAlgorithm $1 SHA1" "TotpDigits $2 6" "TotpPeriod $3 30"; do
         read -r k v d <<< "$kv"
-        if [ "$v" != "$d" ] || [ -n "$(pf_get "$P_FILE" Auth "$k")" ]; then pf_set_key "$P_FILE" Auth "$k" "$v"; fi
+        if [ "$v" != "$d" ] || [ -n "$(pf_get "$P_FILE" Auth "$k")" ]; then pf_set_key "$P_FILE" Auth "$k" "$v" || return 1; fi
     done
     P_TOTP_ALG="$1"; P_TOTP_DIGITS="$2"; P_TOTP_PERIOD="$3"
+    return 0
 }
 
 cmd_secret() {
@@ -1127,7 +1155,9 @@ do_connect() { # профиль уже загружен
     # Что человек решил сохранить после входа — применяем здесь, в
     # родительской оболочке: authenticate работает в подстановке, и её
     # вывод — строка с токеном.
-    [ -n "$TEACH_OUT" ] && { apply_teach "$TEACH_OUT"; rm -f "$TEACH_OUT"; }
+    # «|| true» — не для кода возврата (он и так 0): в этом контексте set -e
+    # не обрывает apply_teach на непредвиденной ошибке после удачного входа.
+    if [ -n "$TEACH_OUT" ]; then apply_teach "$TEACH_OUT" || true; rm -f "$TEACH_OUT"; fi
     # 5 — «нужен человек»: не ошибка, а решение, которое принимает не скрипт.
     [ "$rc" = 5 ] && return 5
     [ "$rc" = 0 ] || return "$rc"
@@ -1181,6 +1211,11 @@ do_connect() { # профиль уже загружен
 apply_teach() { # файл
     local f="$1"
     [ -s "$f" ] && [ -n "${P_FILE:-}" ] || return 0
+    # Битый итог — предупреждение, профиль не трогаем, подключение идёт дальше.
+    if ! /usr/bin/python3 -c 'import json,sys; assert isinstance(json.load(open(sys.argv[1])), dict)' "$f" >/dev/null 2>&1; then
+        warn "запомненное" "итог окна входа не разобрался — профиль не тронут; повторите: ocbar connect --teach"
+        return 0
+    fi
     local get='import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))'
     local rules totp pwmode
     rules=$(/usr/bin/python3 -c "$get" "$f" rules 2>/dev/null || true)
@@ -1196,16 +1231,25 @@ apply_teach() { # файл
         ( cmd_rules import "$t" "$P_NAME" ) || warn "правила формы" "не сохранились — повторите: ocbar connect --teach"
         rm -f "$t"
     fi
+    # Профиль может быть не на запись (чужой каталог, файл root) — это
+    # предупреждение с тем, что поставить руками, а не обрыв после входа.
     case "$totp" in
-        keychain) pf_set_key "$P_FILE" Auth Totp keychain
-                  set_totp_params "${ta:-SHA1}" "${td:-6}" "${tp:-30}"
-                  ok "код второго фактора" "секрет в связке ключей, проверен по введённому коду — Totp = keychain$(totp_params_label)" ;;
-        sms)      pf_set_key "$P_FILE" Auth Totp sms
-                  ok "код второго фактора" "приходит по SMS — Totp = sms: вводите вы, молчаливого переподключения не будет" ;;
+        keychain)
+            if pf_set_key "$P_FILE" Auth Totp keychain && set_totp_params "${ta:-SHA1}" "${td:-6}" "${tp:-30}"; then
+                ok "код второго фактора" "секрет в связке ключей, проверен по введённому коду — Totp = keychain$(totp_params_label)"
+            else
+                warn "код второго фактора" "секрет в связке ключей, но профиль $P_FILE не записался — поставьте в [Auth]: Totp = keychain"
+            fi ;;
+        sms)
+            if pf_set_key "$P_FILE" Auth Totp sms; then
+                ok "код второго фактора" "приходит по SMS — Totp = sms: вводите вы, молчаливого переподключения не будет"
+            else
+                warn "код второго фактора" "профиль $P_FILE не записался — поставьте в [Auth]: Totp = sms"
+            fi ;;
     esac
     if [ "$pwmode" = keychain ]; then
-        pf_set_key "$P_FILE" Auth Password keychain
-        ok "пароль" "в связке ключей — Password = keychain"
+        if pf_set_key "$P_FILE" Auth Password keychain; then ok "пароль" "в связке ключей — Password = keychain"
+        else warn "пароль" "в связке ключей, но профиль $P_FILE не записался — поставьте в [Auth]: Password = keychain"; fi
     fi
     return 0
 }
@@ -2651,13 +2695,13 @@ cmd_rules() {
                 valid_rule "$line" || { bad=1; warn "непонятное правило" "$line"; }
             done <<< "$body"
             [ "$bad" = 0 ] || die "правила не приняты — формат: stop <сел> | fill username|password|totp <сел> | click[!] <сел>"
-            printf '%s\n' "$body" | pf_replace_section "$P_FILE" Autofill
+            printf '%s\n' "$body" | pf_replace_section "$P_FILE" Autofill || die "не удалось записать $P_FILE"
             local nsteps; nsteps=$(printf '%s\n' "$body" | grep -c '^# *шаг ' || true)
             ok "правила в профиле [$P_NAME]" "$(printf '%s\n' "$body" | grep -vc '^#' || true) правил$( [ "${nsteps:-0}" -gt 1 ] && printf ', окон формы: %s' "$nsteps"), прошлая версия — $(basename "$P_FILE").bak" ;;
         clear)
             load_profile "${2:-}"
             [ -n "$P_FILE" ] || die "профиль [$P_NAME] старого формата"
-            printf '' | pf_replace_section "$P_FILE" Autofill
+            printf '' | pf_replace_section "$P_FILE" Autofill || die "не удалось записать $P_FILE"
             ok "секция [Autofill] убрана из [$P_NAME]" "действуют $( [ -f "$RULES_FILE" ] && echo "правила из $RULES_FILE" || echo "встроенные правила")" ;;
         *) die "rules: show [профиль] | import <файл> [профиль] | clear [профиль]" ;;
     esac
