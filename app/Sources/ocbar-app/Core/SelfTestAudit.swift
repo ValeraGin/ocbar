@@ -141,6 +141,25 @@ extension SelfTest {
         t.check("уведомление: свой токен принят", Notifier.parse(good) != nil)
         t.check("уведомление: чужой токен отвергнут", Notifier.parse(bad) == nil)
         t.check("уведомление: без токена отвергнуто", Notifier.parse(none) == nil)
+        t.check("уведомление: при незаписанном токене не принимается ничего",
+                Notifier.verdict(good, token: nil) != .show(title: "t", body: "b"))
+
+        // Токен в файле: одна строка hex, права 0600, notify.allowed рядом.
+        let dir = NSTemporaryDirectory() + "ocbar-notify-\(getpid())/state"
+        defer { try? FileManager.default.removeItem(atPath: (dir as NSString).deletingLastPathComponent) }
+        let token = Notifier.prepareToken(in: dir)
+        let file = dir + "/notify.token"
+        let text = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
+        let perms = ((try? FileManager.default.attributesOfItem(atPath: file))?[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        t.check("уведомление: токен записан одной строкой hex",
+                token != nil && text == (token ?? "") + "\n" && (token ?? "").count == 32
+                && (token ?? "").allSatisfy { $0.isHexDigit }, text)
+        t.check("уведомление: файл токена — 0600", perms == 0o600, String(perms, radix: 8))
+        t.check("уведомление: записанный токен принимается",
+                Notifier.parse(URL(string: "ocbar://notify?title=t&token=\(token ?? "-")")!) != nil)
+        Notifier.writeAllowed(false, in: dir)
+        t.check("уведомление: notify.allowed пишется",
+                (try? String(contentsOfFile: dir + "/notify.allowed", encoding: .utf8)) == "0\n")
     }
 
     // --- сроки ------------------------------------------------------------
@@ -237,7 +256,7 @@ extension SelfTest {
         let store = StatusStore(testSource: {
             var s = Status(); s.profile = "опрос-\(polls.inc())"; return s
         })
-        store.perform("долгое действие") { Thread.sleep(forTimeInterval: 3); return .ok("") }
+        store.perform("долгое действие") { _ in Thread.sleep(forTimeInterval: 3); return .ok("") }
         spin(0.2)
         let before = polls.value
         store.refresh()
@@ -253,5 +272,40 @@ extension SelfTest {
         for _ in 0..<5 { slowStore.refresh() }
         spin(2.0)
         t.check("опрос: тики не копятся за медленным опросом", slow.value == 1, "вызовов \(slow.value)")
+
+        // «Отключить» посреди долгого входа: вход отменяется (запущенная
+        // команда гаснет), следом — отключение. Отключение подставное.
+        let disconnects = Counter()
+        let cancelStore = StatusStore(testSource: { Status() }, disconnect: { _ = disconnects.inc(); return .ok("") })
+        cancelStore.perform("Подключаюсь…", cancel: "Отменить подключение", disconnects: true) { token in
+            let r = Shell.run("/bin/sleep", ["30"], timeout: 60, cancel: token)
+            return r.code == Shell.cancelledCode ? .cancelled : .ok("")
+        }
+        spin(0.3)
+        let pressed = Date()
+        cancelStore.disconnect()
+        spin(6) { cancelStore.busy == nil && disconnects.value == 1 }
+        let took = Date().timeIntervalSince(pressed)
+        t.check("отмена: «Отключить» во время входа гасит вход и отключает",
+                disconnects.value == 1 && cancelStore.busy == nil && took < 5,
+                "отключений \(disconnects.value), занято: \(cancelStore.busy ?? "нет"), \(String(format: "%.1f", took)) с")
+
+        // Короткое действие не отменяется, а доделывается; отключение — следом.
+        let shortStore = StatusStore(testSource: { Status() }, disconnect: { _ = disconnects.inc(); return .ok("") })
+        let finished = Counter()
+        shortStore.perform("Переключаю…") { _ in Thread.sleep(forTimeInterval: 0.5); _ = finished.inc(); return .ok("") }
+        shortStore.disconnect()
+        spin(4) { disconnects.value == 2 && shortStore.busy == nil }
+        t.check("отмена: короткое действие доделывается, отключение — следом",
+                finished.value == 1 && disconnects.value == 2, "доделано \(finished.value), отключений \(disconnects.value - 1)")
+
+        // Отмена гасит и потомков: окно входа (ocbar-auth) — потомок ocbar.
+        let token = CancelToken()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { token.cancel() }
+        let r = Shell.run("/bin/sh", ["-c", "/bin/sleep 31 & echo $!; wait"], timeout: 20, cancel: token)
+        let child = pid_t(r.out.split(separator: "\n").first.map(String.init) ?? "") ?? 0
+        t.check("отмена: команда и её потомки погашены",
+                r.code == Shell.cancelledCode && child > 0 && kill(child, 0) != 0,
+                "код \(r.code), потомок \(child)")
     }
 }

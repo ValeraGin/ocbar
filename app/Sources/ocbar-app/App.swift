@@ -76,7 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    // ocbar://notify?title=…&body=… — уведомление от клиента (см. Notifier).
+    // ocbar://notify?title=…&body=…&token=… — уведомление от клиента (см.
+    // Notifier). Без своего токена не показывается — Notifier пишет в журнал.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where !Notifier.handle(url) {
             AppLog.write("неизвестный URL: \(url.absoluteString)")
