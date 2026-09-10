@@ -717,7 +717,9 @@ cmd_suspend() {
 # Применить зоны из wanted, подставив резолвер шлюза вместо слова vpn.
 apply_wanted_zones() {
     [ -s "$ZONES_WANTED" ] || { clear_zones; return 0; }
-    local vpndns; vpndns=$(sed -n 's/^DNS=//p' "$TUNNEL_ENV" 2>/dev/null | head -1); vpndns="${vpndns%% *}"
+    # Без tunnel.env (туннель ещё не поднимался) sed падает, и под pipefail
+    # zone-add/zone-del молча выходили с кодом 1 — отсюда || true.
+    local vpndns; vpndns=$(sed -n 's/^DNS=//p' "$TUNNEL_ENV" 2>/dev/null | head -1 || true); vpndns="${vpndns%% *}"
     [ -n "$vpndns" ] || say "шлюз не прислал DNS — зоны со значением vpn пропущены"
     awk -v d="$vpndns" '$2=="vpn" { if (d=="") next; $2=d } {print}' "$ZONES_WANTED" | apply_zones
 }
