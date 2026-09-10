@@ -87,7 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // Витрина состояний для разработки: то же меню на подставленных данных,
     // все состояния сразу. Обычному запуску не мешает.
     private func openStage() {
-        NSApp.setActivationPolicy(.regular)
+        // Снимок (--shot) — вне экрана и без активации: окно не должно
+        // вспыхивать поверх чужой работы, значок в Dock не нужен.
+        let offscreen = CommandLine.arguments.contains("--shot")
+        if !offscreen { NSApp.setActivationPolicy(.regular) }
         let window = NSWindow(contentRect: NSRect(x: 60, y: 60, width: 1450, height: 1600),
                               styleMask: [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
@@ -102,10 +105,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             window.contentView = NSHostingView(rootView: StageView())
         }
-        window.setFrameOrigin(NSPoint(x: 60, y: 60))
         window.delegate = self
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if offscreen {
+            window.setFrameOrigin(NSPoint(x: -30000, y: -30000))
+            window.orderFrontRegardless()
+        } else {
+            window.setFrameOrigin(NSPoint(x: 60, y: 60))
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
         stageWindow = window
     }
 
