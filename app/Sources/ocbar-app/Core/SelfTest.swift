@@ -190,12 +190,15 @@ enum SelfTest {
         GlobalHotkeys.shared.unregisterAll()
 
         // --- уведомления от клиента по URL ---
-        let n = Notifier.parse(URL(string: "ocbar://notify?title=ocbar%3A%20%D0%BF%D0%B0%D1%83%D0%B7%D0%B0&body=%D0%9C%D0%B0%D1%80%D1%88%D1%80%D1%83%D1%82%D1%8B%20%D1%81%D0%BD%D1%8F%D1%82%D1%8B")!)
+        let savedToken = Notifier.expectedToken
+        Notifier.expectedToken = "5e1f7e57"
+        defer { Notifier.expectedToken = savedToken }
+        let n = Notifier.parse(URL(string: "ocbar://notify?title=ocbar%3A%20%D0%BF%D0%B0%D1%83%D0%B7%D0%B0&body=%D0%9C%D0%B0%D1%80%D1%88%D1%80%D1%83%D1%82%D1%8B%20%D1%81%D0%BD%D1%8F%D1%82%D1%8B&token=5e1f7e57")!)
         check("уведомление разбирается", n != nil)
         check("приставка «ocbar:» убрана", n?.title == "пауза", n?.title ?? "")
         check("текст уведомления", n?.body == "Маршруты сняты")
         check("чужая схема отвергнута", Notifier.parse(URL(string: "http://notify?title=x")!) == nil)
-        check("пустое уведомление отвергнуто", Notifier.parse(URL(string: "ocbar://notify")!) == nil)
+        check("пустое уведомление отвергнуто", Notifier.parse(URL(string: "ocbar://notify?token=5e1f7e57")!) == nil)
 
         // --- разбор состояния ---
         let status = Status.parse("""
@@ -401,6 +404,15 @@ extension SelfTest {
             check("редактор: выбран второй профиль", shows("Бета"))
             check("редактор: разметка доступна после выбора другого профиля", ProfileEditorView.probeLearnEnabled == true,
                   "кнопка " + (ProfileEditorView.probeLearnEnabled.map { $0 ? "доступна" : "серая" } ?? "не отрисована"))
+            // Файл открытого профиля записал кто-то другой (разметка, ocbar
+            // rules): правок в редакторе нет — он должен перечитать файл сам.
+            try? "[Connection]\nName = Бета-2\nUrl = vpn.example.test/b\n\n[Routes]\n10.0.0.0/8\n\n[Auth]\nPassword = ask\nTotp = off\n"
+                .write(toFile: tmp + "/profiles/b.ocbar", atomically: true, encoding: .utf8)
+            let checksBefore = ProfileEditorView.probeDiskChecks
+            settle(3.5)
+            check("редактор: файл, изменённый на диске, перечитан", shows("Бета-2"),
+                  "сверок с диском \(ProfileEditorView.probeDiskChecks - checksBefore), последняя: «\(ProfileEditorView.probeDiskNote)»; поля: "
+                  + views(NSTextField.self).map(\.stringValue).filter { $0.contains("Бета") }.joined(separator: ", "))
         } else {
             check("редактор: список профилей найден", false)
         }
