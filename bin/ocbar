@@ -2313,16 +2313,24 @@ cmd_rules() {
 # покрывают только типовые. Разметка — способ объяснить программе чужую
 # форму мышью: человек показывает поля и кнопку, правила пишутся сами.
 cmd_learn() {
-    local p="" out="" a
+    local p="" out="" a probe=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --out) out="${2:-}"; shift 2 ;;
+            --probe) probe=1; shift ;;
             -*) die "learn: --out <файл>" ;;
             *) p="$1"; shift ;;
         esac
     done
     load_profile "$p"
     local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
+    # --probe: что предзаполнение разметки узнало бы на первом окне портала —
+    # без окна, без учётных данных, ничего не нажимая.
+    if [ "$probe" = 1 ]; then
+        info "Пробник разметки: профиль [$P_NAME], $P_URL (без окна, ничего не нажимается)"
+        "$auth" --learn-probe --url "$P_URL" --useragent "$P_UA"
+        return
+    fi
     # Куда класть: явный --out; иначе профилю-файлу — в его секцию [Autofill]
     # (если он не указывает общий файл ключом Rules); старому формату — в файл.
     local target="$out" into_profile=0
@@ -2500,7 +2508,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
-  ocbar learn [профиль] [--out файл]  разметить форму входа мышью: правила
+  ocbar learn [профиль] [--probe]     разметить форму входа мышью (--probe — без
+                                      окна: что предзаполнение узнает само); правила
                                       автозаполнения для своего портала —
                                       в секцию [Autofill] самого профиля
   ocbar rules show|import|clear       правила автозаполнения профиля
