@@ -111,8 +111,10 @@ final class OcbarClient: @unchecked Sendable {
     // Тайм-аут шире: после входа ещё окно «что сохранить», до трёх минут.
     func connect(profile: String?, show: Bool = false, teach: Bool = false) -> ActionResult {
         action(["connect"] + (profile.map { [$0] } ?? []) + (show ? ["--show"] : []) + (teach ? ["--teach"] : []),
-               timeout: teach ? 600 : 360)
+               timeout: Self.connectTimeout(teach: teach))
     }
+    static func connectTimeout(teach: Bool) -> TimeInterval { teach ? 600 : 360 }
+    static let learnTimeout: TimeInterval = 1800
     func disconnect() -> ActionResult { action(["disconnect"], timeout: 40) }
     func pause() -> ActionResult { action(["pause"], timeout: 40) }
     func resume() -> ActionResult { action(["resume"], timeout: 60) }
