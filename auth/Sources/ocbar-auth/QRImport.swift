@@ -21,12 +21,13 @@ enum QRImport {
     }
 
     enum ImportError: Error, CustomStringConvertible {
-        case noImage(String), noQR, badPayload(String), empty
+        case noImage(String), noQR, notOTP, badPayload(String), empty
         var description: String {
             switch self {
             case .noImage(let p): return "не удалось прочитать изображение: \(p)"
             case .noQR:           return "в изображении нет QR-кода (или он нечитаем — попробуйте кадр покрупнее)"
-            case .badPayload(let s): return "QR прочитан, но это не otpauth: \(s)"
+            case .notOTP:         return "QR прочитан, но это не QR второго фактора (нет ссылки otpauth://)"
+            case .badPayload(let s): return "QR второго фактора прочитан, но разобрать не удалось: \(s)"
             case .empty:          return "в QR нет ни одной записи TOTP"
             }
         }
@@ -60,10 +61,15 @@ enum QRImport {
 
     // MARK: - разбор otpauth
 
+    /// Схема URL по стандарту без учёта регистра: `OTPAUTH://…` — та же
+    /// ссылка. Чужой QR в ошибку не попадает ни куском: в нём может быть
+    /// секрет (ссылка с опечаткой в схеме, пароль Wi-Fi), а текст ошибки
+    /// показывается в окне и уходит в журнал.
     static func parse(_ payload: String) throws -> [Entry] {
-        if payload.hasPrefix("otpauth-migration://") { return try parseMigration(payload) }
-        if payload.hasPrefix("otpauth://") { return [try parseSingle(payload)] }
-        throw ImportError.badPayload(String(payload.prefix(40)))
+        let lower = payload.lowercased()
+        if lower.hasPrefix("otpauth-migration://") { return try parseMigration(payload) }
+        if lower.hasPrefix("otpauth://") { return [try parseSingle(payload)] }
+        throw ImportError.notOTP
     }
 
     private static func parseSingle(_ s: String) throws -> Entry {

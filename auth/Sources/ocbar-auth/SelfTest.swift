@@ -21,7 +21,32 @@ enum AuthSelfTest {
         failures = 0
         gate()
         journal()
+        qr()
         return failures
+    }
+
+    // MARK: - QR
+
+    static func qr() {
+        out("QR второго фактора:")
+        let secret = "JBSWY3DPEHPK3PXP"
+        let upper = (try? QRImport.parse("OTPAUTH://TOTP/VPN:alice?secret=\(secret)&issuer=VPN")) ?? []
+        ok("схема OTPAUTH:// в верхнем регистре принимается",
+           upper.count == 1 && upper.first?.secretBase32 == secret && upper.first?.isTOTP == true,
+           "\(upper.count) записей")
+        let migration = LearnCheck.migrationPayload([(Data((0..<20).map { UInt8($0) }), "alice", "VPN")])
+        let mixed = (try? QRImport.parse(migration.replacingOccurrences(of: "otpauth-migration://", with: "OtpAuth-Migration://"))) ?? []
+        ok("схема otpauth-migration:// без учёта регистра", mixed.count == 1, "\(mixed.count) записей")
+        // Похоже на ссылку с секретом, но схема другая: в текст ошибки,
+        // который видит человек и журнал, не должно попасть ни куска.
+        let alien = "otpauht://totp/VPN:alice?secret=\(secret)"
+        var message = ""
+        do { _ = try QRImport.parse(alien) } catch { message = "\(error)" }
+        ok("чужой QR: ошибка без содержимого QR", !message.isEmpty && !message.contains("JBSWY") && !message.contains("otpauht"),
+           message)
+        var wifi = ""
+        do { _ = try QRImport.parse("WIFI:S:home;T:WPA;P:hunter2;;") } catch { wifi = "\(error)" }
+        ok("QR сети Wi-Fi: пароль сети в ошибку не попадает", !wifi.contains("hunter2") && wifi.contains("не QR второго фактора"), wifi)
     }
 
     // MARK: - журнал в --verbose
