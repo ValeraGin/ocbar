@@ -100,9 +100,18 @@ struct LogsView: View {
         }
     }
 
+    // Пути — из `ocbar version --all`, но в фоне: вызов бывает долгим, а
+    // окно должно открыться сразу. До ответа — запасные пути.
     private func loadSources() {
-        let v = OcbarClient.shared.versions()
-        sources = [
+        sources = Self.sources(from: [:])
+        DispatchQueue.global(qos: .utility).async {
+            let v = OcbarClient.shared.versions()
+            DispatchQueue.main.async { sources = Self.sources(from: v); reload() }
+        }
+    }
+
+    private static func sources(from v: [String: String]) -> [LogSource] {
+        [
             LogSource(id: "supervisor", title: "Супервизор",
                       path: v["supervisor_log"] ?? OcbarClient.shared.supervisorLog),
             LogSource(id: "openconnect", title: "openconnect",

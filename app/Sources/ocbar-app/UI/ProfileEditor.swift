@@ -3,7 +3,14 @@ import SwiftUI
 // Редактор профиля .ocbar. Проверка идёт перед сохранением теми же
 // правилами, что и в клиенте: файл, который не примет bin/ocbar или
 // libexec/ocbar-helper, здесь не сохранится.
+//
+// Файл профиля пишет не только редактор: разметка формы, «Запомнить, как я
+// вхожу», `ocbar rules …`. Поэтому редактор помнит, что было на диске при
+// открытии, перечитывает файл сам, если здесь нет правок, и перед записью
+// спрашивает, если файл успел измениться, — молча затереть правила, которые
+// только что записала разметка, хуже, чем спросить.
 struct ProfileEditorView: View {
+    @ObservedObject private var store = StatusStore.shared
     @State private var files: [String] = []
     @State private var legacy: [ProfileEntry] = []
     @State private var selected: String?
@@ -14,20 +21,40 @@ struct ProfileEditorView: View {
     // срабатывает и при загрузке профиля, и тогда любой открытый профиль
     // выглядел «несохранённым» — а разметка при правках была заблокирована.
     @State private var savedText: String?
+    // Файл, из которого открыт профиль (nil — новый, файла ещё нет), и его
+    // содержимое на момент открытия или последней записи.
+    @State private var loadedName: String?
+    @State private var disk: ProfileStore.DiskStamp?
+    @State private var diskChanged = false          // файл поменялся снаружи, а здесь есть правки
+    @State private var alert: EditorAlert?
+    @State private var afterSave: (() -> Void)?     // что сделать после записи, отложенной вопросом
     private var dirty: Bool { savedText.map { $0 != Self.snapshot(doc) } ?? true }
     private static func snapshot(_ d: ProfileDoc) -> String { d.render(dated: Date(timeIntervalSince1970: 0)) }
 
     // Доступна ли разметка — одним выражением: его же видит самопроверка
     // (ocbar-app --selftest открывает редактор на настоящем окне). Кнопки
     // SwiftUI рисует сам, и снаружи их состояние не прочитать.
-    private var learnDisabled: Bool { learning || doc.fileName.trimmed.isEmpty || !errors.isEmpty }
+    // Разметка идёт через общий store: пока идёт любое действие (в том числе
+    // разметка, запущенная из меню), вторую не запустить.
+    private var learnDisabled: Bool { store.busy != nil || doc.fileName.trimmed.isEmpty || !errors.isEmpty }
+    private var learning: Bool { store.busy?.hasPrefix("Идёт разметка") == true }
     static var probeLearnEnabled: Bool?
+    // Для пробы: сколько раз редактор сверялся с диском и чем кончилась
+    // последняя сверка — без этого провал «не перечитал» не объяснить.
+    static var probeDiskChecks = 0
+    static var probeDiskNote = ""
     @State private var message: String?
     @State private var showFile = false
-    @State private var learning = false
     @State private var learnResult: String?
 
     private var errors: [Issue] { issues.filter { $0.level == .error } }
+
+    enum Next { case file(String), new }
+    enum EditorAlert {
+        case unsaved(Next)
+        case changedOnDisk
+        case exists(String)
+    }
 
     var body: some View {
         HSplitView {
@@ -36,6 +63,63 @@ struct ProfileEditorView: View {
         }
         .frame(minWidth: 720, minHeight: 520)
         .onAppear { reloadList() }
+        // Файл могли записать снаружи: ocbar rules из терминала, разметка,
+        // запоминание входа. Время изменения дёшево — смотрим раз в две
+        // секунды и сразу по завершении любого действия. Цикл в .task, а не
+        // Timer.publish в onReceive: издатель, созданный в теле, пересоздаётся
+        // при каждой отрисовке, и проба показала — сверка не шла ни разу.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                checkDisk()
+            }
+        }
+        .onChange(of: store.finishedActions) { _ in checkDisk() }
+        .alert(alertTitle, isPresented: Binding(get: { alert != nil }, set: { if !$0 { alert = nil } }),
+               presenting: alert) { a in
+            alertButtons(a)
+        } message: { a in
+            Text(alertMessage(a))
+        }
+    }
+
+    // --- вопросы ---------------------------------------------------------
+
+    private var alertTitle: String {
+        switch alert {
+        case .unsaved: return "Несохранённые правки в «\(doc.fileName.isEmpty ? "новый профиль" : doc.fileName)»"
+        case .changedOnDisk: return "Файл профиля изменился на диске"
+        case .exists(let name): return "Профиль «\(name)» уже есть"
+        case .none: return ""
+        }
+    }
+
+    private func alertMessage(_ a: EditorAlert) -> String {
+        switch a {
+        case .unsaved:
+            return "Сохранить их, прежде чем открыть другой профиль?"
+        case .changedOnDisk:
+            return "Пока профиль был открыт, файл записали снаружи — разметка формы, «Запомнить, как я вхожу» или ocbar rules. «Перечитать» покажет файл с диска, правки здесь пропадут; «Перезаписать» запишет форму, и пропадёт то, что записали снаружи."
+        case .exists(let name):
+            return "Файл \(ProfileStore.path(name)) уже существует. Перезаписать его содержимым этой формы? Прошлая версия останется рядом с суффиксом .bak."
+        }
+    }
+
+    @ViewBuilder
+    private func alertButtons(_ a: EditorAlert) -> some View {
+        switch a {
+        case .unsaved(let next):
+            Button("Сохранить") { save(then: { go(next) }) }
+            Button("Не сохранять", role: .destructive) { go(next) }
+            Button("Отмена", role: .cancel) {}
+        case .changedOnDisk:
+            Button("Перечитать") { afterSave = nil; if let name = loadedName { open(name) } }
+            Button("Перезаписать", role: .destructive) { let next = afterSave; afterSave = nil; save(force: true, then: next) }
+            Button("Отмена", role: .cancel) { afterSave = nil }
+        case .exists:
+            Button("Перезаписать", role: .destructive) { let next = afterSave; afterSave = nil; save(force: true, then: next) }
+            Button("Отмена", role: .cancel) { afterSave = nil }
+        }
     }
 
     // --- список слева ----------------------------------------------------
@@ -64,17 +148,20 @@ struct ProfileEditorView: View {
                 }
             }
             .onChange(of: selected) { name in
-                guard let name else { return }
-                doc = ProfileStore.load(name) ?? ProfileDoc(fileName: name)
-                issues = ProfileCheck.check(doc)
-                savedText = ProfileStore.load(name).map(Self.snapshot)
-                message = nil
+                guard let name, name != loadedName else { return }
+                // Правки не теряются молча: выбор возвращается на место, пока
+                // человек не ответит.
+                if dirty {
+                    selected = loadedName
+                    alert = .unsaved(.file(name))
+                } else {
+                    open(name)
+                }
             }
             Divider()
             HStack(spacing: 8) {
                 Button {
-                    doc = ProfileDoc(fileName: "", userAgent: ProfileDoc.defaultUserAgent)
-                    selected = nil; savedText = nil; issues = ProfileCheck.check(doc)
+                    if dirty { alert = .unsaved(.new) } else { newDoc() }
                 } label: { Image(systemName: "plus") }
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting(
@@ -165,13 +252,16 @@ struct ProfileEditorView: View {
                 let _ = { Self.probeLearnEnabled = !learnDisabled }()
                 Button(learning ? "Идёт разметка…" : "Разметить портал…") { learn() }
                     .disabled(learnDisabled)
-                if learning { ProgressView().controlSize(.small).scaleEffect(0.6) }
+                if learning {
+                    ProgressView().controlSize(.small).scaleEffect(0.6)
+                    Button("Отменить") { store.cancelCurrent() }.buttonStyle(.link).font(.system(size: 11))
+                }
                 Spacer()
                 Text(doc.autofill.isEmpty
                      ? (doc.rulesFile.trimmed.isEmpty
                         ? (FileManager.default.fileExists(atPath: rulesPath) ? "действует общий файл autofill.rules" : "действуют встроенные правила")
                         : "действует файл из Rules")
-                     : "\(doc.autofill.filter { !$0.trimmed.isEmpty && !$0.trimmed.hasPrefix("#") }.count) правил в профиле")
+                     : "\(doc.autofill.filter { !$0.trimmed.isEmpty && !ProfileDoc.isComment($0.trimmed) }.count) правил в профиле")
                     .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
             }
             Text(learnHint)
@@ -183,7 +273,7 @@ struct ProfileEditorView: View {
                 .font(.system(size: 11, design: .monospaced))
                 .frame(minHeight: 72, maxHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Palette.line))
-            Text("Правила профиля, по строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Строки «# шаг N — …» — заголовки окон формы, их пишет разметка. Пусто — действует общий файл или встроенные.")
+            Text("Правила профиля, по строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Строки «# шаг N — …» — заголовки окон формы, их пишет разметка; строки с «#» и «;» — комментарии. Пусто — действует общий файл или встроенные.")
                 .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
             field("Общий файл правил", $doc.rulesFile,
@@ -200,6 +290,7 @@ struct ProfileEditorView: View {
     private var learnHint: String {
         if doc.fileName.trimmed.isEmpty { return "Укажите имя файла профиля — размечать нужно его форму входа." }
         if !errors.isEmpty { return "В профиле ошибки (внизу окна) — исправьте, и разметка станет доступна." }
+        if let busy = store.busy, !learning { return "Сейчас идёт «\(busy)» — разметка станет доступна, когда оно закончится." }
         if !fileExists || dirty { return "Профиль сначала сохранится — разметка идёт по его адресу, а правила ложатся в сам файл." }
         return "Откроется форма входа вашего портала. Отмечайте мышью поля и кнопку — правила запишутся в этот профиль сами. Форма в несколько окон (сначала пароль, потом код)? Отметьте первое окно и нажмите «Пройти шаг →»: ocbar заполнит его вашими данными и перейдёт к следующему. Прошлая версия профиля останется рядом с суффиксом .bak."
     }
@@ -215,35 +306,31 @@ struct ProfileEditorView: View {
     }
 
     private func learn() {
-        guard !learning else { return }
+        guard store.busy == nil else { return }
         // Разметка идёт по адресу из файла и пишет правила в файл — значит,
         // сначала файл должен совпадать с тем, что на экране.
-        if dirty || !fileExists {
-            save()
-            guard !dirty, fileExists else { return }
-        }
-        learning = true
+        if dirty || !fileExists { save(then: { startLearn() }); return }
+        startLearn()
+    }
+
+    private func startLearn() {
+        guard !dirty, fileExists else { return }
         learnResult = nil
         let name = doc.fileName
-        DispatchQueue.global(qos: .userInitiated).async {
-            // Окно разметки живёт, пока человек не нажмёт «Готово»: ждём долго.
-            let result = OcbarClient.shared.action(["learn", name], timeout: 1800)
-            DispatchQueue.main.async {
-                learning = false
-                switch result {
-                case .ok(let text):
-                    // Правила легли в файл профиля — перечитать его, чтобы
-                    // редактор показывал то, что на диске.
-                    if let fresh = ProfileStore.load(name) {
-                        doc = fresh; issues = ProfileCheck.check(doc); savedText = Self.snapshot(fresh)
-                    }
-                    learnResult = text.contains("отменена") ? "разметка отменена — профиль не тронут"
-                        : "правила записаны в профиль: \(doc.autofill.count) строк"
-                case .needsLogin:
-                    learnResult = "разметка не завершена"
-                case .failed(_, let text):
-                    learnResult = "не получилось: " + text
-                }
+        // Через store: там флаг занятости, одна разметка на всё приложение, и
+        // её видно (и можно отменить) из меню.
+        store.learn(profile: name) { result in
+            // Правила легли в файл профиля — перечитать его, чтобы редактор
+            // показывал то, что на диске.
+            if loadedName == name, !dirty { open(name) } else { checkDisk() }
+            switch result {
+            case .ok(let text):
+                learnResult = text.contains("отменена") ? "разметка отменена — профиль не тронут"
+                    : "правила записаны в профиль: \(doc.autofill.filter { !ProfileDoc.isComment($0.trimmed) }.count) строк"
+            case .needsLogin, .cancelled:
+                learnResult = "разметка не завершена"
+            case .failed(_, let text):
+                learnResult = "не получилось: " + text
             }
         }
     }
@@ -294,6 +381,8 @@ struct ProfileEditorView: View {
         }
     }
 
+    // Строка сети — как в файле: сеть первым словом, после неё может быть
+    // комментарий; строка с «#» или «;» — комментарий целиком.
     private var routesEditor: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(doc.routes.indices, id: \.self) { i in
@@ -302,10 +391,15 @@ struct ProfileEditorView: View {
                         get: { i < doc.routes.count ? doc.routes[i] : "" },
                         set: { if i < doc.routes.count { doc.routes[i] = $0; touched() } }))
                         .textFieldStyle(.roundedBorder).font(.ocMono).frame(width: 190)
-                    if !doc.routes[i].trimmed.isEmpty, !ProfileCheck.validCIDR(doc.routes[i].trimmed) {
-                        Text("не CIDR").font(.ocNote).foregroundStyle(Palette.bad)
-                    } else if let len = ProfileCheck.prefixLength(doc.routes[i].trimmed), len < 8 {
-                        Text("уводит почти весь трафик").font(.ocNote).foregroundStyle(Palette.warn)
+                    let line = i < doc.routes.count ? doc.routes[i] : ""
+                    if let net = ProfileDoc.routeNet(line) {
+                        if !ProfileCheck.validCIDR(net) {
+                            Text("не CIDR").font(.ocNote).foregroundStyle(Palette.bad)
+                        } else if let len = ProfileCheck.prefixLength(net), len < 8 {
+                            Text("уводит почти весь трафик").font(.ocNote).foregroundStyle(Palette.warn)
+                        }
+                    } else if !line.trimmed.isEmpty {
+                        Text("комментарий").font(.ocNote).foregroundStyle(Palette.tertiary)
                     }
                     Spacer()
                     Button { doc.routes.remove(at: i); touched() } label: { Image(systemName: "minus") }
@@ -344,6 +438,17 @@ struct ProfileEditorView: View {
 
     private var bottomBar: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if diskChanged {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(Palette.warn)
+                    Text("Файл изменился на диске, пока здесь есть правки: сохранение спросит, что оставить.")
+                        .font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Перечитать") { if let name = loadedName { open(name) } }
+                        .buttonStyle(.link).font(.system(size: 11))
+                }
+            }
             if !issues.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(issues) { issue in
@@ -401,34 +506,127 @@ struct ProfileEditorView: View {
         issues = ProfileCheck.check(doc)
     }
 
-    private func reloadList() {
-        files = ProfileStore.list()
-        let status = OcbarClient.shared.status()
-        legacy = status.profiles.filter { !files.contains($0.name) }
-        if selected == nil, let first = files.first {
-            selected = first
-            doc = ProfileStore.load(first) ?? ProfileDoc(fileName: first)
-            savedText = ProfileStore.load(first).map(Self.snapshot)
-            issues = ProfileCheck.check(doc)
+    // Открыть профиль из файла и запомнить, что было на диске.
+    private func open(_ name: String) {
+        let stamp = ProfileStore.stamp(name)
+        let fresh = stamp.text.map { ProfileDoc.parse($0, fileName: name) } ?? ProfileDoc(fileName: name)
+        loadedName = stamp.text == nil ? nil : name
+        disk = stamp.text == nil ? nil : stamp
+        doc = fresh
+        savedText = stamp.text == nil ? nil : Self.snapshot(fresh)
+        issues = ProfileCheck.check(fresh)
+        diskChanged = false
+        message = nil
+        learnResult = nil
+        selected = name
+    }
+
+    private func newDoc() {
+        doc = ProfileDoc(fileName: "", userAgent: ProfileDoc.defaultUserAgent)
+        loadedName = nil
+        disk = nil
+        selected = nil
+        // Пустая форма — ещё не правка: переход к другому профилю не спрашивает.
+        savedText = Self.snapshot(doc)
+        issues = ProfileCheck.check(doc)
+        diskChanged = false
+        message = nil
+        learnResult = nil
+    }
+
+    private func go(_ next: Next) {
+        switch next {
+        case .file(let name): open(name)
+        case .new: newDoc()
         }
     }
 
-    private func save() {
+    // Файл открытого профиля поменялся снаружи? Без правок здесь — просто
+    // перечитать; с правками — предупредить, сохранение спросит.
+    private func checkDisk() {
+        Self.probeDiskChecks += 1
+        guard let name = loadedName, let known = disk else { Self.probeDiskNote = "нет открытого файла"; return }
+        let m = ProfileStore.mtime(name)
+        if m != nil, m == known.mtime { Self.probeDiskNote = "время не изменилось"; return }
+        let now = ProfileStore.stamp(name)
+        if now == known { disk = now; Self.probeDiskNote = "текст тот же"; return }
+        Self.probeDiskNote = dirty ? "изменён, есть правки" : "изменён, перечитан"
+        if now.text == nil {
+            loadedName = nil
+            disk = nil
+            files = ProfileStore.list()
+            message = "файл профиля удалён на диске — «Сохранить» запишет его заново"
+            return
+        }
+        if dirty {
+            diskChanged = true
+        } else {
+            open(name)
+            message = "файл изменился на диске — перечитан"
+        }
+    }
+
+    private func reloadList() {
+        files = ProfileStore.list()
+        reloadLegacy()
+        if selected == nil, loadedName == nil, let first = files.first {
+            open(first)
+        }
+    }
+
+    // Профили из profiles.conf — из `ocbar status`, в фоне: вызов идёт
+    // до секунды-двух, и окно не должно подвисать на это время.
+    private func reloadLegacy() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let profiles = OcbarClient.shared.status().profiles
+            DispatchQueue.main.async {
+                legacy = profiles.filter { !files.contains($0.name) }
+            }
+        }
+    }
+
+    private func save(force: Bool = false, then next: (() -> Void)? = nil) {
         issues = ProfileCheck.check(doc)
         guard errors.isEmpty else { return }
+        let name = doc.fileName
+        if !force {
+            // «+» с именем существующего файла или переименование в чужое имя.
+            if name != loadedName, FileManager.default.fileExists(atPath: ProfileStore.path(name)) {
+                afterSave = next
+                alert = .exists(name)
+                return
+            }
+            // Файл записали снаружи после открытия — не затирать молча.
+            if name == loadedName, let known = disk, ProfileStore.stamp(name) != known {
+                afterSave = next
+                alert = .changedOnDisk
+                return
+            }
+        }
         if let error = ProfileStore.save(doc) {
             issues.append(Issue(level: .error, text: "не удалось записать: \(error)"))
             return
         }
+        loadedName = name
+        disk = ProfileStore.stamp(name)
         savedText = Self.snapshot(doc)
+        diskChanged = false
+        files = ProfileStore.list()
+        selected = name
+        reloadLegacy()
         // Проверяем не своими глазами, а клиентом: профиль должен появиться
-        // в его списке — значит файл разобран.
-        let seen = OcbarClient.shared.status().profiles.contains { $0.name == doc.fileName }
-        message = seen
-            ? "сохранено, ocbar видит профиль «\(doc.fileName)»"
-            : "файл записан, но ocbar профиль не показывает — проверьте ocbar profiles"
-        reloadList()
-        selected = doc.fileName
+        // в его списке — значит файл разобран. В фоне: это вызов ocbar.
+        message = "сохранено"
+        DispatchQueue.global(qos: .userInitiated).async {
+            let seen = OcbarClient.shared.status().profiles.contains { $0.name == name }
+            DispatchQueue.main.async {
+                guard loadedName == name else { return }
+                message = seen
+                    ? "сохранено, ocbar видит профиль «\(name)»"
+                    : "файл записан, но ocbar профиль не показывает — проверьте ocbar profiles"
+            }
+        }
+        next?()
     }
 
     // Перевод старого профиля в файл — командой самого клиента, чтобы формат
@@ -436,17 +634,23 @@ struct ProfileEditorView: View {
     // profiles.conf: это и есть смысл перевода.
     private func convert(_ name: String) {
         let target = ProfileStore.path(name)
-        try? FileManager.default.createDirectory(atPath: OcbarClient.shared.profileDir,
-                                                 withIntermediateDirectories: true)
-        switch OcbarClient.shared.action(["export", name, target], timeout: 20) {
-        case .ok:
-            message = "профиль \(name) переведён в файл — теперь ocbar читает его оттуда"
-            reloadList()
-            selected = name
-        case .needsLogin:
-            message = nil
-        case .failed(_, let text):
-            issues = [Issue(level: .error, text: "перевод не удался: \(text)")]
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? FileManager.default.createDirectory(atPath: OcbarClient.shared.profileDir,
+                                                     withIntermediateDirectories: true)
+            let result = OcbarClient.shared.action(["export", name, target], timeout: 20)
+            DispatchQueue.main.async {
+                switch result {
+                case .ok:
+                    files = ProfileStore.list()
+                    reloadLegacy()
+                    if dirty { alert = .unsaved(.file(name)) } else { open(name) }
+                    message = "профиль \(name) переведён в файл — теперь ocbar читает его оттуда"
+                case .needsLogin, .cancelled:
+                    message = nil
+                case .failed(_, let text):
+                    issues = [Issue(level: .error, text: "перевод не удался: \(text)")]
+                }
+            }
         }
     }
 }

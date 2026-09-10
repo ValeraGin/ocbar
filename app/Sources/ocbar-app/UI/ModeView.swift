@@ -12,7 +12,11 @@ struct ModeView: View {
     @State private var selected: String = ""
     @State private var doc = ProfileDoc()
     @State private var message: String?
+    @State private var messageIsError = false
     @State private var dirty = false
+    // Есть ли ocproxy — из `ocbar version --all`, в фоне: вызов бывает
+    // долгим, а считался прямо при отрисовке, на главном потоке.
+    @State private var ocproxy: Bool?
 
     var body: some View {
         ScrollView {
@@ -23,7 +27,7 @@ struct ModeView: View {
             .padding(18)
         }
         .frame(minWidth: 640, minHeight: 460)
-        .onAppear { reload() }
+        .onAppear { reload(); loadVersions() }
     }
 
     private var header: some View {
@@ -76,7 +80,7 @@ struct ModeView: View {
                      badge: ocproxyBadge)
             }
 
-            if doc.mode == "proxy", !ocproxyInstalled {
+            if doc.mode == "proxy", ocproxy == false {
                 note("ocproxy на этой машине не найден — подключение в прокси-режиме откажет, пока его нет: brew install ocproxy. В формулу он не входит: нужен только этому режиму.")
             }
 
@@ -105,7 +109,10 @@ struct ModeView: View {
 
             HStack(spacing: 10) {
                 if let message {
-                    Text(message).font(.system(size: 11)).foregroundStyle(Palette.ok)
+                    Text(message).font(.system(size: 11))
+                        .foregroundStyle(messageIsError ? Palette.bad : Palette.ok)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
                 Spacer()
                 Button("Сохранить в профиль") { save() }.disabled(!dirty)
@@ -164,9 +171,19 @@ struct ModeView: View {
         }
     }
 
-    private var ocproxyInstalled: Bool { OcbarClient.shared.versions(maxAge: 300)["ocproxy_path"] != nil }
     private var ocproxyBadge: (String, Color) {
-        ocproxyInstalled ? ("работает", Palette.ok) : ("нужен ocproxy", Palette.warn)
+        switch ocproxy {
+        case .some(true): return ("работает", Palette.ok)
+        case .some(false): return ("нужен ocproxy", Palette.warn)
+        case .none: return ("проверяю…", Palette.tertiary)
+        }
+    }
+
+    private func loadVersions() {
+        DispatchQueue.global(qos: .utility).async {
+            let v = OcbarClient.shared.versions(maxAge: 300)
+            DispatchQueue.main.async { ocproxy = v.isEmpty ? nil : v["ocproxy_path"] != nil }
+        }
     }
 
     private func reload() {
@@ -184,17 +201,30 @@ struct ModeView: View {
         message = nil
     }
 
+    // Экран меняет три ключа — и только их: файл перечитывается перед
+    // записью, чтобы не затереть то, что в него записали после открытия
+    // (редактор, разметка, «Запомнить, как я вхожу»).
     private func save() {
-        let issues = ProfileCheck.check(doc).filter { $0.level == .error }
-        guard issues.isEmpty else {
-            message = nil
+        var fresh = ProfileStore.load(selected) ?? doc
+        fresh.mode = doc.mode
+        fresh.proxyPort = doc.proxyPort
+        fresh.systemProxyValue = doc.systemProxyValue
+        let errors = ProfileCheck.check(fresh).filter { $0.level == .error }
+        guard errors.isEmpty else {
+            // Молчать нельзя: кнопка «не срабатывала», и было не понять почему.
+            message = "Не сохранено — в профиле ошибки: " + errors.map(\.text).joined(separator: "; ")
+                + ". Поправьте их на вкладке «Профили»."
+            messageIsError = true
             return
         }
-        if let error = ProfileStore.save(doc) {
+        if let error = ProfileStore.save(fresh) {
             message = "не удалось записать: \(error)"
+            messageIsError = true
             return
         }
+        doc = fresh
         dirty = false
         message = "сохранено"
+        messageIsError = false
     }
 }

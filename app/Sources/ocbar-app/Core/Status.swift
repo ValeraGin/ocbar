@@ -138,21 +138,36 @@ struct Status {
                 // "10.0.0.0/8 utun5 on"; вместо пустого интерфейса — "-",
                 // иначе поле схлопывается и признак "on" читается как утун.
                 let f = value.split(separator: " ").map(String.init)
-                guard f.count >= 3 else { continue }
+                guard f.count >= 3, !s.routes.contains(where: { $0.net == f[0] }) else { continue }
                 s.routes.append(RouteEntry(net: f[0], via: f[1] == "-" ? nil : f[1],
                                            enabled: f[2] == "on"))
             case "zone":
                 let f = value.split(separator: " ").map(String.init)
-                guard f.count >= 4 else { continue }
+                guard f.count >= 4, !s.zones.contains(where: { $0.zone == f[0] }) else { continue }
                 s.zones.append(ZoneEntry(zone: f[0], dns: f[1],
                                          applied: f[2] == "applied", enabled: f[3] == "on"))
             case "profile_list":
+                // «имя|название|вход|описание». Имя — первое поле; повтор
+                // имени — тот же профиль (id в списке меню должны быть
+                // уникальны). «|» в названии или описании сдвигает поля,
+                // поэтому поле входа ищется: password или пустое.
                 let f = value.components(separatedBy: "|")
-                guard !f.isEmpty, !f[0].isEmpty else { continue }
-                s.profiles.append(ProfileEntry(name: f[0],
-                                               title: f.count > 1 ? f[1] : "",
-                                               auth:  f.count > 2 ? f[2] : "",
-                                               descr: f.count > 3 ? f[3] : ""))
+                guard let name = f.first, !name.isEmpty,
+                      !s.profiles.contains(where: { $0.name == name }) else { continue }
+                var title = f.count > 1 ? f[1] : ""
+                var auth = f.count > 2 ? f[2] : ""
+                var descr = f.count > 3 ? f[3] : ""
+                if f.count > 4,
+                   let i = (2..<f.count).first(where: { f[$0] == "password" })
+                        ?? (2..<f.count).first(where: { f[$0].isEmpty }) {
+                    title = f[1..<i].joined(separator: "|")
+                    auth = f[i]
+                    descr = f[(i + 1)...].joined(separator: "|")
+                }
+                // Парольная группа — только ровно password: всё прочее — sso.
+                s.profiles.append(ProfileEntry(name: name, title: title,
+                                               auth: auth == "password" ? "password" : "",
+                                               descr: descr))
             default: break
             }
         }
