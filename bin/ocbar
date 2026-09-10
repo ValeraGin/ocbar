@@ -116,14 +116,18 @@ rotate_log() { # файл [предел байт] [сколько хранить
     log "лог превысил $((max/1024)) КБ — предыдущий сохранён как $(basename "$f").1"
 }
 
-# Уведомление системы. Через приложение меню-бара (URL-схема ocbar://notify,
-# D50) — только если оно запущено, система разрешила ему уведомления и есть
-# его токен. Приложение при запуске кладёт в USER_STATE notify.token (0600,
-# одна строка hex; адрес без верного токена оно отбрасывает — чужие
-# программы и страницы в браузере не покажут уведомление от имени ocbar) и
-# notify.allowed («1» — разрешены). Иначе — osascript: раньше при запрещённых
-# уведомлениях клиент считал уведомление доставленным, и «нужен вход» молча
-# пропадал.
+# Уведомление системы — только от приложения меню-бара (URL-схема
+# ocbar://notify, D50). Своего запасного показа у клиента нет (D61):
+# уведомление, показанное не приложением, система подписывает «Script
+# Editor», и оно выглядит как чужой скрипт. Приложение не запущено —
+# клиент запускает его в фоне и ждёт свежий токен; уведомления ocbar
+# запрещены или приложения нет — сообщение остаётся только в журнале, а
+# меню приложения показывает «Уведомления выключены».
+#
+# Приложение при запуске кладёт в USER_STATE notify.token (0600, одна
+# строка hex; адрес без верного токена оно отбрасывает — чужие программы и
+# страницы в браузере не покажут уведомление от имени ocbar) и
+# notify.allowed («1» — разрешены).
 notify_token() {
     local f="$USER_STATE/notify.token" t=""
     [ -f "$f" ] && [ -O "$f" ] || return 0
@@ -134,33 +138,45 @@ notify_token() {
     [ "${#t}" -ge 16 ] || return 0
     printf '%s' "$t"
 }
-# Куда пойдёт уведомление: «app <адрес>» или «osascript». Решение отдельно от
-# показа, чтобы самопроверка проверяла его, ничего не показывая.
-# OCBAR_SELFTEST_APP=1|0 подменяет «запущено ли приложение» — только для неё.
+# Куда пойдёт уведомление: «app <адрес>»; «launch» — приложение не запущено,
+# запустить и спросить снова; «off <причина>» — не показывать, только журнал.
+# Решение отдельно от показа, чтобы самопроверка проверяла его, ничего не
+# показывая. OCBAR_SELFTEST_APP=1|0 подменяет «запущено ли приложение».
 notify_route() { # заголовок, текст
     local running="${OCBAR_SELFTEST_APP:-}" allowed tok url=""
     if [ -z "$running" ]; then if [ -n "$(app_pid)" ]; then running=1; else running=0; fi; fi
+    if [ "$running" != 1 ]; then printf 'launch\n'; return 0; fi
     allowed=$(head -1 "$USER_STATE/notify.allowed" 2>/dev/null | tr -d '[:space:]' || true)
+    if [ "$allowed" != 1 ]; then printf 'off уведомления ocbar не разрешены в Системных настройках\n'; return 0; fi
     tok=$(notify_token)
-    if [ "$running" = 1 ] && [ "$allowed" = 1 ] && [ -n "$tok" ]; then
-        url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2], "token": sys.argv[3]}))' "$1" "$2" "$tok" 2>/dev/null || true)
-    fi
-    if [ -n "$url" ]; then printf 'app %s\n' "$url"; else printf 'osascript\n'; fi
+    if [ -z "$tok" ]; then printf 'off нет токена приложения\n'; return 0; fi
+    url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2], "token": sys.argv[3]}))' "$1" "$2" "$tok" 2>/dev/null || true)
+    if [ -z "$url" ]; then printf 'off не удалось собрать адрес\n'; return 0; fi
+    printf 'app %s\n' "$url"
 }
-# Текст передаётся аргументом, а не подстановкой в текст скрипта: иначе
-# кавычки в сообщении ломают osascript.
 notify() { # заголовок, текст
     [ "${OCBAR_NOTIFY:-1}" = 1 ] || return 0
     [ "$NOTIFY_ENABLED" = 0 ] && return 0
-    local r; r=$(notify_route "$1" "$2")
+    local r a n=0
+    r=$(notify_route "$1" "$2")
+    if [ "$r" = launch ]; then
+        a=$(app_path || true)
+        if [ -z "$a" ]; then log "уведомление не показано (нет ocbar.app): $1 — $2"; return 0; fi
+        # Старый токен недействителен: запущенное приложение кладёт новый.
+        rm -f "$USER_STATE/notify.token" "$USER_STATE/notify.allowed"
+        open -g -j "$a" >/dev/null 2>&1 || true
+        while [ $n -lt 32 ] && ! { [ -s "$USER_STATE/notify.token" ] && [ -s "$USER_STATE/notify.allowed" ]; }; do
+            sleep 0.25; n=$((n+1))
+        done
+        r=$(OCBAR_SELFTEST_APP=1 notify_route "$1" "$2")
+    fi
     case "$r" in
-        "app "*) if open -g "${r#app }" >/dev/null 2>&1; then return 0; fi ;;
+        "app "*) open -g "${r#app }" >/dev/null 2>&1 && return 0
+                 log "уведомление не показано (приложение не приняло адрес): $1 — $2" ;;
+        "off "*) log "уведомление не показано (${r#off }): $1 — $2" ;;
+        *)       log "уведомление не показано (приложение не запустилось): $1 — $2" ;;
     esac
-    osascript - "$1" "$2" >/dev/null 2>&1 <<'AS' || true
-on run argv
-    display notification (item 2 of argv) with title (item 1 of argv)
-end run
-AS
+    return 0
 }
 
 # ------------------------------------------------------------ бинарники ----
@@ -2996,20 +3012,21 @@ PROFILE
     has "secret code: свежий код из источника профиля" "123456" "$(run secret code c)"
     rm -f "$tmp/profiles/c.ocbar"
 
-    # Уведомления: через приложение — только с его токеном и разрешением
-    # системы; иначе osascript, иначе «нужен вход» пропал бы молча.
+    # Уведомления: только через приложение, с его токеном и разрешением
+    # системы; своего запасного показа («Script Editor») у клиента нет (D61).
     tok=0123456789abcdef0123456789abcdef
     printf '%s\n' "$tok" > "$tmp/state/notify.token"; chmod 600 "$tmp/state/notify.token"
     printf '1\n' > "$tmp/state/notify.allowed"
     out=$(OCBAR_SELFTEST_APP=1 run _notify-route 'ocbar: нужен вход' 'Сессия & «истекла»' || true)
     matches "уведомление: через приложение, с токеном" "^app ocbar://notify\?title=[^&]+&body=[^&]+&token=${tok}\$" "$out"
-    is "уведомление: приложение не запущено — osascript" osascript "$(OCBAR_SELFTEST_APP=0 run _notify-route t b)"
+    is "уведомление: приложение не запущено — запустить его" launch "$(OCBAR_SELFTEST_APP=0 run _notify-route t b)"
     printf '0\n' > "$tmp/state/notify.allowed"
-    is "уведомление: уведомления запрещены — osascript" osascript "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
+    matches "уведомление: уведомления запрещены — только журнал" '^off ' "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
     printf '1\n' > "$tmp/state/notify.allowed"; chmod 644 "$tmp/state/notify.token"
-    is "уведомление: токен с правами 0644 — osascript" osascript "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
+    matches "уведомление: токен с правами 0644 — только журнал" '^off ' "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
     rm -f "$tmp/state/notify.token" "$tmp/state/notify.allowed"
-    is "уведомление: токена нет — osascript" osascript "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
+    matches "уведомление: токена нет — только журнал" '^off ' "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
+    is "уведомление: клиент не зовёт osa""script ни в одной строке кода" 0 "$(grep -v '^[[:space:]]*#' "$SELF" | grep -c 'osa''script' || true)"
 
     if [ ${#pids[@]} -gt 0 ]; then kill "${pids[@]}" 2>/dev/null || true; fi
     rm -rf "$tmp"

@@ -4,6 +4,7 @@ import SwiftUI
 // Подробности разворачиваются здесь же — отдельного окна для них не нужно.
 struct MenuView: View {
     @EnvironmentObject var store: StatusStore
+    @ObservedObject private var notify = NotifyState.shared
     @Environment(\.openWindow) private var openWindow
     @State private var showDetails: Bool
     @State private var showProfiles: Bool
@@ -23,6 +24,7 @@ struct MenuView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+                .onAppear { if !CommandLine.arguments.contains("--stage") { Notifier.refreshAllowed() } }
             if let note = look.note {
                 Text(note)
                     .font(.ocNote).foregroundStyle(Palette.secondary)
@@ -42,6 +44,11 @@ struct MenuView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                     .padding(.horizontal, 13).padding(.top, 5)
+            }
+            if !notify.allowed {
+                MenuRow(action: { Notifier.openSettings() }) {
+                    Text("Уведомления выключены — Разрешить…").foregroundStyle(Palette.warn)
+                }
             }
             if let warning = store.helperWarning {
                 Text(warning)
