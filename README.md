@@ -291,18 +291,27 @@ ocbar rules clear <профиль>             # убрать секцию — �
 ## Команды
 
 ```
-ocbar connect [профиль] [--show]      SSO и туннель; окно покажется, если за 2 с не прошло молча
+ocbar connect [профиль] [--show] [--teach] [-v]
+                                      SSO и туннель; окно покажется, если за 2 с не прошло молча;
+                                      --teach — войти руками и запомнить форму, пароль, код
 ocbar disconnect
-ocbar status [--short]                --short — для плагина меню
-ocbar routes add|del|toggle <CIDR>    маршруты на живом туннеле
-ocbar dns on|off|toggle <зона>        зоны /etc/resolver
+ocbar status [--short]                --short — машинный вид для меню
+ocbar profiles | import <файл> | export <профиль> [файл]
+ocbar routes on|off|toggle <CIDR>     сети на живом туннеле; apply | clear | status
+ocbar dns on|off|toggle <зона>        зоны /etc/resolver; apply | clear | status
 ocbar pause | resume | toggle         «как будто выключен»: маршруты и зоны сняты,
                                       туннель и вход живы, возврат мгновенный
+ocbar secret set-password|set-totp|status|code [профиль]
+ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
+ocbar learn [профиль] [--probe] [--out <файл>]   разметить форму входа
+ocbar rules show|import <файл>|clear [профиль]  правила в [Autofill] профиля
 ocbar app start|stop|status           приложение меню-бара; autostart on|off
+ocbar supervisor status|start|stop|restart       агент супервизора
 ocbar version [--all]                 версия; --all — версии и пути всех частей
 ocbar doctor                          диагностика, ничего не меняет
-ocbar cleanup                         мусор после падения: зоны, маршруты, DNS 127.0.0.1
-ocbar supervise                       цикл реконнекта (его держит LaunchAgent)
+ocbar selftest                        самопроверка на подставленных конфигах
+ocbar cleanup                         мусор после падения: наши зоны, маршруты, SOCKS
+sudo ocbar install [--trust] | uninstall
 --dry-run                             печатать привилегированные команды вместо выполнения
 ```
 
@@ -317,13 +326,15 @@ auth/.build/release/ocbar-auth --dump-script     # JS автозаполнени
 ## Самопроверки
 
 Ничего не трогают и не требуют ни сети, ни привилегий: конфиги подставные,
-состояние уводится во временный каталог.
+состояние и журнал уводятся во временный каталог, вместо хелпера — заглушка
+(D60). Каждая печатает итог с числом проверок.
 
 ```bash
-ocbar selftest                      # разбор профиля, сети и зоны, отказы на неверных значениях
-ocbar-app --selftest                # разбор и запись профиля, правила проверки, разбор состояния
-ocbar-auth --selftest               # TOTP по RFC 6238 и разбор XML
-ocbar-auth --learn-selftest         # селекторы разметки на странице-образце
+ocbar selftest                      # разбор профиля, сети и зоны, отказы, уборка только своего, уведомления
+ocbar-app --selftest                # разбор и запись профиля (сверка с ocbar export), проверки, опрос, токен
+ocbar-auth --selftest               # TOTP по RFC 6238, разбор XML, где заполнять форму, лимиты, cookie
+ocbar-auth --learn-selftest         # разметка и запись входа на странице-образце
+tools/helper-selftest.sh            # хелпер целиком на --dry-run с заглушками (только из репозитория)
 ```
 
 Отдельно, уже на живом подключении (меняет состояние и возвращает обратно):
