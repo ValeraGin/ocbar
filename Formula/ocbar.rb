@@ -24,7 +24,9 @@ class Ocbar < Formula
     libexec.install "libexec/ocbar-helper"
     bin.install "bin/ocbar"
     (pkgshare/"swiftbar").install "swiftbar/ocbar.5s.sh"
-    (pkgshare/"examples").install Dir["etc/*.example"]
+    # example.ocbar — образец основного формата (профиль одним файлом); маска
+    # *.example его не берёт, поэтому он назван отдельно.
+    (pkgshare/"examples").install Dir["etc/*.example"], "etc/example.ocbar"
     doc.install Dir["docs/0*.md"], "README.md", "INSTALL.md", "TROUBLESHOOTING.md", "ROADMAP.md", "DECISIONS.md"
   end
 
@@ -33,8 +35,12 @@ class Ocbar < Formula
       Один раз, с паролем — хелпер root:wheel, sudoers.d, LaunchAgent супервизора:
         sudo ocbar install
 
-      Конфиги (образцы в #{pkgshare}/examples):
-        ~/.config/ocbar/profiles.conf, zones.conf, networks.conf, autofill.rules
+      Профиль — один файл на подключение (образцы в #{pkgshare}/examples):
+        mkdir -p ~/.config/ocbar/profiles
+        cp #{pkgshare}/examples/example.ocbar ~/.config/ocbar/profiles/main.ocbar
+      Старый формат (profiles.conf, networks.conf, zones.conf) тоже читается;
+      перевести в файл — ocbar export. Правила формы входа — секция [Autofill]
+      в самом профиле, пишет их ocbar learn.
 
       Меню-бар — приложение (плагин SwiftBar остаётся как запасной вариант):
         ocbar app start                 запустить сейчас
@@ -50,15 +56,39 @@ class Ocbar < Formula
 
       После brew upgrade openconnect копия бинаря перестаёт совпадать с манифестом
       доверия — ocbar doctor подскажет: sudo ocbar install --trust
+
+      Удаление — строго в таком порядке:
+        sudo ocbar uninstall
+        brew uninstall ocbar
+      Наоборот нельзя: без формулы убирать системную часть нечем, и останутся
+      root-хелпер с беспарольным sudo, копия openconnect и агент супервизора,
+      которого launchd перезапускает. Что удалить после — INSTALL.md, «Удаление».
     EOS
   end
 
   test do
-    assert_match "ocbar 0.", shell_output("#{bin}/ocbar version")
+    # Стабильная сборка — ровно версия формулы; у HEAD версия формулы
+    # «HEAD-…», поэтому там сверяется только префикс.
+    out = shell_output("#{bin}/ocbar version").strip
+    if version.head?
+      assert_match(/\Aocbar 0\./, out)
+    else
+      assert_equal "ocbar #{version}", out
+    end
     assert_match "selftest: всё OK", shell_output("#{bin}/ocbar selftest")
     assert_match "selftest: всё OK", shell_output("#{libexec}/ocbar-auth --selftest")
     assert_match "ocbar-helper", shell_output("#{libexec}/ocbar-helper version")
     assert_predicate prefix/"ocbar.app/Contents/MacOS/ocbar-app", :executable?
-    system "plutil", "-lint", prefix/"ocbar.app/Contents/Info.plist"
+    plist = prefix/"ocbar.app/Contents/Info.plist"
+    system "plutil", "-lint", plist
+    # Без строки о камере macOS завершает процесс при чтении QR камерой (D55),
+    # без схемы ocbar:// не доходят уведомления от приложения (D50).
+    refute_empty shell_output("plutil -extract NSCameraUsageDescription raw #{plist}").strip
+    assert_equal "ocbar",
+                 shell_output("plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw #{plist}").strip
+    unless version.head?
+      assert_equal version.to_s,
+                   shell_output("plutil -extract CFBundleShortVersionString raw #{plist}").strip
+    end
   end
 end
