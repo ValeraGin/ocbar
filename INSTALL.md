@@ -363,21 +363,46 @@ sudo ./bin/ocbar install
 
 ## 8. Удаление
 
+**Порядок важен: сначала `sudo ocbar uninstall`, потом `brew uninstall
+ocbar`.** `uninstall` — команда самого `ocbar`; если сначала удалить
+формулу, убирать системную часть будет нечем, и на машине останутся
+root-хелпер с беспарольным правилом в `/etc/sudoers.d/ocbar`, копия
+`openconnect` в root-каталоге и LaunchAgent супервизора, который launchd
+будет перезапускать, хотя программы уже нет.
+
 ```bash
-./bin/ocbar disconnect
-sudo ./bin/ocbar uninstall     # приложение и его автозапуск, агент, sudoers, хелпер, /usr/local/libexec/ocbar
+ocbar disconnect
+sudo ocbar uninstall           # приложение и его автозапуск, агент, sudoers, хелпер, /usr/local/libexec/ocbar
+brew uninstall ocbar           # только после uninstall; из репозитория — просто удалить клон
 sudo rm -rf /usr/local/var/ocbar                      # состояние: uninstall его оставляет
 rm -rf ~/.config/ocbar ~/Library/Logs/ocbar
 rm -rf "$HOME/Library/Application Support/ocbar"      # выбранный профиль, тумблеры меню
 rm -rf ~/Library/WebKit/ocbar-auth ~/Library/HTTPStorages/ocbar-auth.binarycookies
-security delete-generic-password -s ru.ocbar.client   # если заводили секреты
+rm -rf ~/Library/Caches/ocbar-auth                    # кэш окна входа
+rm -f ~/Library/Preferences/ru.ocbar.app.plist ~/Library/Preferences/ocbar-app.plist   # настройки приложения
 ```
+
+Из репозитория то же самое — `./bin/ocbar` вместо `ocbar`, без строки с
+`brew`.
+
+Секреты в связке ключей удаляются по одной записи за вызов: у каждого
+логина их две — пароль и секрет кода.
+
+```bash
+security delete-generic-password -s ru.ocbar.client -a <логин>        # пароль
+security delete-generic-password -s ru.ocbar.client -a totp/<логин>   # секрет TOTP
+```
+
+Логин — `User` из профиля (по умолчанию — имя пользователя macOS); если в
+профиле задан свой `KeychainService`, подставьте его вместо
+`ru.ocbar.client`. Команда без `-a` удаляет только первую найденную запись
+сервиса, и вторая остаётся.
 
 `uninstall` намеренно оставляет каталог состояния: там манифест зон, по
 которому убираются файлы в системном каталоге резолверов. Удаляйте его
 последним и только после `disconnect`.
 
-Последние две строки стоит выполнить и без удаления программы, если нужно
+Строки с `~/Library/WebKit/ocbar-auth` и `HTTPStorages` стоит выполнить и без удаления программы, если нужно
 оборвать сохранённую сессию SSO: **[проверено]** cookie провайдера входа
 живут в этом хранилище месяцами, и отключение VPN их не трогает.
 
