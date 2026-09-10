@@ -80,8 +80,24 @@ enum Autofill {
     ///
     /// Проверка `offsetParent !== null` обязательна: на странице IdP обычно висят
     /// скрытые поля прошлых шагов, и без неё пароль уедет не в тот input.
-    static func script(rules: [AutofillRule], creds: Credentials, totpCode: String?) -> String {
+    ///
+    /// `allowed` — где можно заполнять (FillScope.jsAllowed): хост проверяется
+    /// и здесь, в момент выполнения. Между проверкой в Swift и выполнением
+    /// скрипта страница успевает смениться (редирект), и без этой проверки
+    /// логин с паролем ушли бы на следующую. nil — без проверки (--dump-script
+    /// без --fill-hosts). Скрипт выполняется в изолированном мире
+    /// (WebAuth.world): страница не может подменить ни location, ни
+    /// встроенные функции, которыми он сравнивает хост.
+    static func script(rules: [AutofillRule], creds: Credentials, totpCode: String?,
+                       allowed: [[String: Any]]? = nil) -> String {
         var body = "(function(){\n"
+        if let allowed {
+            let aj = String(data: (try? JSONSerialization.data(withJSONObject: allowed, options: [.sortedKeys])) ?? Data("[]".utf8),
+                            encoding: .utf8) ?? "[]"
+            body += "  var allowed = \(aj), here = String(location.hostname).toLowerCase();\n"
+            body += "  var hostOK = location.protocol === 'https:' && allowed.some(function(a){ return here === a.h || (a.s && here.length > a.h.length && here.slice(-a.h.length - 1) === '.' + a.h); });\n"
+            body += "  if (!hostOK) return {offHost: here, filled: []};\n"
+        }
         body += "  var visible = function(e){ return e && e.offsetParent !== null; };\n"
         body += "  var filled = [];\n"
         // Все поля из правил fill — и те, которым нечем заполниться: видимое
@@ -95,7 +111,9 @@ enum Autofill {
             let sel = jsString(r.selector)
             switch r.action {
             case .stop:
-                body += "  { var e = document.querySelector(\(sel)); if (visible(e)) return {stopped: (e.innerText||'').trim().slice(0,200)}; }\n"
+                // filled — и здесь: stop может стоять после fill, и подставленное
+                // до него должно попасть в счётчики (AutofillGate).
+                body += "  { var e = document.querySelector(\(sel)); if (visible(e)) return {stopped: (e.innerText||'').trim().slice(0,200), filled: filled}; }\n"
             case .fill(let what):
                 let value: String?
                 switch what {
@@ -174,4 +192,228 @@ extension Autofill {
     click input[id=idSIButton9]
     click input[id=idSubmit_SAOTCC_Continue]
     """)
+}
+
+/// Где можно заполнять форму и куда пускать всплывающие окна — без WebKit,
+/// чтобы проверять напрямую.
+///
+/// Только https: по http логин с паролем ушли бы открытым текстом.
+///
+/// С IdpHosts (--fill-hosts) — только эти хосты и их поддомены: человек
+/// сказал явно.
+///
+/// Без IdpHosts — хосты цепочки входа, точным совпадением:
+///  - хост шлюза (к нему проверен TLS, он выдал адрес входа);
+///  - всё, куда уходит главный документ, пока он ещё не открыт или открыт
+///    на хосте шлюза: адрес sso-v2-login, серверные перенаправления с него,
+///    автоотправка SAML-формы со страницы шлюза (привязка HTTP-POST) и
+///    перенаправления провайдера входа в этой же навигации. Эти адреса
+///    выбирают шлюз и провайдер, которого назначил шлюз, а не случайная
+///    страница;
+///  - дальше — только туда, куда человек перешёл сам: навигация главного
+///    документа в видимом окне в пределах нескольких секунд после
+///    настоящего (isTrusted) щелчка или нажатия клавиши.
+/// Переход, который страница провайдера сделала сама (скрипт, ссылка из
+/// рекламы, window.open), цепочку не продлевает: там заполняет человек.
+/// Раньше без IdpHosts заполнялось на любом хосте, куда уведёт страница, в
+/// том числе в молчаливом режиме супервизора.
+struct FillScope {
+    let explicit: [String]
+    let gatewayHosts: Set<String>
+    private(set) var chain: Set<String>
+    private(set) var documentHost: String?     // хост текущего главного документа
+
+    init(explicit: [String], gatewayHosts: [String]) {
+        self.explicit = explicit.map { $0.lowercased() }.filter { !$0.isEmpty }
+        self.gatewayHosts = Set(gatewayHosts.map { $0.lowercased() }.filter { !$0.isEmpty })
+        chain = self.gatewayHosts
+    }
+
+    static func host(_ url: URL?) -> String? {
+        guard let h = url?.host?.lowercased(), !h.isEmpty else { return nil }
+        return h
+    }
+
+    private static func https(_ url: URL?) -> Bool { url?.scheme?.lowercased() == "https" }
+
+    private func explicitMatch(_ h: String) -> Bool {
+        explicit.contains { h == $0 || h.hasSuffix("." + $0) }
+    }
+
+    /// Можно ли заполнять форму на этой странице.
+    func allowsFill(_ url: URL?) -> Bool {
+        guard Self.https(url), let h = Self.host(url) else { return false }
+        return explicit.isEmpty ? chain.contains(h) : explicitMatch(h)
+    }
+
+    /// Можно ли увести главное окно входа на адрес из window.open или
+    /// target=_blank. Без жеста человека WebKit такие окна не открывает
+    /// вовсе (javaScriptCanOpenWindowsAutomatically = false), а с жестом —
+    /// только на хост цепочки входа или из IdpHosts, по https.
+    func allowsPopup(_ url: URL?) -> Bool {
+        guard Self.https(url), let h = Self.host(url) else { return false }
+        return chain.contains(h) || explicitMatch(h)
+    }
+
+    enum Reason: Equatable { case already, gatewayChain, human, refused }
+
+    /// Главный документ уходит на url (и на каждое серверное
+    /// перенаправление). humanRecent — только что был настоящий жест
+    /// человека в видимом окне.
+    mutating func navigation(to url: URL, humanRecent: Bool) -> Reason {
+        guard Self.https(url), let h = Self.host(url) else { return .refused }
+        if chain.contains(h) { return .already }
+        if documentHost == nil || gatewayHosts.contains(documentHost ?? "") {
+            chain.insert(h)
+            return .gatewayChain
+        }
+        if humanRecent {
+            chain.insert(h)
+            return .human
+        }
+        return .refused
+    }
+
+    /// Главный документ открылся (didCommit).
+    mutating func committed(_ url: URL?) {
+        if let h = Self.host(url) { documentHost = h }
+    }
+
+    /// Список для проверки внутри скрипта (Autofill.script, allowed).
+    var jsAllowed: [[String: Any]] {
+        explicit.isEmpty ? chain.sorted().map { ["h": $0, "s": false] }
+                         : explicit.map { ["h": $0, "s": true] }
+    }
+}
+
+/// Решения цикла автозаполнения — без WebKit, чтобы проверять их напрямую
+/// (`ocbar-auth --selftest`). Окно входа только спрашивает: можно ли
+/// запускать скрипт, что ему дать и что делать с результатом.
+///
+/// Лимиты:
+///  - код одноразовый — подставляется РОВНО один раз за вход: несколько
+///    неверных кодов подряд блокируют учётную запись;
+///  - пароль — не больше двух раз. Два, а не один: Microsoft прячет на
+///    странице логина второе поле пароля для менеджеров паролей. Третий раз —
+///    это уже неверный пароль по кругу, а порталы блокируют учётку после
+///    трёх-пяти попыток;
+///  - нажатий — не больше пяти за вход: у Microsoft с кодом и «Остаться в
+///    системе?» выходит четыре;
+///  - на неизменившейся странице после нажатия скрипт не повторяется —
+///    иначе «Войти» жмётся в цикле на форме с ошибкой;
+///  - на одной странице — не больше двенадцати попыток.
+///
+/// Счётчики пароля и кода считаются ДО любого раннего выхода. Раньше ветка
+/// «ждём человека» (видно пустое поле `fill manual`) выходила раньше них, и
+/// портал с капчей, перерисовывающий форму, получал пароль снова и снова.
+struct AutofillGate {
+    let maxClicks = 5
+    let maxPasswordFills = 2
+    let maxAttemptsPerPage = 12
+    private(set) var clicks = 0
+    private(set) var passwordFills = 0
+    private(set) var totpFills = 0
+    private(set) var attempts = 0
+    private(set) var lastClickSignature: String?
+    private(set) var stopped: String?
+
+    /// Что можно дать скрипту в этой попытке.
+    struct Offer: Equatable { var password: Bool; var code: Bool }
+
+    /// Что вернул скрипт (Autofill.script).
+    struct Outcome {
+        var filled: [String] = []
+        var clicked: String? = nil
+        var waiting: String? = nil
+        var stopped: String? = nil
+        var inputs: [String] = []
+        var offHost: String? = nil
+
+        init(filled: [String] = [], clicked: String? = nil, waiting: String? = nil,
+             stopped: String? = nil, inputs: [String] = [], offHost: String? = nil) {
+            self.filled = filled; self.clicked = clicked; self.waiting = waiting
+            self.stopped = stopped; self.inputs = inputs; self.offHost = offHost
+        }
+
+        init(_ dict: [String: Any]) {
+            filled = (dict["filled"] as? [String]) ?? []
+            clicked = dict["clicked"] as? String
+            waiting = dict["waiting"] as? String
+            stopped = dict["stopped"] as? String
+            inputs = (dict["inputs"] as? [String]) ?? []
+            offHost = dict["offHost"] as? String
+        }
+    }
+
+    enum Next: Equatable {
+        case keepGoing                 // ничего не случилось — следующая попытка по таймеру
+        case clicked(String)           // нажали — ждём новую страницу
+        case waitingHuman(String)      // видно пустое поле, заполнить нечем
+        case unknownForm([String])     // поля есть, ни одно не узнано
+        case offHost(String)           // страница не из разрешённых — заполняет человек
+        case formError(String)         // правило stop: форма показала ошибку
+        case clickLimit                // лимит нажатий — дальше только человек
+    }
+
+    struct Decision: Equatable {
+        var next: Next
+        var countedPassword = false
+        var countedCode = false
+        var passwordLimitReached = false
+    }
+
+    /// Новая страница: попытки и запрет повтора — заново, лимиты входа — нет.
+    mutating func newPage() { attempts = 0; lastClickSignature = nil }
+
+    /// Можно ли запускать скрипт на странице с такой сигнатурой.
+    func mayRun(signature: String) -> Bool {
+        stopped == nil && attempts < maxAttemptsPerPage && signature != lastClickSignature
+    }
+
+    /// Попытка началась: что ей можно дать.
+    mutating func begin() -> Offer {
+        attempts += 1
+        return Offer(password: passwordFills < maxPasswordFills, code: totpFills == 0)
+    }
+
+    /// Результат попытки. Первым делом — счётчики: что подставлено, то
+    /// подставлено, как бы ни закончилась попытка.
+    mutating func record(_ o: Outcome, signature: String) -> Decision {
+        var d = Decision(next: .keepGoing)
+        if o.filled.contains("password") {
+            passwordFills += 1
+            d.countedPassword = true
+            d.passwordLimitReached = passwordFills >= maxPasswordFills
+        }
+        if o.filled.contains("totp") {
+            totpFills += 1
+            d.countedCode = true
+        }
+        if let s = o.stopped {
+            stopped = s
+            d.next = .formError(s)
+            return d
+        }
+        if let h = o.offHost {
+            d.next = .offHost(h)
+            return d
+        }
+        if let c = o.clicked {
+            clicks += 1
+            lastClickSignature = signature
+            if clicks >= maxClicks {
+                stopped = "лимит автозаполнения"
+                d.next = .clickLimit
+            } else {
+                d.next = .clicked(c)
+            }
+            return d
+        }
+        if let w = o.waiting {
+            d.next = .waitingHuman(w)
+            return d
+        }
+        if o.filled.isEmpty && !o.inputs.isEmpty { d.next = .unknownForm(o.inputs) }
+        return d
+    }
 }

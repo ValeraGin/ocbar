@@ -7,7 +7,7 @@ import Foundation
 ///
 /// Три признака завершения, как в эталоне: точное совпадение URL с
 /// login-final, совпадение по префиксу без query, появление cookie.
-final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDelegate {
+final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDelegate, WKScriptMessageHandler {
     struct Options {
         var showAfter: TimeInterval = 2      // окно прячем, пока есть шанс пройти молча
         var alwaysShow = false
@@ -23,8 +23,10 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         var totpCode: String? = nil       // если код пришёл готовым (из внешней базы)
         var totpParams = TOTPParams()     // алгоритм, цифры, период секрета — из профиля
         var autofill = true
-        var cookieDomain: String? = nil   // домен шлюза: cookie принимаем только оттуда
-        var fillHosts: [String] = []      // где разрешено заполнять форму; пусто = везде
+        // Хосты шлюза (адрес группы и адрес, где идёт POST): cookie — только
+        // с них, --insecure — только к ним, с них начинается цепочка входа.
+        var gatewayHosts: [String] = []
+        var fillHosts: [String] = []      // IdpHosts; пусто — хосты цепочки входа (FillScope)
         // Запомнить вход: человек входит руками, ocbar записывает форму и
         // после входа предлагает сохранить (TeachRecorder, TeachFlow).
         var teach = false                 // галочка доступна
@@ -43,25 +45,75 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     private var showTimer: Timer?
     private var timeoutTimer: Timer?
     private var fillTimer: Timer?
-    private var lastClickSignature: String?
     private var lastFillURL: String?
-    private var fillAttempts = 0
-    private var clicks = 0
-    // Больше — это уже цикл, а не вход. Пять, а не три: у Microsoft с кодом и
-    // «Остаться в системе?» выходит четыре нажатия. Повторного нажатия на
-    // неизменившейся странице не бывает (lastClickSignature).
-    private let maxClicks = 5
-    private var totpFills = 0        // код одноразовый: подставляем РОВНО один раз
-    // Пароль — не больше двух раз за вход. Два, а не один: Microsoft прячет
-    // на странице логина второе поле пароля для менеджеров паролей. Третий
-    // раз — это уже неверный пароль по кругу, а порталы блокируют учётку
-    // после трёх-пяти попыток.
-    private var passwordFills = 0
-    private let maxPasswordFills = 2
+    // Лимиты кода, пароля и нажатий, запрет повтора на неизменившейся
+    // странице — в AutofillGate: там они проверяются без WebKit.
+    private var gate = AutofillGate()
+    private var scope: FillScope
+    private var lastGesture: Date?
+    private var offHostLogged: String?
+
+    /// Изолированный мир окна входа: скрипт автозаполнения, его проверка
+    /// хоста и слушатель жестов человека. Страница не видит ни их, ни
+    /// обработчик сообщений и не может подменить встроенные функции.
+    static let world = WKContentWorld.world(name: "ocbar-auth")
+
+    /// Настоящий (isTrusted) щелчок или клавиша в главном документе — жест
+    /// человека: переход сразу после него продлевает цепочку входа.
+    static let gestureScript = """
+    (function () {
+      if (window.__ocbarGestureReady) return;
+      window.__ocbarGestureReady = true;
+      function g(e) { if (e.isTrusted) window.webkit.messageHandlers.ocbarGesture.postMessage(1); }
+      document.addEventListener('mousedown', g, true);
+      document.addEventListener('keydown', g, true);
+    })();
+    """
+
+    /// Общая конфигурация окна входа — её же проверяет --learn-selftest.
+    /// Всплывающие окна без жеста человека WebKit не открывает вовсе.
+    static func configuration(persistent: Bool) -> WKWebViewConfiguration {
+        let cfg = WKWebViewConfiguration()
+        // persistent: IdP-сессия переживает перезапуск
+        cfg.websiteDataStore = persistent ? .default() : .nonPersistent()
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = false
+        return cfg
+    }
+
+    /// Cookie токена и cookie ошибки — только с точного хоста шлюза, без
+    /// родительского домена: хранилище общее и постоянное, и cookie с тем
+    /// же именем мог поставить на весь домен любой соседний хост (или
+    /// остаться от прошлого запуска с другим шлюзом). Точка в начале
+    /// (Domain=хост шлюза) допускается: такую ставит только сам хост и его
+    /// поддомены.
+    static func cookieFromGateway(domain: String, hosts: Set<String>) -> Bool {
+        var d = domain.lowercased()
+        if d.hasPrefix(".") { d.removeFirst() }
+        return !d.isEmpty && hosts.contains(d)
+    }
+
+    /// --insecure — только к хосту шлюза: страницы провайдера входа, где
+    /// вводится пароль, проверяются всегда.
+    static func trustsUnverified(host: String, insecure: Bool, gatewayHosts: Set<String>) -> Bool {
+        insecure && gatewayHosts.contains(host.lowercased())
+    }
+
+    private var cookieHosts: Set<String> {
+        var s = scope.gatewayHosts
+        for u in [request.loginURL, request.loginFinalURL] {
+            if let h = FillScope.host(URL(string: u)) { s.insert(h) }
+        }
+        return s
+    }
+
+    /// Был ли только что настоящий жест человека в видимом окне.
+    private var humanRecent: Bool {
+        guard shownToHuman, window?.isVisible == true, let t = lastGesture else { return false }
+        return Date().timeIntervalSince(t) < 3
+    }
     private(set) var recorder: TeachRecorder?
     private var teachBox: NSButton?
     private(set) var shownToHuman = false
-    private var stoppedReason: String?
 
     enum WebAuthError: Error, CustomStringConvertible {
         case cancelled, timeout, needsHuman(String), errorCookie(String), stopped(String), navigation(String)
@@ -82,15 +134,17 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         self.request = request
         self.opts = options
         self.done = completion
+        self.scope = FillScope(explicit: options.fillHosts, gatewayHosts: options.gatewayHosts)
         super.init()
     }
 
     // MARK: - запуск
 
     func start() {
-        let cfg = WKWebViewConfiguration()
-        cfg.websiteDataStore = .default()          // persistent: IdP-сессия переживает перезапуск
-        cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let cfg = Self.configuration(persistent: true)
+        cfg.userContentController.addUserScript(WKUserScript(source: Self.gestureScript, injectionTime: .atDocumentStart,
+                                                             forMainFrameOnly: true, in: Self.world))
+        cfg.userContentController.add(self, contentWorld: Self.world, name: "ocbarGesture")
         if opts.teach {
             let r = TeachRecorder(username: opts.creds.username)
             r.enabled = opts.teachOn
@@ -164,7 +218,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             finish(.failure(.navigation("некорректный sso-v2-login: \(request.loginURL)")))
             return
         }
-        Log.info("открываю \(url.absoluteString)")
+        Log.info("открываю \(Log.redact(url))")
         webView.load(URLRequest(url: url))
     }
 
@@ -221,21 +275,17 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
             guard let self = self, !self.finished else { return }
             // Имя cookie задаёт шлюз, а хранилище общее и постоянное. Без
-            // проверки домена сюда попадала бы cookie от другого шлюза или
-            // остаток от прошлого запуска.
-            let matching = cookies.filter { c in
-                guard c.name == self.request.tokenCookieName else { return false }
-                guard let want = self.opts.cookieDomain, !want.isEmpty else { return true }
-                let dom = c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain
-                return want == dom || want.hasSuffix("." + dom)
-            }
-            if let tok = matching.first {
+            // проверки домена сюда попадала бы cookie от другого шлюза,
+            // соседнего хоста того же домена или остаток от прошлого запуска.
+            let hosts = self.cookieHosts
+            let fromGateway = cookies.filter { WebAuth.cookieFromGateway(domain: $0.domain, hosts: hosts) }
+            if let tok = fromGateway.first(where: { $0.name == self.request.tokenCookieName }) {
                 Log.info("cookie \(tok.name) получена (домен \(tok.domain), \(tok.value.count) символов)")
                 self.finish(.success(tok.value))
                 return
             }
             if let errName = self.request.errorCookieName,
-               let err = cookies.first(where: { $0.name == errName }), !err.value.isEmpty {
+               let err = fromGateway.first(where: { $0.name == errName }), !err.value.isEmpty {
                 self.finish(.failure(.errorCookie(err.value)))
             }
         }
@@ -245,15 +295,17 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         let u = webView.url?.absoluteString ?? "?"
-        Log.debug("страница загружена: \(u)")
+        // В журнал и в строку состояния — без query: строка состояния
+        // уходит в журнал как причина «нужен человек» (--no-window).
+        Log.debug("страница загружена: \(Log.redact(webView.url))")
         recorder?.apply(to: webView)
-        statusLabel.stringValue = u
+        statusLabel.stringValue = Log.redact(webView.url)
         if urlLooksFinal(webView.url) {
             Log.info("достигнут sso-v2-login-final, жду cookie")
         }
         checkCookies()
         // новая страница — новая попытка автозаполнения
-        if lastFillURL != u { lastFillURL = u; fillAttempts = 0; lastClickSignature = nil }
+        if lastFillURL != u { lastFillURL = u; gate.newPage() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.autofillTick() }
     }
 
@@ -278,19 +330,70 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
 
     func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
                  completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        if opts.insecure, challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           Self.trustsUnverified(host: challenge.protectionSpace.host, insecure: opts.insecure,
+                                 gatewayHosts: scope.gatewayHosts),
            let trust = challenge.protectionSpace.serverTrust {
+            Log.debug("TLS: сертификат \(challenge.protectionSpace.host) принят без проверки (--insecure, хост шлюза)")
             completionHandler(.useCredential, URLCredential(trust: trust))
         } else {
             completionHandler(.performDefaultHandling, nil)
         }
     }
 
-    // MARK: - WKUIDelegate: popup-окна открываем в том же webview
+    // MARK: - цепочка входа (FillScope)
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if navigationAction.targetFrame?.isMainFrame == true, let url = navigationAction.request.url {
+            note(scope.navigation(to: url, humanRecent: humanRecent), url)
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        // Перенаправления WebKit и так проводит через decidePolicyFor; это —
+        // запасной путь на случай, если какое-то пройдёт мимо.
+        if let url = webView.url { note(scope.navigation(to: url, humanRecent: humanRecent), url) }
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        scope.committed(webView.url)
+    }
+
+    private func note(_ reason: FillScope.Reason, _ url: URL) {
+        let h = url.host ?? "?"
+        switch reason {
+        case .already: break
+        case .gatewayChain: Log.debug("цепочка входа: \(h)")
+        case .human: Log.info("человек перешёл на \(h) — там тоже заполняю")
+        case .refused:
+            if url.scheme == "https" || url.scheme == "http" {
+                Log.debug("\(h): не из цепочки входа — автозаполнения там не будет")
+            }
+        }
+    }
+
+    // MARK: - WKScriptMessageHandler: жесты человека из изолированного мира
+
+    func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.world == Self.world, message.name == "ocbarGesture" else { return }
+        lastGesture = Date()
+    }
+
+    // MARK: - WKUIDelegate: popup-окна — в том же webview, но не куда попало
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url { webView.load(URLRequest(url: url)) }
+        // Сюда доходят только окна по жесту человека (конфигурация). И даже
+        // тогда главное окно входа не уходит с цепочки входа: иначе фрейм
+        // с чужой страницы увёл бы его туда, где заполнятся логин и пароль.
+        guard let url = navigationAction.request.url else { return nil }
+        if scope.allowsPopup(url) {
+            webView.load(URLRequest(url: url))
+        } else {
+            Log.info("всплывающее окно на \(Log.redact(url)) не открываю: не https или хост не из цепочки входа")
+        }
         return nil
     }
 
@@ -306,33 +409,27 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     /// больше N раз, и никогда повторно после click на неизменившейся странице —
     /// иначе кнопка «Войти» нажимается в цикле на форме с ошибкой.
     private func autofillTick() {
-        guard !finished, opts.autofill, !opts.rules.isEmpty, stoppedReason == nil else { return }
-        guard fillAttempts < 12 else { return }
+        guard !finished, opts.autofill, !opts.rules.isEmpty, gate.stopped == nil else { return }
+        guard gate.attempts < gate.maxAttemptsPerPage else { return }
         // Правила — это просто селекторы, они совпадут на любой странице с
         // похожими полями. Без привязки к адресу логин с паролем ушли бы
         // туда, куда увёл бы шлюз.
-        let host = webView.url?.host ?? ""
-        if !opts.fillHosts.isEmpty && !opts.fillHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
-            if fillAttempts == 0 {
-                Log.info("страница \(host) не в списке разрешённых для автозаполнения — заполняет человек")
-                fillAttempts = 1
-                show()
-            }
+        // Проверка здесь — чтобы не звать скрипт зря; настоящая — внутри
+        // скрипта (allowed), в момент выполнения.
+        guard scope.allowsFill(webView.url) else {
+            offHost(webView.url?.host ?? "?")
             return
         }
         let sigJS = "location.href + '|' + document.querySelectorAll('input').length + '|' + (document.body ? document.body.innerText.length : 0)"
-        webView.evaluateJavaScript(sigJS) { [weak self] sig, _ in
-            guard let self = self, let sig = sig as? String else { return }
-            if sig == self.lastClickSignature { return }   // после клика ждём изменений
-            self.fillAttempts += 1
-            // Второй автоввод TOTP бессмысленен (тот же секрет) и опасен:
-            // несколько неверных кодов подряд блокируют учётную запись.
+        webView.evaluateJavaScript(sigJS, in: nil, in: Self.world) { [weak self] res in
+            guard let self = self, !self.finished, case .success(let v) = res, let sig = v as? String else { return }
+            guard self.gate.mayRun(signature: sig) else { return }   // после клика ждём изменений
+            let offer = self.gate.begin()
             // Код считается ЗДЕСЬ, а не при старте: между запуском и появлением
-            // поля проходят десятки секунд, а код живёт тридцать. Раньше
-            // подставлялся код, сгенерированный до открытия окна, и он вполне
-            // мог протухнуть — при том что вторая попытка запрещена намеренно.
+            // поля проходят десятки секунд, а код живёт тридцать. Второй
+            // автоввод не даёт AutofillGate: тот же секрет — тот же неверный код.
             var code: String? = nil
-            if self.totpFills == 0 {
+            if offer.code {
                 if let secret = self.opts.totpSecret, !secret.isEmpty {
                     code = TOTP.code(secretBase32: secret, params: self.opts.totpParams)
                 } else {
@@ -340,58 +437,67 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
                 }
             }
             var creds = self.opts.creds
-            if self.passwordFills >= self.maxPasswordFills { creds.password = nil }
-            let js = Autofill.script(rules: self.opts.rules, creds: creds, totpCode: code)
-            self.webView.evaluateJavaScript(js) { result, err in
-                if let err = err { Log.debug("autofill JS: \(err.localizedDescription)"); return }
-                guard let dict = result as? [String: Any] else { return }
-                if let stopped = dict["stopped"] as? String {
-                    Log.info("правило stop: \(stopped)")
-                    self.stoppedReason = stopped
-                    self.statusLabel.stringValue = "Форма сообщает: \(stopped)"
-                    self.show()
-                    return
-                }
-                let filled = (dict["filled"] as? [String]) ?? []
-                if !filled.isEmpty { Log.info("заполнено: \(filled.joined(separator: ", "))") }
-                // Кнопку не нажали, потому что видно пустое поле из правил и
-                // заполнить его нечем, — дальше решает человек.
-                if dict["clicked"] == nil, let waiting = dict["waiting"] as? String {
-                    if self.fillAttempts == 1 || !filled.isEmpty {
-                        Log.info("поле \(waiting) пустое, заполнить нечем — форму не отправляю, её увидит человек")
-                    }
-                    self.show()
-                    return
-                }
-                if filled.contains("password") {
-                    self.passwordFills += 1
-                    if self.passwordFills >= self.maxPasswordFills {
-                        Log.info("пароль подставлен \(self.passwordFills) раза — дальше вводит человек: неверный пароль не должен уходить по кругу")
-                    }
-                }
-                if filled.contains("totp") {
-                    self.recorder?.engineFilledCode = true
-                    self.totpFills += 1
-                    Log.info("код TOTP подставлен один раз — если форма спросит снова, вводит человек")
-                }
-                if let clicked = dict["clicked"] as? String {
-                    self.clicks += 1
-                    Log.info("нажато: \(clicked) (\(self.clicks)/\(self.maxClicks))")
-                    self.lastClickSignature = sig
-                    if self.clicks >= self.maxClicks {
-                        Log.info("лимит нажатий — дальше только человек")
-                        self.stoppedReason = "лимит автозаполнения"
-                        self.show()
-                    }
-                    return
-                }
-                // Ничего не заполнили и не нажали, а поля на странице есть —
-                // форму не распознали, человеку пора её увидеть.
-                if filled.isEmpty, let inputs = dict["inputs"] as? [String], !inputs.isEmpty {
-                    if self.fillAttempts == 1 { Log.info("форма не распознана, поля: \(inputs.joined(separator: " "))") }
-                    self.show()
+            if !offer.password { creds.password = nil }
+            let js = Autofill.script(rules: self.opts.rules, creds: creds, totpCode: code,
+                                     allowed: self.scope.jsAllowed)
+            self.webView.evaluateJavaScript(js, in: nil, in: Self.world) { res in
+                switch res {
+                case .failure(let err): Log.debug("autofill JS: \(err.localizedDescription)")
+                case .success(let v):
+                    guard let dict = v as? [String: Any] else { return }
+                    self.handle(AutofillGate.Outcome(dict), signature: sig)
                 }
             }
         }
+    }
+
+    private func handle(_ o: AutofillGate.Outcome, signature: String) {
+        let first = gate.attempts == 1
+        let d = gate.record(o, signature: signature)
+        if !o.filled.isEmpty { Log.info("заполнено: \(o.filled.joined(separator: ", "))") }
+        if d.passwordLimitReached {
+            Log.info("пароль подставлен \(gate.passwordFills) раза — дальше вводит человек: неверный пароль не должен уходить по кругу")
+        }
+        if d.countedCode {
+            recorder?.engineFilledCode = true
+            Log.info("код TOTP подставлен один раз — если форма спросит снова, вводит человек")
+        }
+        switch d.next {
+        case .keepGoing:
+            break
+        case .formError(let s):
+            Log.info("правило stop: \(s)")
+            statusLabel.stringValue = "Форма сообщает: \(s)"
+            show()
+        case .offHost(let h):
+            offHost(h)
+        case .clicked(let c):
+            Log.info("нажато: \(c) (\(gate.clicks)/\(gate.maxClicks))")
+        case .clickLimit:
+            Log.info("нажато (\(gate.clicks)/\(gate.maxClicks)) — лимит нажатий, дальше только человек")
+            show()
+        case .waitingHuman(let w):
+            // Кнопку не нажали, потому что видно пустое поле из правил и
+            // заполнить его нечем, — дальше решает человек.
+            if first || !o.filled.isEmpty {
+                Log.info("поле \(w) пустое, заполнить нечем — форму не отправляю, её увидит человек")
+            }
+            show()
+        case .unknownForm(let inputs):
+            // Ничего не заполнили и не нажали, а поля на странице есть —
+            // форму не распознали, человеку пора её увидеть.
+            if first { Log.info("форма не распознана, поля: \(inputs.joined(separator: " "))") }
+            show()
+        }
+    }
+
+    /// Страница не из разрешённых: заполняет человек. Пишем в журнал один
+    /// раз на хост, окно показываем.
+    private func offHost(_ host: String) {
+        if offHostLogged != host {
+            offHostLogged = host
+            Log.info("страница \(host) не в списке разрешённых для автозаполнения — заполняет человек")
+        }
+        show()
     }
 }
