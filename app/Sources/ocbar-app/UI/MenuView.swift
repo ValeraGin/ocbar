@@ -199,6 +199,9 @@ struct MenuView: View {
                 MenuRow(action: { store.connect(profile: s.profile.isEmpty ? nil : s.profile, show: true) }) {
                     Text("Войти").fontWeight(.medium)
                 }
+                MenuRow(action: { store.connect(profile: s.profile.isEmpty ? nil : s.profile, teach: true) }) {
+                    Text("Войти и запомнить вход…")
+                }
                 MenuRow(action: { store.disconnect() }) { Text("Не подключаться") }
             case .down, .foreign:
                 let target = s.defaultProfile.isEmpty ? nil : s.defaultProfile
@@ -206,6 +209,11 @@ struct MenuView: View {
                     Text(target.map { name in
                         "Подключить · " + (s.profiles.first { $0.name == name }?.display ?? name)
                     } ?? "Подключить")
+                }
+                // Первый вход: человек входит руками, ocbar запоминает форму и
+                // предлагает сохранить пароль и источник кода.
+                MenuRow(enabled: OcbarClient.shared.binary != nil, action: { store.connect(profile: target, teach: true) }) {
+                    Text("Подключить и запомнить вход…")
                 }
             case .missing:
                 EmptyView()

@@ -537,7 +537,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let steps = Array(Set(marks.filter { $0.kind != "stop" }.map(\.step))).sorted()
         for (i, s) in steps.enumerated() {
             if steps.count > 1 { out += "# шаг \(i + 1)" + (pages[s].map { " — " + $0 } ?? "") + "\n" }
-            for what in ["username", "password", "totp"] {
+            for what in ["username", "password", "totp", "manual"] {
                 for m in marks where m.step == s && m.kind == what { out += "fill  \(what) \(m.selector)\n" }
             }
             for m in marks where m.step == s && (m.kind == "click" || m.kind == "click!") {
@@ -555,7 +555,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     /// странице видно пустое поле из правил.
     static func effectiveKind(_ m: Mark, in marks: [Mark]) -> String {
         guard m.kind == "click" else { return m.kind }
-        let hasFields = marks.contains { $0.step == m.step && ["username", "password", "totp"].contains($0.kind) }
+        let hasFields = marks.contains { $0.step == m.step && ["username", "password", "totp", "manual"].contains($0.kind) }
         return hasFields ? "click" : "click!"
     }
 
@@ -615,50 +615,10 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     }
     static func js(_ s: String) -> String { jsString(s) }
 
-    private static let js = """
-    (function () {
-      if (window.__ocbarLearnReady) return;
-      window.__ocbarLearnReady = true;
-      var marking = true, kind = 'username';
-      var box = document.createElement('div');
-      box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #2f6bbf;' +
-                          'background:rgba(47,107,191,.12);border-radius:3px;display:none';
-      var tip = document.createElement('div');
-      tip.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;display:none;' +
-                          'font:11px -apple-system,sans-serif;background:#2f6bbf;color:#fff;padding:1px 5px;border-radius:3px';
-      document.documentElement.appendChild(box);
-      document.documentElement.appendChild(tip);
-
-      function target(el) {
-        if (!el || el.nodeType !== 1) return el;
-        if (kind === 'username' || kind === 'password' || kind === 'totp')
-          return el.closest('input,textarea') || el;
-        if (kind === 'click' || kind === 'click!')
-          return el.closest('button,a,input,[role=button],[type=submit]') || el;
-        if (kind === 'auto')
-          return el.closest('input,textarea,button,a,[role=button],[type=submit]') || el;
-        return el;
-      }
-
-      // Что это за элемент. Страница знает про него больше, чем человек
-      // помнит про шаги мастера: тип поля, autocomplete, длину, имя.
-      function guessKind(el) {
-        var tag = (el.tagName || '').toLowerCase();
-        var type = ((el.getAttribute && el.getAttribute('type')) || '').toLowerCase();
-        if (tag === 'input' && type === 'password') return 'password';
-        if (tag === 'button' || tag === 'a' || type === 'submit' || type === 'button' ||
-            (el.getAttribute && el.getAttribute('role') === 'button')) return 'click';
-        if (tag === 'input' || tag === 'textarea') {
-          var ac = ((el.getAttribute && el.getAttribute('autocomplete')) || '').toLowerCase();
-          var name = ((el.getAttribute && el.getAttribute('name')) || '') + ' ' + (el.id || '');
-          var len = parseInt((el.getAttribute && el.getAttribute('maxlength')) || '0', 10);
-          if (ac === 'one-time-code' || /otp|otc|totp|one.?time|код|pin|token/i.test(name) ||
-              (type === 'tel' && len > 0 && len <= 8)) return 'totp';
-          return 'username';
-        }
-        return 'stop';
-      }
-
+    /// Составление селектора по элементу — общее для разметки и для записи
+    /// при входе (TeachRecorder): правило, записанное любым путём, выглядит
+    /// одинаково.
+    static let selectorJS = """
       function safeValue(v) {
         if (v === null || v === undefined || v === '') return null;
         return /^[A-Za-z0-9_:.-]+$/.test(v) ? v : "'" + String(v).replace(/'/g, "") + "'";
@@ -712,6 +672,53 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         return unique(p, el) ? p : p;
       }
 
+    """
+
+    private static let js = """
+    (function () {
+      if (window.__ocbarLearnReady) return;
+      window.__ocbarLearnReady = true;
+      var marking = true, kind = 'username';
+      var box = document.createElement('div');
+      box.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #2f6bbf;' +
+                          'background:rgba(47,107,191,.12);border-radius:3px;display:none';
+      var tip = document.createElement('div');
+      tip.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;display:none;' +
+                          'font:11px -apple-system,sans-serif;background:#2f6bbf;color:#fff;padding:1px 5px;border-radius:3px';
+      document.documentElement.appendChild(box);
+      document.documentElement.appendChild(tip);
+
+      function target(el) {
+        if (!el || el.nodeType !== 1) return el;
+        if (kind === 'username' || kind === 'password' || kind === 'totp')
+          return el.closest('input,textarea') || el;
+        if (kind === 'click' || kind === 'click!')
+          return el.closest('button,a,input,[role=button],[type=submit]') || el;
+        if (kind === 'auto')
+          return el.closest('input,textarea,button,a,[role=button],[type=submit]') || el;
+        return el;
+      }
+
+      // Что это за элемент. Страница знает про него больше, чем человек
+      // помнит про шаги мастера: тип поля, autocomplete, длину, имя.
+      function guessKind(el) {
+        var tag = (el.tagName || '').toLowerCase();
+        var type = ((el.getAttribute && el.getAttribute('type')) || '').toLowerCase();
+        if (tag === 'input' && type === 'password') return 'password';
+        if (tag === 'button' || tag === 'a' || type === 'submit' || type === 'button' ||
+            (el.getAttribute && el.getAttribute('role') === 'button')) return 'click';
+        if (tag === 'input' || tag === 'textarea') {
+          var ac = ((el.getAttribute && el.getAttribute('autocomplete')) || '').toLowerCase();
+          var name = ((el.getAttribute && el.getAttribute('name')) || '') + ' ' + (el.id || '');
+          var len = parseInt((el.getAttribute && el.getAttribute('maxlength')) || '0', 10);
+          if (ac === 'one-time-code' || /otp|otc|totp|one.?time|код|pin|token/i.test(name) ||
+              (type === 'tel' && len > 0 && len <= 8)) return 'totp';
+          return 'username';
+        }
+        return 'stop';
+      }
+
+    \(LearnSession.selectorJS)
       function place(el) {
         // Страницу целиком не подсвечиваем: у края окна ближайшим предком
         // оказывается body, и мигающая рамка вокруг всего лишь мешает.
@@ -910,6 +917,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     private var failures = 0
     private var clickSelector: String?
     private var messages = 0
+    private var teach: TeachRecorder?
 
     /// Две типовые формы: Keycloak (id) и Microsoft (name + кнопка с id).
     private static let page = """
@@ -941,6 +949,17 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         <div id="msf"><input type="text" id="msu"><input type="password" id="msp"></div>
         <input type="submit" id="msbtn" value="Войти" onclick="window.__msClick()">
       </div>
+      <div id="teachbox">
+        <form id="tf1" onsubmit="event.preventDefault(); if (document.getElementById('tp').value.indexOf('верный') === 0) { this.style.display = 'none'; document.getElementById('tf2').style.display = 'block'; }">
+          <input type="text" id="tu"><input type="password" id="tp"><button type="button" id="teye">глаз</button><button type="submit" id="tgo">Войти</button>
+        </form>
+        <form id="tf2" style="display:none" onsubmit="event.preventDefault(); this.style.display = 'none'; document.getElementById('tf3').style.display = 'block';">
+          <input type="text" name="totp" id="tc"><input type="text" id="tcap"><input type="submit" id="tok" value="Подтвердить">
+        </form>
+        <form id="tf3" style="display:none" onsubmit="event.preventDefault(); window.__teachDone = true;">
+          <input type="submit" id="tkmsi" value="Да">
+        </form>
+      </div>
       <form id="pf1"><input id="pfu" autocomplete="username"><input type="password" id="pfp" autocomplete="current-password"><button id="pfb">Войти</button></form>
       <form id="pf2"><input type="text" name="username" id="u2" autocomplete="on"><input type="password" id="p2" autocomplete="on"><input type="checkbox" id="rm2"><button type="submit" id="b2">Войти</button></form>
       <form id="pf3"><input type="text" name="totp" id="t3"><input type="submit" id="s3" value="Войти"></form>
@@ -959,6 +978,13 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
           ['msu', 'msp'].forEach(function (i) { document.getElementById(i).value = ''; });
           document.getElementById('msbtn').value = 'Войти';
           window.__msStage = 0;
+        };
+        window.__teachReset = function () {
+          document.getElementById('tf1').style.display = 'block';
+          document.getElementById('tf2').style.display = 'none';
+          document.getElementById('tf3').style.display = 'none';
+          ['tu', 'tp', 'tc', 'tcap'].forEach(function (i) { document.getElementById(i).value = ''; });
+          window.__teachDone = false;
         };
         window.__twoReset = function () {
           document.getElementById('s1').style.display = 'block';
@@ -980,6 +1006,9 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         c.addUserScript(WKUserScript(source: LearnSession.pageScript, injectionTime: .atDocumentEnd,
                                      forMainFrameOnly: true))
         cfg.userContentController = c
+        let t = TeachRecorder(username: "alice")
+        t.install(into: c)
+        teach = t
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 400), configuration: cfg)
         webView.navigationDelegate = self
         webView.loadHTMLString(Self.page, baseURL: URL(string: "https://example.test/"))
@@ -1037,7 +1066,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                     self.failures += 1
                 }
                 pending -= 1
-                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkPrefill { self.checkAlways { self.checkClick() } } } } } }
+                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkPrefill { self.checkAlways { self.checkTeach { self.checkClick() } } } } } } }
             }
         }
     }
@@ -1293,6 +1322,131 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /// Запись входа при настоящем входе (TeachRecorder). Изоляция: страница
+    /// не видит обработчик и не может включить запись сама. Запись: ошибся
+    /// паролем, нажал «показать пароль», ввёл верный, потом код и капчу, потом
+    /// «Да» — должно получиться ровно три окна. Движок по записанному
+    /// проходит форму, а на пустой капче (fill manual) останавливается.
+    private func checkTeach(_ then: @escaping () -> Void) {
+        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
+            if cond { print("  [ OK ] \(name)") }
+            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
+        }
+        guard let rec = teach else { ok("запись входа установлена", false); then(); return }
+
+        // Секрет TOTP принимается только по введённому коду.
+        let rfc = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        let t0 = Date(timeIntervalSince1970: 1_111_111_109)
+        let c0 = TOTP.code(secretBase32: rfc, at: t0) ?? ""
+        ok("секрет TOTP: даёт введённый код — принят", TeachDialog.secretMatches(rfc, code: c0, at: t0.addingTimeInterval(20)))
+        ok("секрет TOTP: запись с пробелами и строчными — тот же секрет",
+           TeachDialog.secretMatches("gezd gnbv gy3t qojq gezd gnbv gy3t qojq", code: c0, at: t0))
+        ok("секрет TOTP: чужой секрет — отвергнут", !TeachDialog.secretMatches("JBSWY3DPEHPK3PXP", code: c0, at: t0))
+        ok("секрет TOTP: код трёхминутной давности — отвергнут", !TeachDialog.secretMatches(rfc, code: c0, at: t0.addingTimeInterval(180)))
+        let line = KeychainWriter.line(service: "ru.ocbar.client", account: "alice", label: "ocbar-VPN-password", secret: "a b\"") ?? ""
+        ok("связка: значение идёт шестнадцатеричной строкой, не в открытом виде",
+           line.contains("-X 61206222") && !line.contains("a b"), line)
+        ok("связка: имя сервиса с пробелом отвергнуто",
+           KeychainWriter.line(service: "ru ocbar", account: "alice", label: "x", secret: "p") == nil)
+
+        rec.enabled = false
+        rec.apply(to: webView)                       // флаг в изолированном мире — выключен
+        rec.enabled = true                           // приложение готово принять, но страница не включит
+        eval("""
+        window.__ocbarSet(false, 'auto'); window.__teachReset();
+        var seen = typeof (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ocbarTeach);
+        window.__ocbarTeachOn = true;
+        document.getElementById('tu').value = 'alice'; document.getElementById('tp').value = 'верный';
+        document.getElementById('tgo').click();
+        seen
+        """) { seen in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                ok("изоляция: страница не видит обработчик записи", (seen as? String) == "undefined", "\(seen ?? "?")")
+                ok("изоляция: страница не включает запись сама", rec.steps.isEmpty, "\(rec.steps.count) окон")
+                rec.apply(to: self.webView)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.checkTeachCapture(rec, ok, then) }
+            }
+        }
+    }
+
+    private func checkTeachCapture(_ rec: TeachRecorder, _ ok: @escaping (String, Bool, String) -> Void,
+                                   _ then: @escaping () -> Void) {
+        let human = """
+        window.__teachReset();
+        var u = document.getElementById('tu'), p = document.getElementById('tp');
+        u.value = 'alice'; p.value = 'не "тот" пароль';
+        document.getElementById('teye').click();
+        document.getElementById('tgo').click();
+        p.value = 'верный "пароль" с пробелом';
+        document.getElementById('tgo').click();
+        document.getElementById('tc').value = '123456';
+        document.getElementById('tcap').value = 'xk3p';
+        document.getElementById('tok').click();
+        document.getElementById('tkmsi').click();
+        String(window.__teachDone)
+        """
+        eval(human) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                let st = rec.steps
+                let shape = st.map { s in s.fields.map { "\($0.kind) \($0.selector)" }.joined(separator: ", ") + " → " + (s.button ?? "-") }
+                ok("запись: три окна — «глаз» и повтор после ошибки не плодят шаги",
+                   shape == ["username input[id=tu], password input[id=tp] → button[id=tgo]",
+                             "totp input[id=tc], manual input[id=tcap] → input[id=tok]",
+                             " → input[id=tkmsi]"], shape.joined(separator: " | "))
+                ok("запись: логин узнан по совпадению с логином профиля",
+                   st.first?.fields.first?.why == "введён логин профиля", "")
+                ok("запись: сохранится последний, верный пароль", rec.password == "верный \"пароль\" с пробелом", "")
+                ok("запись: введённый код запомнен для проверки секрета", rec.code == "123456", "")
+                let text = rec.rulesText(portal: "example.test")
+                let body = text.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
+                    .split(separator: "\n").map(String.init)
+                let want = ["# шаг 1 — example.test/", "fill  username input[id=tu]", "fill  password input[id=tp]",
+                            "click button[id=tgo]", "# шаг 2 — example.test/", "fill  totp input[id=tc]",
+                            "fill  manual input[id=tcap]", "click input[id=tok]", "# шаг 3 — example.test/",
+                            "click! input[id=tkmsi]"]
+                ok("запись: правила — окна по порядку, признаки ошибки из встроенного набора впереди",
+                   Array(body.drop { $0.hasPrefix("stop") }) == want && body.prefix { $0.hasPrefix("stop") }.count >= 3,
+                   body.joined(separator: " | "))
+                let run = Autofill.script(rules: Autofill.parse(text: text),
+                                          creds: Credentials(username: "alice", password: "верный \"пароль\" с пробелом", totpSecret: nil),
+                                          totpCode: "123456")
+                // Сначала на странице видна ошибка входа: встроенные признаки,
+                // добавленные к записанному, должны остановить движок — иначе
+                // пароль ушёл бы снова. Потом ошибку убираем и проходим форму.
+                self.eval("window.__teachReset(); document.getElementById('passwordError').style.display = ''; 'ok'") { _ in
+                  self.eval(run) { r0 in
+                    let d0 = r0 as? [String: Any] ?? [:]
+                    ok("движок по записанному: видна ошибка входа — стоит, пароль не уходит",
+                       d0["stopped"] != nil && d0["clicked"] == nil, "\(d0)")
+                    self.eval("window.__teachReset(); document.getElementById('passwordError').style.display = 'none'; 'ok'") { _ in
+                    self.eval(run) { r1 in
+                        let d1 = r1 as? [String: Any] ?? [:]
+                        self.eval(run) { r2 in
+                            let d2 = r2 as? [String: Any] ?? [:]
+                            ok("движок по записанному: окно 1 пройдено", (d1["clicked"] as? String) == "button[id=tgo]", "\(d1)")
+                            ok("движок по записанному: на пустой капче стоит и ждёт человека",
+                               d2["clicked"] == nil && (d2["waiting"] as? String) == "input[id=tcap]", "\(d2)")
+                            self.eval("document.getElementById('tcap').value = 'xk3p'; document.getElementById('tok').click(); 'ok'") { _ in
+                                self.eval(run) { _ in
+                                    self.eval("String(window.__teachDone)") { done in
+                                        ok("движок по записанному: после человека — «Да» на экране без полей",
+                                           (done as? String) == "true", "\(done ?? "?")")
+                                        rec.enabled = false
+                                        rec.apply(to: self.webView)
+                                        rec.forgetSecrets()
+                                        self.eval("document.getElementById('passwordError').style.display = ''; 'ok'") { _ in then() }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    }
+                  }
                 }
             }
         }

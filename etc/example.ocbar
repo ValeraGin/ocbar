@@ -40,7 +40,8 @@ corp.example.com = vpn
 # Password        = keepassxc
 # PasswordCommand = op item get VPN --fields password
 #
-# Откуда брать одноразовый код: auto | keychain | keepassxc | command | off
+# Откуда брать одноразовый код: auto | keychain | keepassxc | command | sms | off
+# sms — код приходит по SMS и вводится руками (молча переподключиться не выйдет)
 Totp            = keepassxc
 KeepassEntry    = Группа/Запись
 KeepassDb       = ~/путь/база.kdbx
@@ -61,6 +62,8 @@ KeepassKeychain = имя-сервиса-в-связке-ключей
 #   stop   <селектор>                  форма показала ошибку — не заполнять повторно
 #   fill   username|password|totp <селектор>
 #   click  <селектор>                  нажать, только если что-то заполнили
+#   fill   manual <селектор>           поле, которое вводите вы: не заполняется,
+#                                      но пока пустое — кнопки не жмутся
 #   click! <селектор>                  нажать и без заполнения: экран без полей
 #                                      («Остаться в системе?», «Другой способ входа»)
 # Никакая кнопка не жмётся, пока на странице видно пустое поле из правил fill:

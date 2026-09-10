@@ -276,6 +276,33 @@ pf_replace_section() { # файл секция содержимое(stdin)
     mv "$tmp" "$f"; chmod 600 "$f" 2>/dev/null || true
 }
 
+# Поставить ключ в секции профиля: заменить, если есть, добавить в конец
+# секции, если нет, завести секцию, если нет и её. Прошлая версия — .bak.
+pf_set_key() { # файл секция ключ значение
+    local f="$1" tmp="$1.tmp"
+    awk -v want="$2" -v key="$3" -v val="$4" '
+        function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        /^[ \t]*\[/ {
+            if (insec && !done) { print key " = " val; done = 1 }
+            printf "%s", blank; blank = ""
+            s = trim($0); gsub(/^\[|\]$/, "", s); insec = (tolower(s) == tolower(want)); if (insec) seen = 1
+            print; next
+        }
+        insec && /^[ \t]*$/ { blank = blank $0 "\n"; next }
+        insec && !done && $0 !~ /^[ \t]*[#;]/ && index($0, "=") > 0 {
+            k = trim(substr($0, 1, index($0, "=") - 1))
+            if (tolower(k) == tolower(key)) { printf "%s", blank; blank = ""; print key " = " val; done = 1; next }
+        }
+        { printf "%s", blank; blank = ""; print }
+        END {
+            if (insec && !done) { print key " = " val; done = 1 }
+            printf "%s", blank
+            if (!seen) { print ""; print "[" want "]"; print key " = " val }
+        }' "$f" > "$tmp"
+    cp -f "$f" "$f.bak" 2>/dev/null || true
+    mv "$tmp" "$f"; chmod 600 "$f" 2>/dev/null || true
+}
+
 profile_files() { [ -d "$PROFILE_DIR" ] && ls "$PROFILE_DIR"/*.ocbar 2>/dev/null | while read -r f; do basename "$f" .ocbar; done || true; }
 
 # Глобальные ключи из шапки profiles.conf (до первой секции).
@@ -640,7 +667,16 @@ human_since() { # unix ts → "2ч 13м"
 }
 
 # --------------------------------------------------------------- секреты ----
-kc_get() { security find-generic-password -s "$1" -a "$2" -w 2>/dev/null || true; }
+# Значение с не-ASCII байтами `security -w` отдаёт шестнадцатеричной
+# строкой без каких-либо признаков — пароль на кириллице читался бы как
+# набор цифр. Отличаем по `-g`: там у такого значения префикс 0x.
+kc_get() {
+    local hex
+    hex=$(security find-generic-password -g -s "$1" -a "$2" 2>&1 >/dev/null \
+          | sed -n 's/^password: 0x\([0-9A-Fa-f]*\).*/\1/p')
+    if [ -n "$hex" ]; then printf '%s' "$hex" | xxd -r -p
+    else security find-generic-password -s "$1" -a "$2" -w 2>/dev/null || true; fi
+}
 kc_has() { security find-generic-password -s "$1" -a "$2" >/dev/null 2>&1; }
 
 # --- KeePassXC: код берём готовым, TOTP-секрет из базы не достаём вовсе ---
@@ -853,6 +889,7 @@ cmd_secret() {
             fi
             case "$P_TOTP" in
                 off) warn "Автоввод TOTP" "выключен (totp = off) — код вводит человек" ;;
+                sms) warn "Автоввод TOTP" "код приходит по SMS (Totp = sms) — вводит человек, молчаливого переподключения не будет" ;;
                 keepassxc|command)
                     local c err src; err=$(mktemp "${TMPDIR:-/tmp}/ocbar-totp.XXXXXX")
                     if [ "$P_TOTP" = keepassxc ]; then c=$(keepass_totp 2>"$err") || true; src="KeePassXC: $P_KP_ENTRY"
@@ -868,7 +905,7 @@ cmd_secret() {
             # нажатия, а не при запуске. secret status печатает его и так.
             local c=""
             case "$P_TOTP" in
-                off) die "у профиля [$P_NAME] Totp = off — код вводит человек" ;;
+                off|sms) die "у профиля [$P_NAME] Totp = $P_TOTP — код вводит человек" ;;
                 keepassxc) c=$(keepass_totp) || exit 1 ;;
                 command) c=$(command_totp) || exit 1 ;;
                 *)  local sec a; sec=$(kc_get "$P_SVC" "totp/$P_USER")
@@ -902,11 +939,18 @@ authenticate() { # печатает "token hash post_url"
     fi
     [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
     [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
+    # «Запомнить, как я вхожу»: галочка в окне входа для профиля одним
+    # файлом. После входа окно спросит, что сохранить; итог без секретов
+    # ляжет в TEACH_OUT, секреты ocbar-auth кладёт в связку сам.
+    if [ -n "${P_FILE:-}" ] && [ "${OCBAR_SILENT:-}" != 1 ] && [ -n "${TEACH_OUT:-}" ]; then
+        args+=(--teach-out "$TEACH_OUT")
+        [ "${OCBAR_TEACH:-}" = 1 ] && args+=(--teach-on --always-show)
+    fi
     [ "${OCBAR_VERBOSE:-}" = 1 ] && args+=(--verbose)
     local pw totp="" code="" pwerr; pwerr=$(mktemp "${TMPDIR:-/tmp}/ocbar-pw.XXXXXX")
     pw=$(resolve_password 2>"$pwerr") || true
     case "$P_TOTP" in
-        off) ;;
+        off|sms) ;;
         keepassxc)
             # Из базы приходит готовый код, а не секрет: секрет остаётся в базе.
             code=$(keepass_totp) || log "код из KeePassXC не получен — введёт человек" ;;
@@ -918,7 +962,8 @@ authenticate() { # печатает "token hash post_url"
     rm -f "$pwerr"
     local json
     json=$(OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp" \
-           OCBAR_TOTP_CODE="$code" "$auth" "${args[@]}") || {
+           OCBAR_TOTP_CODE="$code" OCBAR_KEYCHAIN_SERVICE="$P_SVC" OCBAR_PROFILE_NAME="$P_TITLE" \
+           OCBAR_PASSWORD_SOURCE="$(password_source)" OCBAR_TOTP_SOURCE="$P_TOTP" "$auth" "${args[@]}") || {
         local rc=$?
         case $rc in
             2) die "SSO: тайм-аут" ;;
@@ -973,7 +1018,13 @@ do_connect() { # профиль уже загружен
     fi
     info "Вход через SSO: $P_TITLE ($P_URL)…"
     local token hash post_url out rc=0
+    TEACH_OUT=""
+    [ -n "${P_FILE:-}" ] && TEACH_OUT=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach.XXXXXX")
     out=$(authenticate) || rc=$?
+    # Что человек решил сохранить после входа — применяем здесь, в
+    # родительской оболочке: authenticate работает в подстановке, и её
+    # вывод — строка с токеном.
+    [ -n "$TEACH_OUT" ] && { apply_teach "$TEACH_OUT"; rm -f "$TEACH_OUT"; }
     # 5 — «нужен человек»: не ошибка, а решение, которое принимает не скрипт.
     [ "$rc" = 5 ] && return 5
     [ "$rc" = 0 ] || return "$rc"
@@ -1013,6 +1064,36 @@ do_connect() { # профиль уже загружен
     rm -f "$NEEDS_LOGIN" "$LINK_LOST" 2>/dev/null || true
     notify "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
     report_health || true
+}
+
+# Итог «Запомнить, как я вхожу» (JSON от ocbar-auth, без секретов):
+# правила — в секцию [Autofill], выбранные источники — в ключи профиля.
+# Ошибка здесь не должна рвать подключение: вход уже прошёл.
+apply_teach() { # файл
+    local f="$1"
+    [ -s "$f" ] && [ -n "${P_FILE:-}" ] || return 0
+    local get='import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))'
+    local rules totp pwmode
+    rules=$(/usr/bin/python3 -c "$get" "$f" rules 2>/dev/null || true)
+    totp=$(/usr/bin/python3 -c "$get" "$f" totp 2>/dev/null || true)
+    pwmode=$(/usr/bin/python3 -c "$get" "$f" password 2>/dev/null || true)
+    if [ -n "$rules" ]; then
+        local t; t=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach-rules.XXXXXX")
+        printf '%s\n' "$rules" > "$t"
+        ( cmd_rules import "$t" "$P_NAME" ) || warn "правила формы" "не сохранились — повторите: ocbar connect --teach"
+        rm -f "$t"
+    fi
+    case "$totp" in
+        keychain) pf_set_key "$P_FILE" Auth Totp keychain
+                  ok "код второго фактора" "секрет в связке ключей, проверен по введённому коду — Totp = keychain" ;;
+        sms)      pf_set_key "$P_FILE" Auth Totp sms
+                  ok "код второго фактора" "приходит по SMS — Totp = sms: вводите вы, молчаливого переподключения не будет" ;;
+    esac
+    if [ "$pwmode" = keychain ]; then
+        pf_set_key "$P_FILE" Auth Password keychain
+        ok "пароль" "в связке ключей — Password = keychain"
+    fi
+    return 0
 }
 
 # Остановить сессию любого рода. Прокси — свой процесс, туннель — хелпер.
@@ -1250,7 +1331,7 @@ cmd_connect() {
     # Явный вызов человеком — это и есть его решение: снимаем ожидание.
     rm -f "$NEEDS_LOGIN" 2>/dev/null || true
     local p="" a
-    for a in "$@"; do case "$a" in --show) OCBAR_SHOW=1 ;; -v|--verbose) OCBAR_VERBOSE=1 ;; *) p="$a" ;; esac; done
+    for a in "$@"; do case "$a" in --show) OCBAR_SHOW=1 ;; --teach) OCBAR_TEACH=1; OCBAR_SHOW=1 ;; -v|--verbose) OCBAR_VERBOSE=1 ;; *) p="$a" ;; esac; done
     load_profile "$p"
     do_connect
     [ "$DRY_RUN" = 1 ] || cmd_status
@@ -2236,6 +2317,25 @@ PROFILE
     has "шаги формы: правила действуют из профиля" "autofill=inline" "$(run status --short)"
     has "шаги формы: экспорт уносит заголовки" "# шаг 2" "$(run export t 2>&1)"
     run rules clear t >/dev/null
+    # Правка ключа профиля: заменить, добавить в секцию, завести секцию.
+    printf '[Connection]\nName = Ключи\nUrl = vpn.example.test/k\nUser = tester\n\n[Auth]\nTotp = off\nKeychainService = svc\n\n[Health]\nCheck = h:443\n' > "$tmp/k.ocbar"
+    pf_set_key "$tmp/k.ocbar" Auth Totp sms
+    pf_set_key "$tmp/k.ocbar" Auth Password keychain
+    pf_set_key "$tmp/k.ocbar" Proxy Port 12080
+    out=$(cat "$tmp/k.ocbar")
+    has "ключ профиля заменяется" "Totp = sms" "$out"
+    hasnt "старое значение ключа убрано" "Totp = off" "$out"
+    matches "новый ключ — в своей секции" "KeychainService = svc.Password = keychain" "$(printf '%s' "$out" | tr '\n' '.')"
+    has "секция заводится, если её нет" "[Proxy]" "$out"
+    has "остальные секции целы" "Check = h:443" "$out"
+    # Итог «Запомнить, как я вхожу» применяется к профилю.
+    printf '[Connection]\nName = Учусь\nUrl = vpn.example.test/l\nUser = tester\n\n[Auth]\nTotp = auto\n' > "$tmp/profiles/l.ocbar"
+    printf '%s' '{"rules": "stop  div.alert-error\n# шаг 1 — idp.test/login\nfill  username input[id=u]\nfill  password input[id=p]\nclick button[id=go]\n# шаг 2 — idp.test/otp\nfill  totp input[id=c]\nfill  manual input[id=cap]\nclick input[id=ok]", "totp": "sms", "password": ""}' > "$tmp/teach.json"
+    out=$(OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" OCBAR_SELFTEST_TEACH="$tmp/teach.json" "$SELF" _apply-teach l 2>&1)
+    has "запомненное: правила в профиле" "fill  manual input[id=cap]" "$(cat "$tmp/profiles/l.ocbar")"
+    has "запомненное: Totp = sms" "Totp = sms" "$(cat "$tmp/profiles/l.ocbar")"
+    has "Totp = sms виден в secret status" "приходит по SMS" "$(run secret status l 2>&1)"
+    rm -f "$tmp/profiles/l.ocbar" "$tmp/k.ocbar"
     printf '[Connection]\nName = Код\nUrl = vpn.example.test/c\nUser = tester\n\n[Auth]\nTotp = command\nTotpCommand = echo 123456\n' > "$tmp/profiles/c.ocbar"
     has "secret code: свежий код из источника профиля" "123456" "$(run secret code c 2>&1)"
     rm -f "$tmp/profiles/c.ocbar"
@@ -2268,7 +2368,7 @@ valid_rule() {
     read -r kind field sel <<< "$1"
     case "$kind" in
         stop|click|click!) [ -n "$field" ] && [ -z "$sel" ] ;;
-        fill) case "$field" in username|password|totp) [ -n "$sel" ] ;; *) return 1 ;; esac ;;
+        fill) case "$field" in username|password|totp|manual) [ -n "$sel" ] ;; *) return 1 ;; esac ;;
         *) return 1 ;;
     esac
 }
@@ -2353,7 +2453,7 @@ cmd_learn() {
     pw=$(resolve_password 2>"$pwerr") || true
     rm -f "$pwerr"
     case "$P_TOTP" in
-        off) ;;
+        off|sms) ;;
         keepassxc|command) totp_cmd="'$SELF_ENTRY' secret code '$P_NAME'" ;;
         *) totp_secret=$(kc_get "$P_SVC" "totp/$P_USER") ;;
     esac
@@ -2489,7 +2589,8 @@ usage() {
     cat <<'USAGE'
 ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супервизор.
 
-  ocbar connect [профиль] [--show]   подключиться (окно SSO покажется при необходимости);
+  ocbar connect [профиль] [--show] [--teach]   подключиться; --teach — войти руками, а ocbar
+                                      запомнит форму и предложит сохранить пароль и код;
                                       другим профилем при живой сессии — переключение;
                                       Mode = proxy в профиле — SOCKS через ocproxy, без root
   ocbar disconnect                    отключиться
@@ -2557,6 +2658,7 @@ case "${1:-}" in
     cleanup)    cmd_cleanup ;;
     supervise)  shift; cmd_supervise "$@" ;;
     _proxy-tun) cmd_proxy_tun ;;
+    _apply-teach) shift; load_profile "${1:-}"; apply_teach "${OCBAR_SELFTEST_TEACH:-}" ;;   # для selftest
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
     version)    shift; cmd_version "${1:-}" ;;

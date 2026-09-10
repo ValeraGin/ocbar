@@ -106,8 +106,12 @@ final class OcbarClient: @unchecked Sendable {
     // заканчивается «не ответила за 180 с» посреди формы. Отсюда 360.
     // --show: окно входа сразу, а не после пробы молчаливого прохода —
     // когда человек сам нажал «Войти», ждать две секунды незачем.
-    func connect(profile: String?, show: Bool = false) -> ActionResult {
-        action(["connect"] + (profile.map { [$0] } ?? []) + (show ? ["--show"] : []), timeout: 360)
+    // teach: войти руками, а ocbar запомнит форму и после входа предложит
+    // сохранить правила, пароль и источник кода (ocbar connect --teach).
+    // Тайм-аут шире: после входа ещё окно «что сохранить», до трёх минут.
+    func connect(profile: String?, show: Bool = false, teach: Bool = false) -> ActionResult {
+        action(["connect"] + (profile.map { [$0] } ?? []) + (show ? ["--show"] : []) + (teach ? ["--teach"] : []),
+               timeout: teach ? 600 : 360)
     }
     func disconnect() -> ActionResult { action(["disconnect"], timeout: 40) }
     func pause() -> ActionResult { action(["pause"], timeout: 40) }
