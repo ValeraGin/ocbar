@@ -216,8 +216,8 @@ ocbar secret import-qr ~/Downloads/qr.png --select <часть-имени>   # �
 одна и та же схема для обоих. Для KeePassXC в профиле:
 
 ```ini
-password = keepassxc          # keychain (по умолчанию) | keepassxc | command | ask
-totp = keepassxc              # keychain | keepassxc | command | off
+password = keepassxc          # auto (по умолчанию) | keychain | keepassxc | command | ask
+totp = keepassxc              # auto (по умолчанию) | keychain | keepassxc | command | sms | off
 keepass_entry = Группа/Запись
 keepass_db = ~/путь/база.kdbx
 keepass_keychain_service = keepassxc-docs
@@ -225,8 +225,11 @@ keepass_keychain_service = keepassxc-docs
 
 Ни пароль, ни секрет при этом не копируются: `keepassxc-cli` читает базу
 напрямую, значения уходят в окружение подпроцесса и нигде не печатаются.
-`password = ask` означает «вводит человек» — тогда молчаливого
-переподключения не будет.
+`auto` — «разберись сам»: команда, если задана; иначе связка ключей (для
+пароля — если он там есть); иначе база, если указана запись.
+`password = ask` означает «вводит человек», `totp = sms` — код приходит по
+SMS и вводится руками, `totp = off` — автоввод кода выключен; во всех трёх
+случаях молчаливого переподключения не будет.
 
 Мастер-пароль базы берётся из Keychain по имени сервиса и в аргументы не
 попадает; `keepassxc-cli` читает файл напрямую, разблокировать окно
