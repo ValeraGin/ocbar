@@ -202,9 +202,16 @@ priv() {
 #                 [имя]  url = host/group  name = …  user = …  mode = split|full
 #                        auth = sso|password  useragent = …  keychain_service = …
 #                        csd_wrapper = /путь  rules = /путь  totp = auto|keepassxc|off
+# Метка порядка байтов в начале файла (её ставят некоторые редакторы). awk и
+# read видят её частью первой строки: «[Connection]» переставал быть
+# заголовком, и профиль терял Url. Возврат каретки (файл из Windows) — туда же.
+BOM=$'\357\273\277'
+
 profile_get() { # имя ключ
     [ -f "$PROFILES" ] || return 0
-    awk -v s="[$1]" -v k="$2" '
+    awk -v s="[$1]" -v k="$2" -v bom="$BOM" '
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
         $0 == s { inside = 1; next }
         /^\[/   { inside = 0 }
         inside && $0 ~ "^[ \t]*" k "[ \t]*=" { sub("^[^=]*=[ \t]*", ""); sub("[ \t]+$", ""); print; exit }
@@ -227,8 +234,9 @@ profile_file() { # имя → путь файла или пусто
 # Значение ключа из указанной секции. Регистр ключа не важен.
 pf_get() { # файл секция ключ
     [ -f "$1" ] || return 0
-    awk -v want="$2" -v key="$3" '
+    awk -v want="$2" -v key="$3" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
         /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
         /^[ \t]*[#;]/ { next }
         {
@@ -244,8 +252,9 @@ pf_get() { # файл секция ключ
 # Все строки секции как есть (для [Routes]) или пары «ключ значение» (для [DNS]).
 pf_section() { # файл секция
     [ -f "$1" ] || return 0
-    awk -v want="$2" '
+    awk -v want="$2" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
         /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
         /^[ \t]*[#;]/ { next }
         {
@@ -265,8 +274,9 @@ pf_section() { # файл секция
 # «ключ значение» их ломает.
 pf_section_raw() { # файл секция [1 — вместе с комментариями: заголовки шагов формы]
     [ -f "$1" ] || return 0
-    awk -v want="$2" -v keep="${3:-0}" '
+    awk -v want="$2" -v keep="${3:-0}" -v bom="$BOM" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        FNR == 1 { sub("^" bom, "") }
         /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
         /^[ \t]*[#;]/ { if (keep != 1) next }
         { line = trim($0); if (line != "" && tolower(sec) == tolower(want)) print line }
@@ -322,13 +332,15 @@ profile_files() { [ -d "$PROFILE_DIR" ] && ls "$PROFILE_DIR"/*.ocbar 2>/dev/null
 # Глобальные ключи из шапки profiles.conf (до первой секции).
 global_get() {
     [ -f "$PROFILES" ] || return 0
-    awk -v k="$1" '/^\[/{exit} $0 ~ "^[ \t]*" k "[ \t]*=" {sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
+    awk -v k="$1" -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/\r$/, "") }
+        /^\[/{exit} $0 ~ "^[ \t]*" k "[ \t]*=" {sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES"
 }
 
 profile_default() {
     # 1) явный default в старом profiles.conf
     if [ -f "$PROFILES" ]; then
-        local d; d=$(awk '/^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t\r]+$",""); print; exit}' "$PROFILES")
+        local d; d=$(awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/\r$/, "") }
+            /^\[/{exit} /^[ \t]*default[ \t]*=/{sub("^[^=]*=[ \t]*",""); sub("[ \t]+$",""); print; exit}' "$PROFILES")
         [ -n "$d" ] && { printf '%s' "$d"; return 0; }
     fi
     # 2) файл-профиль с именем default, 3) единственный файл-профиль
@@ -344,27 +356,42 @@ profile_list() {
     # Завершающий `true` обязателен: без него отсутствие profiles.conf делает
     # код группы ненулевым, а с pipefail это рушит весь конвейер — и
     # profile_exists начинает врать «профиля нет» при существующем профиле.
-    { profile_files; [ -f "$PROFILES" ] && sed -n 's/^\[\(.*\)\]$/\1/p' "$PROFILES"; true; } 2>/dev/null \
+    { profile_files
+      [ -f "$PROFILES" ] && awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/\r$/, "") }
+          /^\[.*\]$/ { s = $0; sub(/^\[/, "", s); sub(/\]$/, "", s); print s }' "$PROFILES"
+      true; } 2>/dev/null \
         | awk 'NF && !seen[$0]++'
 }
 
-# "имя|name|auth" по всем профилям за один проход: раньше это было два
-# вызова awk на каждый профиль, то есть шестнадцать процессов на восемь строк.
+# "имя|название|auth|описание" по всем профилям, по строке на профиль.
+# Приложение режет строку по «|» на четыре поля, поэтому «|» внутри поля
+# заменяется на «¦»: иначе черта в названии сдвигала описание в чужое поле.
+# Каждое имя — один раз, профиль-файл важнее одноимённой секции
+# profiles.conf (тот же порядок, что у load_profile): раньше профиль из
+# файла и из profiles.conf выдавался дважды, и меню показывало всё вдвое.
 profiles_summary() {
-    local n f
+    local n f files nm au ds; files=$(profile_files)
     while read -r n; do
         [ -n "$n" ] || continue
-        f=$(profile_file "$n")
-        [ -n "$f" ] && printf '%s|%s|%s|%s\n' "$n" "$(pf_get "$f" Connection Name)" "$(pf_get "$f" Connection Auth)" "$(pf_get "$f" Connection Description)"
-    done <<< "$(profile_files)"
+        f=$(profile_file "$n"); [ -n "$f" ] || continue
+        nm=$(pf_get "$f" Connection Name); au=$(pf_get "$f" Connection Auth); ds=$(pf_get "$f" Connection Description)
+        printf '%s|%s|%s|%s\n' "${n//\|/¦}" "${nm//\|/¦}" "${au//\|/¦}" "${ds//\|/¦}"
+    done <<< "$files"
     [ -f "$PROFILES" ] || return 0
-    awk '
-        function val(line,   v) { v = line; sub("^[^=]*=[ \t]*", "", v); sub("[ \t\r]+$", "", v); return v }
-        /^\[/ { if (cur != "") print cur "|" nm "|" au "|" ds; cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; ds = ""; next }
+    OCBAR_SUMMARY_SKIP="$files" awk -v bom="$BOM" '
+        function val(line,   v) { v = line; sub("^[^=]*=[ \t]*", "", v); sub("[ \t]+$", "", v); return v }
+        function clean(x) { gsub(/\|/, "¦", x); return x }
+        function flush() {
+            if (cur != "" && !(cur in skip) && !seen[cur]++) print clean(cur) "|" clean(nm) "|" clean(au) "|" clean(ds)
+        }
+        BEGIN { n = split(ENVIRON["OCBAR_SUMMARY_SKIP"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") skip[a[i]] = 1 }
+        FNR == 1 { sub("^" bom, "") }
+        { sub(/\r$/, "") }
+        /^\[/ { flush(); cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; ds = ""; next }
         /^[ \t]*name[ \t]*=/        { if (nm == "") nm = val($0) }
         /^[ \t]*auth[ \t]*=/        { if (au == "") au = val($0) }
         /^[ \t]*description[ \t]*=/ { if (ds == "") ds = val($0) }
-        END { if (cur != "") print cur "|" nm "|" au "|" ds }
+        END { flush() }
     ' "$PROFILES"
 }
 profile_exists() { profile_list | grep -Fxq "$1"; }
@@ -562,6 +589,7 @@ read_zones() {
     [ -f "$ZONES_CONF" ] || return 0
     local zone dns port
     while read -r zone dns port _; do
+        zone=${zone#"$BOM"}; zone=${zone%$'\r'}; dns=${dns%$'\r'}; port=${port%$'\r'}
         case "${zone:-}" in ''|\#*) continue ;; esac
         [ -n "${dns:-}" ] || { warn "строка без DNS пропущена: $zone" >&2; continue; }
         valid_zone "$zone" || { warn "недопустимое имя зоны, пропущено: $zone" >&2; continue; }
@@ -585,6 +613,7 @@ read_networks() {
     [ -f "$NETWORKS_CONF" ] || return 0
     local n
     while read -r n _; do
+        n=${n#"$BOM"}; n=${n%$'\r'}
         case "${n:-}" in ''|\#*) continue ;; esac
         valid_cidr "$n" || { warn "некорректная сеть в networks.conf: $n" >&2; continue; }
         # Сеть с маской короче /8 уводит в туннель почти весь трафик. Это
@@ -2500,7 +2529,7 @@ rules_source_label() {
 effective_rules_body() {
     if [ "${P_RULES_SRC:-}" = inline ]; then pf_section_raw "$P_FILE" Autofill 1
     elif [ -n "${P_RULES:-}" ] && [ -f "$P_RULES" ]; then
-        awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$P_RULES"
+        awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$P_RULES"
     fi
 }
 # Правило: stop <селектор> | fill username|password|totp <селектор> | click[!] <селектор>
@@ -2531,7 +2560,7 @@ cmd_rules() {
             # В профиль переносятся правила и заголовки окон формы («# шаг N»,
             # их пишет разметка); шапка файла разметки и прочие комментарии — нет.
             local body bad=0 line
-            body=$(awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^$/ { next } /^# *шаг / { print; next } /^[#;]/ { next } { print }' "$src")
+            body=$(awk -v bom="$BOM" 'FNR == 1 { sub("^" bom, "") } { sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^$/ { next } /^# *шаг / { print; next } /^[#;]/ { next } { print }' "$src")
             while IFS= read -r line; do
                 case "$line" in ''|\#*) continue ;; esac
                 valid_rule "$line" || { bad=1; warn "непонятное правило" "$line"; }
@@ -2802,6 +2831,9 @@ case "${1:-}" in
     _proxy-tun) cmd_proxy_tun ;;
     _apply-teach) shift; load_profile "${1:-}"; apply_teach "${OCBAR_SELFTEST_TEACH:-}" ;;   # для selftest
     _qr-check) shift; load_profile "${1:-}"; qr_entry_check "${2:-}"; echo ok ;;             # для selftest
+    # Загрузка и проверка профиля без входа: отрицательные проверки selftest
+    # идут сюда, а не в connect — при поломке валидации дело не дойдёт до входа.
+    _check-profile) shift; load_profile "${1:-}"; echo ok ;;
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
     version)    shift; cmd_version "${1:-}" ;;
