@@ -57,7 +57,8 @@ func usage() -> String {
       --select ПОДСТРОКА    выбрать запись по issuer/имени (иначе — первая TOTP)
       --learn               режим обучения: открыть форму входа и показать
                             мышью, где логин, пароль, код и кнопка, — правила
-                            составятся сами (--out куда записать)
+                            составятся сами (--out куда записать); форма в
+                            несколько окон проходится кнопкой «Пройти шаг»
       --out FILE            файл для --learn (иначе печать в stdout)
       --rules FILE          правила автозаполнения (см. etc/autofill.rules)
       --no-autofill         не заполнять форму
@@ -74,7 +75,9 @@ func usage() -> String {
       --json                --probe в JSON
       --verbose             подробный лог в stderr
 
-    Окружение: OCBAR_USERNAME, OCBAR_PASSWORD, OCBAR_TOTP_SECRET | OCBAR_TOTP_CODE.
+    Окружение: OCBAR_USERNAME, OCBAR_PASSWORD, OCBAR_TOTP_SECRET | OCBAR_TOTP_CODE;
+    для --learn ещё OCBAR_TOTP_COMMAND — команда, печатающая свежий код
+    (им заполняет поле кода кнопка «Пройти шаг»).
     Коды выхода: 0 ок, 1 протокол/HTTP, 2 тайм-аут, 3 отменено, 4 аргументы,
     5 нужен человек (только с --no-window).
     """
@@ -403,7 +406,14 @@ if args.learn {
             Log.info("шлюз не ответил (\(error)) — открываю адрес как есть")
         }
         DispatchQueue.main.async {
-            session = LearnSession(startURL: target, outFile: args.outFile) { code in exit(code) }
+            // Источники данных для «Пройти шаг» — те же, что у входа: ocbar
+            // learn кладёт их в окружение. OCBAR_TOTP_COMMAND печатает свежий
+            // код — он нужен в момент нажатия, а не при запуске окна.
+            let env = ProcessInfo.processInfo.environment
+            session = LearnSession(startURL: target, outFile: args.outFile,
+                                   creds: Credentials.fromEnvironment(),
+                                   totpSecret: env["OCBAR_TOTP_SECRET"], totpCode: env["OCBAR_TOTP_CODE"],
+                                   totpCommand: env["OCBAR_TOTP_COMMAND"]) { code in exit(code) }
             session?.start()
         }
     }

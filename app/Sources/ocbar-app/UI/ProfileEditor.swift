@@ -167,7 +167,7 @@ struct ProfileEditorView: View {
                      ? (doc.rulesFile.trimmed.isEmpty
                         ? (FileManager.default.fileExists(atPath: rulesPath) ? "действует общий файл autofill.rules" : "действуют встроенные правила")
                         : "действует файл из Rules")
-                     : "\(doc.autofill.count) правил в профиле")
+                     : "\(doc.autofill.filter { !$0.trimmed.isEmpty && !$0.trimmed.hasPrefix("#") }.count) правил в профиле")
                     .font(.system(size: 10.5)).foregroundStyle(Palette.tertiary)
             }
             Text(learnHint)
@@ -179,7 +179,7 @@ struct ProfileEditorView: View {
                 .font(.system(size: 11, design: .monospaced))
                 .frame(minHeight: 72, maxHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Palette.line))
-            Text("Правила профиля, по строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Пусто — действует общий файл или встроенные.")
+            Text("Правила профиля, по строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Строки «# шаг N — …» — заголовки окон формы, их пишет разметка. Пусто — действует общий файл или встроенные.")
                 .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
             field("Общий файл правил", $doc.rulesFile,
@@ -197,7 +197,7 @@ struct ProfileEditorView: View {
         if doc.fileName.trimmed.isEmpty { return "Укажите имя файла профиля — размечать нужно его форму входа." }
         if !errors.isEmpty { return "В профиле ошибки (внизу окна) — исправьте, и разметка станет доступна." }
         if !fileExists || dirty { return "Профиль сначала сохранится — разметка идёт по его адресу, а правила ложатся в сам файл." }
-        return "Откроется форма входа вашего портала. Отмечайте мышью поле логина, поле пароля, поле кода и кнопку — правила запишутся в этот профиль сами. Прошлая версия профиля останется рядом с суффиксом .bak."
+        return "Откроется форма входа вашего портала. Отмечайте мышью поля и кнопку — правила запишутся в этот профиль сами. Форма в несколько окон (сначала пароль, потом код)? Отметьте первое окно и нажмите «Пройти шаг →»: ocbar заполнит его вашими данными и перейдёт к следующему. Прошлая версия профиля останется рядом с суффиксом .bak."
     }
 
     private var fileExists: Bool {

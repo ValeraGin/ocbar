@@ -4,11 +4,19 @@ import Foundation
 
 /// Режим обучения: человек показывает мышью, где на его портале поле логина,
 /// поле пароля, поле кода и кнопка входа, — а мы записываем это правилами
-/// автозаполнения (etc/autofill.rules).
+/// автозаполнения (секция [Autofill] профиля или файл правил).
 ///
 /// Зачем: форма провайдера входа у каждой компании своя, а встроенный набор
 /// правил покрывает только типовые (Keycloak, Microsoft). Разметить свой
 /// портал мышью — единственный способ обойтись без чтения чужого HTML.
+///
+/// Форма бывает в несколько окон: сначала логин и пароль, потом отдельно
+/// код. Отметки помнят, на каком окне сделаны (шаг), а кнопка «Пройти шаг»
+/// заполняет отмеченное настоящими данными из профиля и нажимает отмеченную
+/// кнопку — так человек доходит до следующего окна, ничего не вводя руками.
+/// Правила пишутся блоками по шагам. Движок входа от шагов не зависит: он на
+/// каждой загрузке страницы заполняет то, что видно, — заголовки шагов нужны
+/// человеку, чтобы видеть, какое окно что заполняет.
 ///
 /// Сессия окна намеренно НЕ сохраняется (`nonPersistent`): с живой сессией
 /// провайдер проводит молча, и размечать становится нечего. Заодно разметка
@@ -19,6 +27,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let kind: String        // username | password | totp | click | stop
         let selector: String
         let hint: String        // что это было на странице — для строки состояния
+        var step: Int = 1       // окно формы, на котором отмечено
     }
 
     /// Что размечаем сейчас. Порядок кнопок — порядок обычной формы входа.
@@ -27,13 +36,20 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         ("username", "Логин",  "Щёлкните по полю, куда вводится логин"),
         ("password", "Пароль", "Щёлкните по полю пароля"),
         ("totp",     "Код",    "Щёлкните по полю одноразового кода"),
-        ("click",    "Кнопка", "Щёлкните по кнопке, которая отправляет форму (можно несколько — по одной на каждом шаге)"),
+        ("click",    "Кнопка", "Щёлкните по кнопке, которая отправляет это окно формы"),
         ("stop",     "Ошибка", "Щёлкните по строке, где показывается ошибка входа — увидев её, автозаполнение остановится"),
     ]
 
     private let startURL: URL
     private let outFile: String?
     private let done: (Int32) -> Void
+    // Чем заполнять по кнопке «Пройти шаг»: те же источники, что у настоящего
+    // входа (ocbar learn кладёт их в окружение). Код берётся в момент
+    // нажатия — он живёт тридцать секунд, а размечают минутами.
+    private let creds: Credentials
+    private let totpSecret: String?
+    private let totpCode: String?
+    private let totpCommand: String?
 
     private var window: NSWindow!
     private var webView: WKWebView!
@@ -41,15 +57,25 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     private var modeButton: NSButton!
     private var status: NSTextField!
     private var collected: NSTextField!
+    private var stepLabel: NSTextField!
+    private var passButton: NSButton!
     private var marks: [Mark] = []
+    private var step = 1
+    private var pages: [Int: String] = [:]   // шаг → хост и путь страницы, где его отмечали
     private var marking = true
     private var kind = "auto"
     private var finished = false
     private var lastHost: String?      // где реально показалась форма: там же живёт IdP
 
-    init(startURL: URL, outFile: String?, completion: @escaping (Int32) -> Void) {
+    init(startURL: URL, outFile: String?, creds: Credentials = Credentials(),
+         totpSecret: String? = nil, totpCode: String? = nil, totpCommand: String? = nil,
+         completion: @escaping (Int32) -> Void) {
         self.startURL = startURL
         self.outFile = outFile
+        self.creds = creds
+        self.totpSecret = totpSecret
+        self.totpCode = totpCode
+        self.totpCommand = totpCommand
         self.done = completion
         super.init()
     }
@@ -65,7 +91,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                                               forMainFrameOnly: true))
         cfg.userContentController = controller
 
-        let width: CGFloat = 680, webHeight: CGFloat = 700, barHeight: CGFloat = 84
+        let width: CGFloat = 720, webHeight: CGFloat = 700, barHeight: CGFloat = 104
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: width, height: webHeight), configuration: cfg)
         webView.navigationDelegate = self
         webView.autoresizingMask = [.width, .height]
@@ -73,39 +99,51 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         kindPicker = NSSegmentedControl(labels: Self.kinds.map(\.title), trackingMode: .selectOne,
                                         target: self, action: #selector(kindChanged))
         kindPicker.selectedSegment = 0
-        kindPicker.frame = NSRect(x: 10, y: webHeight + 50, width: 420, height: 24)
+        kindPicker.frame = NSRect(x: 10, y: webHeight + 74, width: 420, height: 24)
 
         modeButton = NSButton(checkboxWithTitle: "Отмечать элементы", target: self, action: #selector(modeChanged))
         modeButton.state = .on
-        modeButton.frame = NSRect(x: 440, y: webHeight + 52, width: 160, height: 20)
+        modeButton.frame = NSRect(x: 440, y: webHeight + 76, width: 170, height: 20)
         modeButton.toolTip = "Выключите, чтобы пользоваться страницей обычным образом: нажать «Далее», закрыть баннер, выбрать другой способ входа."
 
         status = NSTextField(labelWithString: Self.kinds[0].hint)
         status.font = .systemFont(ofSize: 11)
         status.textColor = .secondaryLabelColor
         status.lineBreakMode = .byTruncatingMiddle
-        status.frame = NSRect(x: 12, y: webHeight + 30, width: width - 24, height: 16)
+        status.frame = NSRect(x: 12, y: webHeight + 52, width: width - 24, height: 16)
         status.autoresizingMask = [.width]
 
         collected = NSTextField(labelWithString: "отмечено: ничего")
         collected.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         collected.textColor = .tertiaryLabelColor
         collected.lineBreakMode = .byTruncatingTail
-        collected.frame = NSRect(x: 12, y: webHeight + 12, width: width - 260, height: 14)
+        collected.frame = NSRect(x: 12, y: webHeight + 32, width: width - 24, height: 14)
         collected.autoresizingMask = [.width]
 
-        let undo = NSButton(title: "Убрать последнее", target: self, action: #selector(undoLast))
-        undo.bezelStyle = .rounded
-        undo.font = .systemFont(ofSize: 11)
-        undo.frame = NSRect(x: width - 250, y: webHeight + 6, width: 130, height: 22)
-        undo.autoresizingMask = [.minXMargin]
+        stepLabel = NSTextField(labelWithString: "шаг 1")
+        stepLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        stepLabel.frame = NSRect(x: 12, y: webHeight + 9, width: 150, height: 16)
+        stepLabel.toolTip = "Окно формы, которое размечается сейчас. Новая страница после отмеченного окна — следующий шаг."
+
+        passButton = NSButton(title: "Пройти шаг →", target: self, action: #selector(passStep))
+        passButton.bezelStyle = .rounded
+        passButton.font = .systemFont(ofSize: 11)
+        passButton.frame = NSRect(x: width - 480, y: webHeight + 6, width: 130, height: 22)
+        passButton.autoresizingMask = [.minXMargin]
+        passButton.toolTip = "Заполнить отмеченные на этом шаге поля вашими данными из профиля и нажать отмеченную кнопку — форма перейдёт к следующему окну"
 
         let verify = NSButton(title: "Проверить", target: self, action: #selector(checkRules))
         verify.bezelStyle = .rounded
         verify.font = .systemFont(ofSize: 11)
-        verify.frame = NSRect(x: width - 340, y: webHeight + 6, width: 86, height: 22)
+        verify.frame = NSRect(x: width - 344, y: webHeight + 6, width: 86, height: 22)
         verify.autoresizingMask = [.minXMargin]
-        verify.toolTip = "Найти отмеченное на этой странице: правило без элемента не сработает"
+        verify.toolTip = "Найти отметки этого шага на странице: правило без элемента не сработает"
+
+        let undo = NSButton(title: "Убрать последнее", target: self, action: #selector(undoLast))
+        undo.bezelStyle = .rounded
+        undo.font = .systemFont(ofSize: 11)
+        undo.frame = NSRect(x: width - 252, y: webHeight + 6, width: 134, height: 22)
+        undo.autoresizingMask = [.minXMargin]
 
         let finish = NSButton(title: "Готово", target: self, action: #selector(finishAndSave))
         finish.bezelStyle = .rounded
@@ -116,7 +154,8 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
 
         let content = NSView(frame: NSRect(x: 0, y: 0, width: width, height: webHeight + barHeight))
         content.addSubview(webView)
-        [kindPicker, modeButton, status, collected, verify, undo, finish].forEach { content.addSubview($0!) }
+        [kindPicker, modeButton, status, collected, stepLabel, passButton, verify, undo, finish]
+            .forEach { content.addSubview($0!) }
 
         window = NSWindow(contentRect: content.frame,
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -161,19 +200,23 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
 
     /// Правило, которое ничего не находит на странице, не сработает и на
     /// живом входе. Проверка отвечает на это сразу, а не через неделю, когда
-    /// автозаполнение промолчит.
+    /// автозаполнение промолчит. Смотрим только отметки текущего окна: поле
+    /// кода на странице с паролем и не должно находиться.
     @objc private func checkRules() {
-        guard !marks.isEmpty else {
-            status.stringValue = "проверять нечего: ничего не отмечено"
+        let here = marks.filter { $0.step == step }
+        guard !here.isEmpty else {
+            status.stringValue = marks.isEmpty
+                ? "проверять нечего: ничего не отмечено"
+                : "на шаге \(displayNumber(step)) ещё ничего не отмечено (всего отметок: \(marks.count))"
             return
         }
-        webView.evaluateJavaScript(Self.checkScript(for: marks.map { $0.selector })) { [weak self] value, _ in
-            guard let self, let codes = value as? [Int], codes.count == self.marks.count else {
+        webView.evaluateJavaScript(Self.checkScript(for: here.map { $0.selector })) { [weak self] value, _ in
+            guard let self, let codes = value as? [Int], codes.count == here.count else {
                 self?.status.stringValue = "проверка не удалась"
                 return
             }
             var parts: [String] = []
-            for (mark, code) in zip(self.marks, codes) {
+            for (mark, code) in zip(here, codes) {
                 let name = self.title(for: mark.kind)
                 switch code {
                 case 2: parts.append(name + " ✓")
@@ -182,11 +225,97 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 default: parts.append(name + ": селектор не разобрался")
                 }
             }
-            // Многошаговая форма — это нормально: поле пароля на первой
-            // странице и не должно находиться.
-            self.status.stringValue = "на этой странице: " + parts.joined(separator: ", ")
-                + (codes.contains(0) ? " · ненайденное может быть на другом шаге" : "")
+            let others = self.marks.count - here.count
+            self.status.stringValue = "шаг \(self.displayNumber(self.step)), на этой странице: " + parts.joined(separator: ", ")
+                + (others > 0 ? " · на других шагах ещё \(others)" : "")
         }
+    }
+
+    /// «Пройти шаг»: заполнить отмеченные на этом окне поля настоящими
+    /// данными и нажать отмеченную кнопку. Без этого до окна с кодом
+    /// приходилось добираться, выключив разметку и введя пароль руками.
+    @objc private func passStep() {
+        let here = marks.filter { $0.step == step }
+        guard here.contains(where: { $0.kind == "click" }) else {
+            status.stringValue = here.isEmpty
+                ? "на этом шаге ничего не отмечено: отметьте поля и кнопку, которая ведёт дальше"
+                : "отметьте кнопку, которая отправляет это окно, — без неё идти дальше нечем"
+            return
+        }
+        passButton.isEnabled = false
+        status.stringValue = "заполняю и нажимаю…"
+        let needCode = here.contains { $0.kind == "totp" }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let code = needCode ? self.currentCode() : nil
+            DispatchQueue.main.async { self.runPass(here, code: code) }
+        }
+    }
+
+    private func runPass(_ here: [Mark], code: String?) {
+        let fills: [(kind: String, selector: String, value: String?)] = here
+            .filter { ["username", "password", "totp"].contains($0.kind) }
+            .map { m in
+                let v: String?
+                switch m.kind {
+                case "username": v = creds.username
+                case "password": v = creds.password
+                default: v = code
+                }
+                return (m.kind, m.selector, (v?.isEmpty ?? true) ? nil : v)
+            }
+        let clicks = here.filter { $0.kind == "click" }.map(\.selector)
+        // Щелчок программы — тоже щелчок: пока разметка включена, страница
+        // перехватит его и запишет как отметку. Выключаем на время нажатия.
+        let js = "window.__ocbarSet(false, \(Self.jsString(kind))); " + Self.passScript(fills: fills, clicks: clicks)
+        webView.evaluateJavaScript(js) { [weak self] value, error in
+            guard let self else { return }
+            self.passButton.isEnabled = true
+            let dict = value as? [String: Any] ?? [:]
+            if let missing = dict["missing"] as? [String], !missing.isEmpty {
+                self.applyState()
+                self.status.stringValue = "нечем заполнить: " + missing.map { self.title(for: $0) }.joined(separator: ", ")
+                    + " — введите в поле сами и нажмите «Пройти шаг» ещё раз"
+                return
+            }
+            if dict["clicked"] is String {
+                let passed = self.displayNumber(self.step)
+                self.step += 1
+                Log.info("разметка: шаг \(passed) пройден")
+                self.refreshCollected()
+                self.status.stringValue = "шаг \(passed) пройден — отмечайте поля и кнопку следующего окна. Всё? — «Готово»"
+                // Одностраничные формы меняют окно без перехода: включаем
+                // разметку обратно сами, не дожидаясь загрузки страницы.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.applyState() }
+                return
+            }
+            self.applyState()
+            self.status.stringValue = dict["noButton"] != nil
+                ? "отмеченная кнопка на странице не видна — отметьте ту, что видна сейчас"
+                : "не получилось: " + (error.map { $0.localizedDescription } ?? "страница не ответила")
+        }
+    }
+
+    /// Код в момент нажатия: секрет из связки ключей, команда клиента
+    /// (KeePassXC или свой источник) или готовый код, если дали только его.
+    private func currentCode() -> String? {
+        if let s = totpSecret, !s.isEmpty { return TOTP.code(secretBase32: s) }
+        if let cmd = totpCommand, !cmd.isEmpty {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/sh")
+            p.arguments = ["-c", cmd]
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            p.standardError = FileHandle.nullDevice
+            do { try p.run() } catch { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            let first = String(decoding: data, as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
+            let digits = first.trimmingCharacters(in: .whitespaces)
+            return (6...8).contains(digits.count) && digits.allSatisfy(\.isNumber) ? digits : nil
+        }
+        if let c = totpCode, !c.isEmpty { return c }
+        return nil
     }
 
     @objc private func finishAndSave() {
@@ -236,6 +365,12 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             status.stringValue = "не удалось составить селектор — попробуйте щёлкнуть по самому полю"
             return
         }
+        // Второй заслон для корня страницы: правило на html или body
+        // срабатывало бы на любой странице.
+        if ["html", "body"].contains(selector.lowercased()) {
+            status.stringValue = "щелчок мимо элементов — отметьте само поле или кнопку"
+            return
+        }
         let hint = (body["hint"] as? String) ?? ""
         // В режиме «Авто» вид определяет сама страница: она видит тип поля,
         // autocomplete, maxlength и имя. Шаги «сначала логин, потом пароль»
@@ -243,17 +378,20 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         // по тому, которое ждёт мастер.
         let guessed = (body["guess"] as? String) ?? "username"
         let what = kind == "auto" ? guessed : kind
-        // Одно и то же поле дважды не пишем: правило от этого не станет вернее.
-        if marks.contains(where: { $0.kind == what && $0.selector == selector }) {
+        // Одно и то же поле дважды на одном окне не пишем: правило от этого
+        // не станет вернее.
+        if marks.contains(where: { $0.kind == what && $0.selector == selector && $0.step == step }) {
             status.stringValue = "уже отмечено: \(selector)"
             return
         }
-        // Логин, пароль и код — по одному на профиль: второе правило того же
-        // вида молча перебило бы первое.
+        // Логин, пароль и код — по одному на окно формы: второе правило того
+        // же вида на том же окне молча перебило бы первое. На разных окнах
+        // одинаковые виды законны.
         if what != "click" && what != "stop" {
-            marks.removeAll { $0.kind == what }
+            marks.removeAll { $0.kind == what && $0.step == step }
         }
-        marks.append(Mark(kind: what, selector: selector, hint: hint))
+        marks.append(Mark(kind: what, selector: selector, hint: hint, step: step))
+        if pages[step] == nil, let u = webView.url { pages[step] = (u.host ?? "") + u.path }
         status.stringValue = kind == "auto"
             ? "распознано как \(title(for: what)): \(selector) — не то? выберите вид слева и щёлкните ещё раз"
             : "отмечено \(title(for: what)): \(selector)"
@@ -269,10 +407,23 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         Self.kinds.first { $0.id == id }?.title.lowercased() ?? id
     }
 
+    /// Номер шага, как его увидит человек и как он ляжет в файл: пустые шаги
+    /// (страницу перезагрузили, отметки убрали) не считаются.
+    private func displayNumber(_ s: Int) -> Int {
+        Set(marks.filter { $0.kind != "stop" && $0.step < s }.map(\.step)).count + 1
+    }
+
     private func refreshCollected() {
-        collected.stringValue = marks.isEmpty
-            ? "отмечено: ничего"
-            : "отмечено \(marks.count): " + marks.map { "\(title(for: $0.kind))=\($0.selector)" }.joined(separator: ", ")
+        stepLabel?.stringValue = "шаг \(displayNumber(step))"
+        guard !marks.isEmpty else { collected.stringValue = "отмечено: ничего"; return }
+        let stops = marks.filter { $0.kind == "stop" }.map { "ошибка=\($0.selector)" }
+        let steps = Array(Set(marks.filter { $0.kind != "stop" }.map(\.step))).sorted()
+        let groups = steps.map { s -> String in
+            let items = marks.filter { $0.step == s && $0.kind != "stop" }
+                .map { "\(title(for: $0.kind))=\($0.selector)" }.joined(separator: ", ")
+            return (steps.count > 1 ? "шаг \(displayNumber(s)): " : "") + items
+        }
+        collected.stringValue = (stops + groups).joined(separator: " · ")
     }
 
     private func applyState() {
@@ -285,34 +436,81 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             lastHost = host
             window.title = "ocbar — разметка формы входа · \(host)"
         }
+        // Новая страница после отмеченного окна — следующее окно формы: так
+        // шаги различаются и тогда, когда человек прошёл окно сам, руками.
+        if marks.contains(where: { $0.step == step }) {
+            step += 1
+            status.stringValue = "новое окно формы — шаг \(displayNumber(step)): отмечайте его поля и кнопку. Всё? — «Готово»"
+        }
+        refreshCollected()
     }
 
     // MARK: - результат
 
-    /// Правила в том порядке, в каком их читает автозаполнение: сначала
-    /// `stop` (иначе пароль уедет в форму с ошибкой), потом поля, потом
-    /// нажатия.
     func rulesText() -> String {
+        Self.rulesText(marks: marks, pages: pages, portal: startURL.host ?? startURL.absoluteString,
+                       formHost: lastHost ?? startURL.host)
+    }
+
+    /// Правила в том порядке, в каком их читает автозаполнение: сначала
+    /// `stop` (иначе пароль уедет в форму с ошибкой), потом окна формы по
+    /// очереди — в каждом поля, потом кнопка. Если окон несколько, у каждого
+    /// заголовок «# шаг N — страница»; пустые шаги пропускаются.
+    static func rulesText(marks: [Mark], pages: [Int: String], portal: String,
+                          formHost: String?, date: Date = Date()) -> String {
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
-        var out = "# Правила автозаполнения формы входа, размечены вручную \(df.string(from: Date())).\n"
-        out += "# Портал: \(startURL.host ?? startURL.absoluteString)\n"
+        var out = "# Правила автозаполнения формы входа, размечены вручную \(df.string(from: date)).\n"
+        out += "# Портал: \(portal)\n"
         out += "# Формат и остальные возможности — etc/autofill.rules.example.\n"
         out += "# Проверить, что получится: ocbar-auth --dump-script --rules <этот файл>\n"
-        if let host = lastHost ?? startURL.host {
+        if let host = formHost {
             out += "#\n# Форма входа живёт на " + host + ". Чтобы заполнять только там,\n"
             out += "# добавьте в профиль:  IdpHosts = " + host + "\n"
         }
         out += "\n"
-        if marks.isEmpty {
-            out += "# Ничего не отмечено.\n"
-            return out
-        }
+        if marks.isEmpty { return out + "# Ничего не отмечено.\n" }
         for m in marks where m.kind == "stop" { out += "stop  \(m.selector)\n" }
-        for what in ["username", "password", "totp"] {
-            for m in marks where m.kind == what { out += "fill  \(what) \(m.selector)\n" }
+        let steps = Array(Set(marks.filter { $0.kind != "stop" }.map(\.step))).sorted()
+        for (i, s) in steps.enumerated() {
+            if steps.count > 1 { out += "# шаг \(i + 1)" + (pages[s].map { " — " + $0 } ?? "") + "\n" }
+            for what in ["username", "password", "totp"] {
+                for m in marks where m.step == s && m.kind == what { out += "fill  \(what) \(m.selector)\n" }
+            }
+            for m in marks where m.step == s && m.kind == "click" { out += "click \(m.selector)\n" }
         }
-        for m in marks where m.kind == "click" { out += "click \(m.selector)\n" }
         return out
+    }
+
+    /// Скрипт «Пройти шаг»: заполнить видимые пустые поля шага и нажать
+    /// первую видимую отмеченную кнопку. Поле, которое пусто и заполнить
+    /// нечем, возвращается в missing — и кнопка тогда не жмётся: отправить
+    /// форму с пустым паролем значит получить ошибку входа.
+    static func passScript(fills: [(kind: String, selector: String, value: String?)], clicks: [String]) -> String {
+        let f: [[String: Any]] = fills.map { ["kind": $0.kind, "sel": $0.selector, "value": $0.value.map { $0 as Any } ?? NSNull()] }
+        let fj = String(data: (try? JSONSerialization.data(withJSONObject: f)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+        let cj = String(data: (try? JSONSerialization.data(withJSONObject: clicks)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+        return """
+        (function (fills, clicks) {
+          var visible = function (e) { return e && e.offsetParent !== null; };
+          var missing = [], filled = [];
+          fills.forEach(function (f) {
+            var e; try { e = document.querySelector(f.sel); } catch (x) { return; }
+            if (!visible(e) || e.value) return;
+            if (f.value === null) { missing.push(f.kind); return; }
+            var setter = Object.getOwnPropertyDescriptor(e.constructor.prototype, 'value').set;
+            setter.call(e, f.value);
+            e.dispatchEvent(new Event('input', {bubbles: true}));
+            e.dispatchEvent(new Event('change', {bubbles: true}));
+            filled.push(f.kind);
+          });
+          if (missing.length) return {missing: missing, filled: filled};
+          for (var i = 0; i < clicks.length; i++) {
+            var b; try { b = document.querySelector(clicks[i]); } catch (x) { continue; }
+            if (visible(b)) { b.click(); return {clicked: clicks[i], filled: filled}; }
+          }
+          return {noButton: true, filled: filled};
+        })(\(fj), \(cj))
+        """
     }
 
     private static func jsString(_ s: String) -> String {
@@ -462,6 +660,9 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         e.preventDefault(); e.stopPropagation();
         var el = target(e.target);
         if (!el || el.nodeType !== 1) return;
+        // Пустое место страницы — не элемент формы: «stop html» остановил бы
+        // автозаполнение везде, html виден всегда.
+        if (el === document.body || el === document.documentElement) return;
         window.webkit.messageHandlers.ocbarLearn.postMessage({
           selector: selectorFor(el),
           guess: guessKind(el),
@@ -491,6 +692,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     private let done: (Int32) -> Void
     private var failures = 0
     private var clickSelector: String?
+    private var messages = 0
 
     /// Две типовые формы: Keycloak (id) и Microsoft (name + кнопка с id).
     private static let page = """
@@ -507,6 +709,25 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         <input type="email" name="loginfmt">
         <input type="submit" value="Далее" data-report-event="Signin_Submit">
       </form>
+      <div id="twostep">
+        <div id="s1err" style="display:none">Неверный пароль</div>
+        <div id="s1">
+          <input type="text" id="s1user"><input type="password" id="s1pass">
+          <button type="button" id="s1next" onclick="document.getElementById('s1').style.display='none'; document.getElementById('s2').style.display='block'">Далее</button>
+        </div>
+        <div id="s2" style="display:none">
+          <input type="text" id="s2otp" maxlength="6">
+          <button type="button" id="s2done" onclick="window.__twoDone = true">Войти</button>
+        </div>
+      </div>
+      <script>
+        window.__twoReset = function () {
+          document.getElementById('s1').style.display = 'block';
+          document.getElementById('s2').style.display = 'none';
+          ['s1user', 's1pass', 's2otp'].forEach(function (i) { document.getElementById(i).value = ''; });
+          window.__twoDone = false;
+        };
+      </script>
     </body></html>
     """
 
@@ -577,7 +798,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                     self.failures += 1
                 }
                 pending -= 1
-                if pending == 0 { self.checkVerify { self.checkClick() } }
+                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkClick() } } } }
             }
         }
     }
@@ -599,6 +820,122 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                 self.failures += 1
             }
             then()
+        }
+    }
+
+    private func eval(_ js: String, _ cb: @escaping (Any?) -> Void) {
+        webView.evaluateJavaScript(js) { v, _ in cb(v) }
+    }
+
+    /// Форма в два окна: сначала логин и пароль, потом отдельное окно с
+    /// кодом. Проверяется трижды: как размеченное пишется в правила (блоками
+    /// по шагам), что движок входа проходит оба окна по этим правилам, и что
+    /// кнопка «Пройти шаг» заполняет и жмёт, а без пароля — не жмёт.
+    private func checkSteps(_ then: @escaping () -> Void) {
+        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
+            if cond { print("  [ OK ] \(name)") }
+            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
+        }
+        typealias M = LearnSession.Mark
+        let marks = [
+            M(kind: "stop", selector: "div[id=s1err]", hint: "", step: 1),
+            M(kind: "username", selector: "input[id=s1user]", hint: "", step: 1),
+            M(kind: "password", selector: "input[id=s1pass]", hint: "", step: 1),
+            M(kind: "click", selector: "button[id=s1next]", hint: "", step: 1),
+            M(kind: "totp", selector: "input[id=s2otp]", hint: "", step: 3),     // шаг 2 пуст: перенумерация
+            M(kind: "click", selector: "button[id=s2done]", hint: "", step: 3),
+        ]
+        let text = LearnSession.rulesText(marks: marks, pages: [1: "idp.test/login", 3: "idp.test/otp"],
+                                          portal: "example.test", formHost: "idp.test")
+        let body = text.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
+            .split(separator: "\n").map(String.init)
+        let want = ["stop  div[id=s1err]", "# шаг 1 — idp.test/login", "fill  username input[id=s1user]",
+                    "fill  password input[id=s1pass]", "click button[id=s1next]", "# шаг 2 — idp.test/otp",
+                    "fill  totp input[id=s2otp]", "click button[id=s2done]"]
+        ok("шаги: правила блоками по окнам, пустой шаг перенумерован", body == want, body.joined(separator: " | "))
+        let single = LearnSession.rulesText(marks: marks.map { var m = $0; m.step = 1; return m },
+                                            pages: [:], portal: "example.test", formHost: nil)
+        ok("шаги: одно окно — без заголовков шагов", !single.contains("# шаг"))
+
+        // Движок входа по размеченным правилам: два прохода — два окна.
+        let run = Autofill.script(rules: Autofill.parse(text: text),
+                                  creds: Credentials(username: "alice", password: "pw", totpSecret: nil),
+                                  totpCode: "123456")
+        eval("window.__ocbarSet(false, 'auto'); window.__twoReset(); 'ok'") { _ in
+            self.eval(run) { r1 in
+                let d1 = r1 as? [String: Any] ?? [:]
+                ok("движок, окно 1: логин и пароль, «Далее»",
+                   (d1["clicked"] as? String) == "button[id=s1next]" && (d1["filled"] as? [String]) == ["username", "password"], "\(d1)")
+                self.eval(run) { r2 in
+                    let d2 = r2 as? [String: Any] ?? [:]
+                    ok("движок, окно 2: код, «Войти»",
+                       (d2["clicked"] as? String) == "button[id=s2done]" && (d2["filled"] as? [String]) == ["totp"], "\(d2)")
+                    self.eval("[window.__twoDone === true, document.getElementById('s1user').value, document.getElementById('s2otp').value]") { r3 in
+                        let a = r3 as? [Any] ?? []
+                        ok("движок прошёл оба окна", a.count == 3 && (a[0] as? Bool) == true
+                           && (a[1] as? String) == "alice" && (a[2] as? String) == "123456", "\(a)")
+                        self.checkPass(ok, then)
+                    }
+                }
+            }
+        }
+    }
+
+    private func checkPass(_ ok: @escaping (String, Bool, String) -> Void, _ then: @escaping () -> Void) {
+        let noPassword = LearnSession.passScript(
+            fills: [("username", "input[id=s1user]", "alice"), ("password", "input[id=s1pass]", nil)],
+            clicks: ["button[id=s1next]"])
+        let step1 = LearnSession.passScript(
+            fills: [("username", "input[id=s1user]", "alice"), ("password", "input[id=s1pass]", "pw")],
+            clicks: ["button[id=s1next]"])
+        let step2 = LearnSession.passScript(fills: [("totp", "input[id=s2otp]", "654321")],
+                                            clicks: ["button[id=s2done]"])
+        eval("window.__twoReset(); 'ok'") { _ in
+            self.eval(noPassword) { p1 in
+                let d = p1 as? [String: Any] ?? [:]
+                ok("«Пройти шаг» без пароля кнопку не жмёт", (d["missing"] as? [String]) == ["password"] && d["clicked"] == nil, "\(d)")
+                self.eval(step1) { p2 in
+                    let d = p2 as? [String: Any] ?? [:]
+                    ok("«Пройти шаг», окно 1: введённое человеком не трогает, пароль заполняет, жмёт «Далее»",
+                       (d["clicked"] as? String) == "button[id=s1next]" && (d["filled"] as? [String]) == ["password"], "\(d)")
+                    self.eval(step2) { p3 in
+                        let d = p3 as? [String: Any] ?? [:]
+                        ok("«Пройти шаг», окно 2: код и «Войти»",
+                           (d["clicked"] as? String) == "button[id=s2done]" && (d["filled"] as? [String]) == ["totp"], "\(d)")
+                        self.eval("[window.__twoDone === true, document.getElementById('s2otp').value]") { r in
+                            let a = r as? [Any] ?? []
+                            ok("форма пройдена кнопкой «Пройти шаг»", a.count == 2 && (a[0] as? Bool) == true
+                               && (a[1] as? String) == "654321", "\(a)")
+                            then()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Щелчок по пустому месту страницы не должен стать правилом: «stop html»
+    /// остановил бы автозаполнение на любой странице — html виден всегда.
+    /// Так и случилось на живом окне 2026-09-10: пара случайных щелчков дала
+    /// отметку «ошибка=html».
+    private func checkRootClick(_ then: @escaping () -> Void) {
+        let before = messages
+        eval("""
+        window.__ocbarSet(true, 'auto');
+        document.body.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+        document.documentElement.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+        'ok'
+        """) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self else { return }
+                if self.messages == before {
+                    print("  [ OK ] щелчок по пустому месту не стал отметкой")
+                } else {
+                    print("  [FAIL] щелчок по пустому месту записан как отметка: \(self.clickSelector ?? "?")")
+                    self.failures += 1
+                }
+                then()
+            }
         }
     }
 
@@ -633,6 +970,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        messages += 1
         clickSelector = (message.body as? [String: Any])?["selector"] as? String
     }
 }

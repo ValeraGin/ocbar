@@ -93,6 +93,10 @@ enum SelfTest {
         badRule.autofill = ["fill nothing x"]
         check("непонятное правило — ошибка", ProfileCheck.check(badRule).contains { $0.level == .error && $0.text.contains("правило") })
         check("правила приняты как есть", ProfileCheck.check(doc).allSatisfy { !$0.text.contains("правило") })
+        let steps = ProfileDoc.parse("[Connection]\nName = s\nUrl = vpn.example.test/s\n\n[Autofill]\n# шаг 1 — idp.test/login\nfill username input[name=u]\nclick button[id=next]\n# шаг 2 — idp.test/otp\nfill totp input[name=otp]\n", fileName: "s")
+        check("окна формы: заголовки шагов в [Autofill] сохраняются",
+              steps.autofill.count == 5 && steps.render().contains("# шаг 2 — idp.test/otp"), "\(steps.autofill)")
+        check("окна формы: заголовок шага — не ошибка", ProfileCheck.check(steps).allSatisfy { !$0.text.contains("правило") })
         check("режим по умолчанию — туннель", doc.mode == "tunnel")
         check("порт SOCKS", doc.proxyPort == "11080")
         check("галочка системного прокси", doc.systemProxy)

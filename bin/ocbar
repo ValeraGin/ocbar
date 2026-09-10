@@ -249,12 +249,12 @@ pf_section() { # файл секция
 # Строки секции как есть, без комментариев и пустых. Для [Autofill]: правила
 # вроде «fill username input[name=username]» содержат «=», и разбор на пары
 # «ключ значение» их ломает.
-pf_section_raw() { # файл секция
+pf_section_raw() { # файл секция [1 — вместе с комментариями: заголовки шагов формы]
     [ -f "$1" ] || return 0
-    awk -v want="$2" '
+    awk -v want="$2" -v keep="${3:-0}" '
         function trim(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
         /^[ \t]*\[/ { sec = trim($0); gsub(/^\[|\]$/, "", sec); next }
-        /^[ \t]*[#;]/ { next }
+        /^[ \t]*[#;]/ { if (keep != 1) next }
         { line = trim($0); if (line != "" && tolower(sec) == tolower(want)) print line }
     ' "$1"
 }
@@ -862,7 +862,23 @@ cmd_secret() {
                     rm -f "$err" ;;
                 *)  if kc_has "$P_SVC" "totp/$P_USER"; then ok "Автоввод TOTP" "из Keychain, один раз за вход"; else skip "Автоввод TOTP" "включён, но секрета нет"; fi ;;
             esac ;;
-        *) die "secret: set-password | set-totp | import-qr <файл> | status [профиль]" ;;
+        code)
+            # Текущий одноразовый код из источника профиля — одной строкой.
+            # Им пользуется окно разметки («Пройти шаг»): код нужен в момент
+            # нажатия, а не при запуске. secret status печатает его и так.
+            local c=""
+            case "$P_TOTP" in
+                off) die "у профиля [$P_NAME] Totp = off — код вводит человек" ;;
+                keepassxc) c=$(keepass_totp) || exit 1 ;;
+                command) c=$(command_totp) || exit 1 ;;
+                *)  local sec a; sec=$(kc_get "$P_SVC" "totp/$P_USER")
+                    [ -n "$sec" ] || die "в Keychain нет TOTP-секрета ($P_SVC / totp/$P_USER)"
+                    a=$(auth_path) || die "не найден ocbar-auth"
+                    c=$(OCBAR_TOTP_SECRET="$sec" "$a" --totp-now 2>/dev/null) || true; sec="" ;;
+            esac
+            [ -n "$c" ] || die "код не получен"
+            printf '%s\n' "$c" ;;
+        *) die "secret: set-password | set-totp | import-qr <файл> | status | code [профиль]" ;;
     esac
 }
 
@@ -881,7 +897,7 @@ authenticate() { # печатает "token hash post_url"
     # действовала сразу.
     if [ "${P_RULES_SRC:-}" = inline ]; then
         mkdir -p "$USER_STATE/rules"
-        { printf '# правила из профиля %s, секция [Autofill]; править там\n' "$P_NAME"; pf_section_raw "$P_FILE" Autofill; } > "$USER_STATE/rules/$P_NAME.rules"
+        { printf '# правила из профиля %s, секция [Autofill]; править там\n' "$P_NAME"; pf_section_raw "$P_FILE" Autofill 1; } > "$USER_STATE/rules/$P_NAME.rules"
         args+=(--rules "$USER_STATE/rules/$P_NAME.rules")
     fi
     [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
@@ -2208,6 +2224,22 @@ PROFILE
     run rules clear t >/dev/null
     hasnt "секция убирается" "[Autofill]" "$(cat "$tmp/profiles/t.ocbar")"
 
+    # Форма в несколько окон: заголовки шагов из разметки доживают до
+    # профиля, шапка файла разметки — нет.
+    printf '# Правила автозаполнения формы входа, размечены вручную 2026-09-10.\n# Портал: x\n\n# шаг 1 — idp.test/login\nfill  username input[id=u]\nclick button[id=next]\n# шаг 2 — idp.test/otp\nfill  totp input[id=otp]\nclick button[id=go]\n' > "$tmp/steps.rules"
+    out=$(run rules import "$tmp/steps.rules" t 2>&1)
+    has "шаги формы: импорт считает окна" "окон формы: 2" "$out"
+    out=$(cat "$tmp/profiles/t.ocbar")
+    has "шаги формы: заголовок окна в профиле" "# шаг 2 — idp.test/otp" "$out"
+    hasnt "шаги формы: шапка разметки в профиль не попадает" "размечены вручную" "$out"
+    has "шаги формы: rules show показывает окна" "# шаг 1" "$(run rules show t 2>&1)"
+    has "шаги формы: правила действуют из профиля" "autofill=inline" "$(run status --short)"
+    has "шаги формы: экспорт уносит заголовки" "# шаг 2" "$(run export t 2>&1)"
+    run rules clear t >/dev/null
+    printf '[Connection]\nName = Код\nUrl = vpn.example.test/c\nUser = tester\n\n[Auth]\nTotp = command\nTotpCommand = echo 123456\n' > "$tmp/profiles/c.ocbar"
+    has "secret code: свежий код из источника профиля" "123456" "$(run secret code c 2>&1)"
+    rm -f "$tmp/profiles/c.ocbar"
+
     rm -rf "$tmp"
     info "----------------------------------------"
     if [ "$fails" = 0 ]; then info "selftest: всё OK ($total проверок)"; return 0; fi
@@ -2225,7 +2257,7 @@ rules_source_label() {
 }
 # Действующие правила без комментариев — для экспорта и показа.
 effective_rules_body() {
-    if [ "${P_RULES_SRC:-}" = inline ]; then pf_section_raw "$P_FILE" Autofill
+    if [ "${P_RULES_SRC:-}" = inline ]; then pf_section_raw "$P_FILE" Autofill 1
     elif [ -n "${P_RULES:-}" ] && [ -f "$P_RULES" ]; then
         awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$P_RULES"
     fi
@@ -2255,15 +2287,18 @@ cmd_rules() {
             local src="${2:-}"; [ -n "$src" ] && [ -f "$src" ] || die "rules import <файл> [профиль]"
             load_profile "${3:-}"
             [ -n "$P_FILE" ] || die "профиль [$P_NAME] — старого формата (profiles.conf); правила в него не кладутся, используйте Rules = <файл>"
+            # В профиль переносятся правила и заголовки окон формы («# шаг N»,
+            # их пишет разметка); шапка файла разметки и прочие комментарии — нет.
             local body bad=0 line
-            body=$(awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^[#;]/ || /^$/ { next } { print }' "$src")
+            body=$(awk '{ sub(/^[ \t]+/, ""); sub(/[ \t\r]+$/, "") } /^$/ { next } /^# *шаг / { print; next } /^[#;]/ { next } { print }' "$src")
             while IFS= read -r line; do
-                [ -n "$line" ] || continue
+                case "$line" in ''|\#*) continue ;; esac
                 valid_rule "$line" || { bad=1; warn "непонятное правило" "$line"; }
             done <<< "$body"
             [ "$bad" = 0 ] || die "правила не приняты — формат: stop <сел> | fill username|password|totp <сел> | click[!] <сел>"
             printf '%s\n' "$body" | pf_replace_section "$P_FILE" Autofill
-            ok "правила в профиле [$P_NAME]" "$(printf '%s\n' "$body" | grep -c .) строк, прошлая версия — $(basename "$P_FILE").bak" ;;
+            local nsteps; nsteps=$(printf '%s\n' "$body" | grep -c '^# *шаг ' || true)
+            ok "правила в профиле [$P_NAME]" "$(printf '%s\n' "$body" | grep -vc '^#' || true) правил$( [ "${nsteps:-0}" -gt 1 ] && printf ', окон формы: %s' "$nsteps"), прошлая версия — $(basename "$P_FILE").bak" ;;
         clear)
             load_profile "${2:-}"
             [ -n "$P_FILE" ] || die "профиль [$P_NAME] старого формата"
@@ -2302,10 +2337,27 @@ cmd_learn() {
     info "  открою форму; отмечайте поля и кнопку мышью, потом «Готово»"
     if [ "$into_profile" = 1 ]; then info "  правила лягут в сам профиль ($P_FILE, секция [Autofill]; прошлая версия — рядом с суффиксом .bak)"
     else info "  правила лягут в $target (прошлые — туда же с суффиксом .bak)"; fi
+    # «Пройти шаг» в окне разметки заполняет отмеченное настоящими данными —
+    # теми же, что у входа. Пароль — через окружение, как в authenticate;
+    # код — командой в момент нажатия: живёт он тридцать секунд.
+    local pw pwerr totp_secret="" totp_cmd=""
+    pwerr=$(mktemp "${TMPDIR:-/tmp}/ocbar-pw.XXXXXX")
+    pw=$(resolve_password 2>"$pwerr") || true
+    rm -f "$pwerr"
+    case "$P_TOTP" in
+        off) ;;
+        keepassxc|command) totp_cmd="'$SELF_ENTRY' secret code '$P_NAME'" ;;
+        *) totp_secret=$(kc_get "$P_SVC" "totp/$P_USER") ;;
+    esac
+    info "  форма в несколько окон (сначала пароль, потом код)? Отметьте поля и кнопку первого окна"
+    info "  и нажмите «Пройти шаг →»: ocbar заполнит их вашими данными (пароль: $(password_source)$([ -n "$pw" ] || printf ' — не получен, введёте сами'), код: $P_TOTP)"
     local rc=0
-    "$auth" --learn --url "$P_URL" --useragent "$P_UA" --out "$target" >/dev/null || rc=$?
+    OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp_secret" OCBAR_TOTP_COMMAND="$totp_cmd" \
+        "$auth" --learn --url "$P_URL" --useragent "$P_UA" --out "$target" >/dev/null || rc=$?
+    pw=""; totp_secret=""
     case "$rc" in
         0)  if [ "$into_profile" = 1 ]; then
+                grep -m1 'IdpHosts =' "$target" 2>/dev/null | sed 's/^#[[:space:]]*/  подсказка: /' || true
                 cmd_rules import "$target" "$P_NAME"; rm -f "$target"
             else
                 ok "правила записаны" "$target"
@@ -2444,7 +2496,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar routes add|del|toggle <CIDR>  маршруты в туннель на лету; apply | clear
   ocbar dns status|apply|clear        зоны /etc/resolver; on|off|toggle <зона>
   ocbar dns init <файл> <DNS|vpn>     создать zones.conf из списка доменов
-  ocbar secret set-password|set-totp|status [профиль]   Keychain
+  ocbar secret set-password|set-totp|status|code [профиль]   Keychain; code — текущий код
   ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
                                       TOTP из QR (в т.ч. экспорт Google
                                       Authenticator); секрет не печатается
