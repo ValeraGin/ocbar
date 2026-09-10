@@ -6,14 +6,18 @@
 # Ставится в /usr/local/libexec/ocbar-helper (root:wheel 0755) и разрешён
 # в /etc/sudoers.d/ocbar без пароля. Поэтому:
 #   - фиксированный набор подкоманд, никаких «выполнить произвольную команду»;
-#   - каждый аргумент валидируется до использования;
+#   - каждый аргумент валидируется до использования, целиком (перевод строки
+#     и управляющие символы — отказ);
+#   - пишет только в каталоги, у которых сам каталог и все предки
+#     принадлежат root и не пишутся группой и остальными;
 #   - исполняется только root-овая копия openconnect с проверкой sha256
 #     самого бинаря и всех его dylib (см. DECISIONS.md, D3);
 #   - никаких путей от пользователя в exec: csd-wrapper — только по имени
-#     файла внутри /usr/local/libexec/ocbar/csd/.
+#     файла внутри /usr/local/libexec/ocbar/csd/, от имени того, кто позвал sudo;
+#   - сигналы — только процессу, который действительно openconnect.
 #
 # Подкоманды:
-#   tunnel-start <url> <servercert> <split|full> <user> [ua] [csd-name]
+#   tunnel-start <url> <servercert> split <user> [ua] [csd-name]
 #                        stdin: cookie=<token>, net <cidr>…, zone <зона> <dns|vpn> [порт]…
 #   tunnel-stop          SIGINT openconnect, уборка маршрутов и зон
 #   stats                попросить openconnect выписать статистику в лог
@@ -22,7 +26,7 @@
 #   resume               вернуть маршруты и зоны из *.wanted
 #   vpnc                 вызывается openconnect как vpnc-script (env: reason, TUNDEV…)
 #   route-add <cidr>     маршрут через живой туннель (+ в routes.wanted)
-#   route-del <cidr>
+#   route-del <cidr>     снять свой маршрут (из routes.state), чужой не трогать
 #   dns-apply            stdin: "<зона> <dns> [порт]" — применить зоны, снять свои лишние
 #   zone-add <зона> <dns|vpn> [порт]   добавить зону в список и применить
 #   zone-del <зона>      убрать зону из списка и снять
@@ -33,34 +37,59 @@
 #   cleanup              мусор от прошлых сессий
 #   flush-dns
 #   trust                пересобрать манифест доверия к копии openconnect
+#   migrate-state        перенести состояние из /usr/local/var/ocbar (до 0.8.0)
 #   version
 #
 # --dry-run первым аргументом: печатать команды, менять только файлы
-# состояния (в OCBAR_STATE_DIR, если задан и процесс не root).
+# состояния — всегда во временной копии или в OCBAR_STATE_DIR, никогда
+# в настоящем каталоге. Под root --dry-run запрещён.
 
 set -euo pipefail
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.7.0"
+VERSION="0.8.0"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
-TRUST="$PREFIX/etc/ocbar/trust.sha256"
+# Манифест доверия — рядом с копией openconnect, в root-овом каталоге.
+# До 0.8.0 он жил в $PREFIX/etc/ocbar, а на Intel Homebrew отдаёт
+# $PREFIX/etc пользователю.
+TRUST="$LIBDIR/trust.sha256"
+OLD_TRUST="$PREFIX/etc/ocbar/trust.sha256"
 RESOLVER_DIR="/etc/resolver"
-STATE_DIR="$PREFIX/var/ocbar"
+# Каталог состояния — в /var/db, все предки которого root-овые. До 0.8.0 —
+# $PREFIX/var/ocbar: на Intel $PREFIX/var принадлежит пользователю, и подмена
+# каталога симлинком заставляла root писать куда угодно (вплоть до sudoers).
+STATE_DIR="/var/db/ocbar"
+OLD_STATE_DIR="$PREFIX/var/ocbar"
+REAL_STATE_DIR="$STATE_DIR"
 DRY_RUN=0
+# Кому разрешено владеть каталогами на пути записи: только root. При
+# холостом прогоне (он никогда не от root) — ещё и самому запустившему:
+# его временный каталог принадлежит ему.
+OK_UIDS="0"
 
 if [ "${1:-}" = "--dry-run" ]; then
     DRY_RUN=1; shift
-    if [ -n "${OCBAR_STATE_DIR:-}" ]; then
-        STATE_DIR="$OCBAR_STATE_DIR"
-    elif [ ! -w "$STATE_DIR" ]; then
-        # Холостой прогон от обычного пользователя: реальный каталог состояния
-        # принадлежит root. Работаем на копии — так видно, каким состояние
-        # стало бы, и ничего настоящего не портим.
+    if [ "$(id -u)" = 0 ]; then
+        # Под root холостой прогон менял настоящие файлы состояния, не
+        # выполняя действий, — и состояние расходилось с системой.
+        printf 'ocbar-helper: --dry-run под root запрещён — запускайте без sudo\n' >&2
+        exit 1
+    fi
+    OK_UIDS="0 $(id -u)"
+    _want="${OCBAR_STATE_DIR:-}"
+    if [ -n "$_want" ] && [ "$_want" != "$REAL_STATE_DIR" ] && [ "$_want" != "$OLD_STATE_DIR" ] \
+       && { [ -d "$_want" ] || mkdir -p "$_want" 2>/dev/null; } && [ -w "$_want" ]; then
+        STATE_DIR="$_want"
+    else
+        # Настоящий каталог состояния принадлежит root. Работаем на копии —
+        # так видно, каким состояние стало бы, и ничего настоящего не портим.
+        _src="${_want:-$REAL_STATE_DIR}"
+        [ -n "$_want" ] || [ -d "$_src" ] || _src="$OLD_STATE_DIR"
         _dry=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-dry.XXXXXX")
-        cp -a "$STATE_DIR"/. "$_dry"/ 2>/dev/null || true
+        cp "$_src"/* "$_dry"/ 2>/dev/null || true
         STATE_DIR="$_dry"
         printf 'ocbar-helper: dry-run без root — состояние скопировано в %s\n' "$_dry" >&2
     fi
@@ -74,8 +103,10 @@ ROUTES_STATE="$STATE_DIR/routes.state"     # что реально добави�
 ZONES_WANTED="$STATE_DIR/zones.wanted"     # "<зона> <dns|vpn> <порт>"
 GW_ROUTE="$STATE_DIR/gateway.route"        # host-route до шлюза, чтобы снять при disconnect
 PAUSED="$STATE_DIR/paused"                 # «как будто выключен»: туннель жив, маршрутов и зон нет
-SOCKS_STATE="$STATE_DIR/socks.state"       # системный SOCKS, который поставили мы: "<сервис> <порт>"
+SOCKS_STATE="$STATE_DIR/socks.state"       # системный SOCKS, который поставили мы: "<сервис>\t<порт>"
 LOG="$STATE_DIR/openconnect.log"
+# Что переносит migrate-state — фиксированный список, не маска.
+STATE_FILES="tunnel.env openconnect.pid zones.state zones.wanted routes.state routes.wanted gateway.route paused socks.state openconnect.log openconnect.log.1"
 
 # ------------------------------------------------------------------ вывод ----
 say()  { printf 'ocbar-helper: %s\n' "$*" >&2; }
@@ -86,6 +117,12 @@ run() {
     if [ "$DRY_RUN" = 1 ]; then printf '  $ %s\n' "$*"; return 0; fi
     "$@"
 }
+# То же, но настоящий вывод команды не нужен (route печатает своё). При
+# --dry-run печать не глушится: иначе холостой прогон скрывает, что снял бы.
+run_quiet() {
+    if [ "$DRY_RUN" = 1 ]; then printf '  $ %s\n' "$*"; return 0; fi
+    "$@" >/dev/null 2>&1
+}
 # Записать файл вне STATE_DIR (например, в /etc/resolver).
 write_sys_file() { # path, content
     if [ "$DRY_RUN" = 1 ]; then printf '  $ printf %s > %s\n' "'$(printf '%s' "$2" | tr '\n' '|')'" "$1"; return 0; fi
@@ -93,49 +130,140 @@ write_sys_file() { # path, content
 }
 
 ensure_state_dir() {
-    if [ ! -d "$STATE_DIR" ]; then
-        if [ "$DRY_RUN" = 1 ] && [ "$(id -u)" != 0 ]; then mkdir -p "$STATE_DIR"; else run mkdir -p "$STATE_DIR"; fi
+    [ -d "$STATE_DIR" ] || mkdir -p -m 755 "$STATE_DIR"
+}
+
+# ------------------------------------------------- каталоги, куда пишем ----
+# Узел пути годится, если принадлежит допустимому владельцу, а каталог ещё
+# и не пишется группой и остальными. Симлинк проверяется по владельцу:
+# цель проверит обход физического пути.
+node_secure() { # путь → 0 или причина на stdout и 1
+    local own mode
+    read -r own mode <<< "$(stat -f '%u %p' "$1" 2>/dev/null || true)"
+    case " $OK_UIDS " in
+        *" ${own:-x} "*) ;;
+        *) printf '%s принадлежит uid %s, а не root' "$1" "${own:-?}"; return 1 ;;
+    esac
+    [ -L "$1" ] && return 0
+    [ -d "$1" ] || { printf '%s — не каталог' "$1"; return 1; }
+    if [ $(( 0$mode & 022 )) -ne 0 ]; then
+        printf '%s доступен на запись группе или всем (режим %s)' "$1" "${mode: -4}"; return 1
     fi
+    return 0
+}
+# Весь путь до корня: логический (как написан, с симлинками) и физический
+# (после них). Несуществующие хвосты пропускаются — их создаст root.
+path_secure() { # путь → 0 или причина на stdout и 1
+    local p="$1" cur deepest="" phys
+    case "$p" in /*) ;; *) printf 'путь не абсолютный: %s' "$p"; return 1 ;; esac
+    cur="$p"
+    while :; do
+        if [ -e "$cur" ] || [ -L "$cur" ]; then
+            [ -n "$deepest" ] || deepest="$cur"
+            node_secure "$cur" || return 1
+        fi
+        [ "$cur" = / ] && break
+        cur=$(dirname "$cur")
+    done
+    phys=$(cd -P "$deepest" 2>/dev/null && pwd -P) || { printf '%s — не каталог' "$deepest"; return 1; }
+    cur="$phys"
+    while :; do
+        node_secure "$cur" || return 1
+        [ "$cur" = / ] && break
+        cur=$(dirname "$cur")
+    done
+    return 0
+}
+require_secure_dirs() {
+    local d why
+    for d in "$STATE_DIR" "$LIBDIR" "$RESOLVER_DIR"; do
+        why=$(path_secure "$d") && continue
+        die "отказ: $why. Каталоги, куда пишет хелпер, и все их предки должны принадлежать root и не писаться другими (chown root:wheel, chmod go-w), затем sudo ocbar install"
+    done
+    return 0
+}
+# Файл состояния, которому можно верить: обычный, не симлинк, одна жёсткая
+# ссылка, владелец допустимый.
+file_trusted() {
+    [ -f "$1" ] && [ ! -L "$1" ] || return 1
+    local own links; read -r own links <<< "$(stat -f '%u %l' "$1" 2>/dev/null || true)"
+    [ "${links:-0}" = 1 ] || return 1
+    case " $OK_UIDS " in *" ${own:-x} "*) return 0 ;; esac
+    return 1
 }
 
 # --------------------------------------------------------------- валидация ----
+# grep -qE '^…$' проверял построчно: значение с переводом строки проходило,
+# если годилась каждая строка. Сопоставление [[ =~ ]] идёт по строке целиком,
+# а управляющие символы отсекаются отдельно.
+plain() { case "$1" in *[[:cntrl:]]*) return 1 ;; esac; return 0; }
+matches() { local re="$2"; plain "$1" && [[ $1 =~ $re ]]; }
+
 valid_ip() {
-    printf '%s' "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || return 1
+    matches "$1" '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || return 1
     local IFS=. o
     for o in $1; do [ "$o" -le 255 ] || return 1; done
+    return 0
 }
 valid_cidr() {
     case "$1" in */*) ;; *) return 1 ;; esac
     valid_ip "${1%/*}" || return 1
-    printf '%s' "${1#*/}" | grep -qE '^[0-9]{1,2}$' && [ "${1#*/}" -le 32 ]
+    matches "${1#*/}" '^[0-9]{1,2}$' && [ "${1#*/}" -le 32 ]
 }
+# Сеть, которую хелпер ставит и снимает. Маршрут по умолчанию (/0) — никогда:
+# полный туннель — это 0.0.0.0/1 и 128.0.0.0/1 (D32).
+valid_net() { valid_cidr "$1" && [ "${1#*/}" -ge 1 ]; }
 valid_zone() {
     case "$1" in ''|.*|*/*|*' '*|*'..'*) return 1 ;; esac
-    printf '%s' "$1" | grep -qE '^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$'
+    [ "${#1}" -le 253 ] && matches "$1" '^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$'
 }
-valid_port()  { printf '%s' "$1" | grep -qE '^[0-9]{1,5}$' && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
-valid_utun()  { printf '%s' "$1" | grep -qE '^utun[0-9]{1,3}$'; }
-valid_user()  { printf '%s' "$1" | grep -qE '^[A-Za-z0-9._@-]{1,64}$'; }
-valid_url()   { printf '%s' "$1" | grep -qE '^(https://)?[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(/[A-Za-z0-9._-]{0,64})?$'; }
-valid_hash()  { printf '%s' "$1" | grep -qE '^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64}|(sha1|sha256|pin-sha256):[A-Za-z0-9+/=]{20,100})$'; }
-valid_ua()    { printf '%s' "$1" | grep -qE '^[A-Za-z0-9 ._()/;:,-]{1,120}$'; }
-valid_name()  { printf '%s' "$1" | grep -qE '^[A-Za-z0-9._-]{1,64}$'; }
-valid_mode()  { [ "$1" = split ] || [ "$1" = full ]; }   # full принимается ради старых вызовов
+valid_port()  { matches "$1" '^[0-9]{1,5}$' && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
+valid_utun()  { matches "$1" '^utun[0-9]{1,3}$'; }
+valid_user()  { matches "$1" '^[A-Za-z0-9._@-]{1,64}$'; }
+valid_url()   { matches "$1" '^(https://)?[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(/[A-Za-z0-9._-]{0,64})?$'; }
+valid_hash()  { matches "$1" '^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64}|(sha1|sha256|pin-sha256):[A-Za-z0-9+/=]{20,100})$'; }
+valid_ua()    { matches "$1" '^[A-Za-z0-9 ._()/;:,-]{1,120}$'; }
+valid_name()  { case "$1" in .|..) return 1 ;; esac; matches "$1" '^[A-Za-z0-9._-]{1,64}$'; }
+valid_mode()  { [ "$1" = split ]; }   # full убран (D4)
+valid_mtu()   { matches "$1" '^[0-9]{3,4}$' && [ "$1" -ge 576 ] && [ "$1" -le 9000 ]; }
+valid_ip6()   { matches "$1" '^[0-9A-Fa-f:.]{2,45}$' && case "$1" in *:*) true ;; *) false ;; esac; }
+valid_dns_word() { [ "$1" = vpn ] || valid_ip "$1"; }
 # Имя сетевого сервиса — только точное совпадение со списком системы: это
 # аргумент networksetup, подстановка чего попало туда недопустима.
 valid_service() {
     local want="$1"
     [ -n "$want" ] || return 1
-    printf '%s' "$want" | grep -qE '^[A-Za-z0-9 ._()/-]{1,64}$' || return 1
+    matches "$want" '^[A-Za-z0-9 ._()/-]{1,64}$' || return 1
     networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | sed 's/^\*//' | grep -Fxq -- "$want"
 }
 valid_user_port() { valid_port "$1" && [ "$1" -ge 1024 ]; }
+# Значение от шлюза, которое пишется в tunnel.env: без управляющих символов,
+# иначе перевод строки дописывает туда свои строки.
+clean() { printf '%s' "$1" | tr -d '\000-\037\177'; }
 
 # ------------------------------------------------------------- состояние ----
-tunnel_pid() { [ -f "$PIDFILE" ] && cat "$PIDFILE" 2>/dev/null | grep -E '^[0-9]+$' || true; }
-# ps, а не kill -0: под обычным пользователем (--dry-run) kill -0 на
-# root-процесс возвращает EPERM, и живой туннель выглядит мёртвым.
-tunnel_alive() { local p; p=$(tunnel_pid); [ -n "$p" ] && ps -p "$p" >/dev/null 2>&1; }
+tunnel_pid() { [ -f "$PIDFILE" ] && grep -E '^[0-9]+$' "$PIDFILE" 2>/dev/null | head -1 || true; }
+# Номер процесса переживает перезагрузку и достаётся кому попало. Сигнал от
+# root чужому процессу недопустим, поэтому сверяем имя (как в CLI). ps, а не
+# kill -0: под обычным пользователем (--dry-run) kill -0 на root-процесс
+# возвращает EPERM.
+is_openconnect() { # pid
+    case "$(ps -p "$1" -o comm= 2>/dev/null)" in openconnect|*/openconnect) return 0 ;; esac
+    return 1
+}
+# pid живого openconnect из pidfile. Номер занят другим процессом — туннель
+# считается мёртвым, pidfile убирается.
+live_pid() {
+    local p; p=$(tunnel_pid)
+    [ -n "$p" ] || return 0
+    if is_openconnect "$p"; then printf '%s' "$p"; return 0; fi
+    if [ -f "$PIDFILE" ]; then
+        ps -p "$p" >/dev/null 2>&1 && say "pid $p из pidfile — не openconnect (номер занят другим процессом), считаю туннель мёртвым"
+        rm -f "$PIDFILE"
+    fi
+    return 0
+}
+tunnel_alive() { [ -n "$(live_pid)" ]; }
 tunnel_dev() { [ -f "$TUNNEL_ENV" ] && sed -n 's/^TUNDEV=//p' "$TUNNEL_ENV" | head -1 || true; }
 tunnel_state() { [ -f "$TUNNEL_ENV" ] && sed -n 's/^STATE=//p' "$TUNNEL_ENV" | head -1 || true; }
 
@@ -160,14 +288,12 @@ collect_libs() { # bin
 cmd_trust() {
     local bin="$LIBDIR/openconnect"
     [ -x "$bin" ] || die "нет $bin — сначала sudo ocbar install"
-    ensure_state_dir
     local list; list=$(collect_libs "$bin")
     if [ "$DRY_RUN" = 1 ]; then
         printf '  $ shasum -a 256 %s > %s\n' "$(printf '%s' "$list" | tr '\n' ' ')" "$TRUST"
         printf '%s\n' "$list" | sed 's/^/  · /'
         return 0
     fi
-    mkdir -p "$(dirname "$TRUST")"
     printf '%s\n' "$list" | xargs shasum -a 256 > "$TRUST.tmp"
     mv "$TRUST.tmp" "$TRUST"
     chmod 644 "$TRUST"
@@ -186,7 +312,7 @@ verify_trust() { # печатает путь к проверенному opencon
         done
         die "openconnect не найден"
     fi
-    [ -f "$TRUST" ] || die "нет манифеста $TRUST — sudo ocbar install --trust"
+    [ -f "$TRUST" ] || die "нет манифеста $TRUST — sudo ocbar install"
     if [ "$DRY_RUN" = 1 ]; then printf '  $ shasum -a 256 -c --status %s\n' "$TRUST" >&2; printf '%s' "$bin"; return 0; fi
     if ! shasum -a 256 -c --status "$TRUST"; then
         say "sha256 openconnect или его dylib не совпали с манифестом."
@@ -197,29 +323,38 @@ verify_trust() { # печатает путь к проверенному opencon
 }
 
 # --------------------------------------------------------------- маршруты ----
-# Куда реально пойдёт трафик сети. Разбор вывода netstat здесь был неверен
-# (бралась не та колонка, а формат записи угадывался по длине префикса) —
-# спрашиваем ядро. Пробуем ПЕРВЫЙ адрес сети, а не нулевой: на .0 ядро
-# отвечает маршрутом по умолчанию.
-route_via() { # cidr → интерфейс
-    local base="${1%%/*}" len="${1#*/}" probe
-    if [ "$len" = 32 ]; then
-        probe="$base"
-    else
-        local IFS=. a b c d; read -r a b c d <<< "$base"
-        d=$((d + 1)); [ "$d" -gt 254 ] && d=1
-        probe="$a.$b.$c.$d"
-    fi
-    route -n get "$probe" 2>/dev/null | awk '/interface:/{print $2; exit}'
+# Нормальная запись сети: адрес, обрезанный по маске (так её хранит ядро).
+net_base() { # cidr → адрес сети
+    local len="${1#*/}" a b c d ip mask
+    IFS=. read -r a b c d <<< "${1%/*}"
+    ip=$(( (a << 24) | (b << 16) | (c << 8) | d ))
+    if [ "$len" = 0 ]; then mask=0; else mask=$(( (0xFFFFFFFF << (32 - len)) & 0xFFFFFFFF )); fi
+    ip=$(( ip & mask ))
+    printf '%d.%d.%d.%d' $(( (ip >> 24) & 255 )) $(( (ip >> 16) & 255 )) $(( (ip >> 8) & 255 )) $(( ip & 255 ))
+}
+net_mask() { # длина префикса → точечная маска
+    local len="$1" mask
+    if [ "$len" = 0 ]; then mask=0; else mask=$(( (0xFFFFFFFF << (32 - len)) & 0xFFFFFFFF )); fi
+    printf '%d.%d.%d.%d' $(( (mask >> 24) & 255 )) $(( (mask >> 16) & 255 )) $(( (mask >> 8) & 255 )) $(( mask & 255 ))
+}
+# Интерфейс маршрута ровно на эту сеть (адрес и маска совпали), иначе пусто.
+# route get -net без точного совпадения отвечает маршрутом по умолчанию —
+# поэтому адрес и маска сверяются.
+route_dev_exact() { # cidr → интерфейс
+    local len="${1#*/}"
+    route -n get -net "$1" 2>/dev/null | awk -v d="$(net_base "$1")" -v m="$(net_mask "$len")" -v host="$([ "$len" = 32 ] && echo 1 || echo 0)" '
+        /destination:/ {dst=$2} /mask:/ {mk=$2} /interface:/ {ifc=$2}
+        END { if (dst == d && (mk == m || (host && mk == ""))) print ifc }'
 }
 
 add_route() { # cidr utun
     # Неудача одного маршрута не должна обрывать всё остальное: из-за set -e
     # падение здесь оставляло туннель без части маршрутов и совсем без зон
     # DNS, причём молча.
-    if run route -n add -net "$1" -interface "$2" >/dev/null 2>&1; then
+    valid_net "$1" || { say "маршрут $1 не ставлю"; return 0; }
+    if run_quiet route -n add -net "$1" -interface "$2"; then
         say "маршрут: $1 → $2"
-    elif [ "$(route_via "$1")" = "$2" ]; then
+    elif [ "$(route_dev_exact "$1")" = "$2" ]; then
         say "маршрут уже есть: $1 → $2"
     else
         say "не удалось поставить маршрут $1 → $2 (продолжаю)"
@@ -227,40 +362,60 @@ add_route() { # cidr utun
     fi
     grep -Fqx "$1 $2" "$ROUTES_STATE" 2>/dev/null || printf '%s %s\n' "$1" "$2" >> "$ROUTES_STATE"
 }
-del_route() { # cidr
-    run route -n delete -net "$1" >/dev/null 2>&1 || true
-    if [ -f "$ROUTES_STATE" ]; then
-        grep -v "^$1 " "$ROUTES_STATE" > "$ROUTES_STATE.tmp" || true
-        mv "$ROUTES_STATE.tmp" "$ROUTES_STATE"
+# Снять СВОЙ маршрут: тот, что записан в routes.state, и только если в
+# таблице он и сейчас идёт через наш интерфейс. Чужой маршрут на ту же сеть
+# (WireGuard, другой VPN) не трогаем, маршрут по умолчанию — никогда.
+del_route() { # cidr utun
+    local net="$1" dev="$2"
+    if ! valid_net "$net"; then
+        say "маршрут $net не снимаю никогда"
+    elif ! valid_utun "$dev"; then
+        say "у маршрута $net нет нашего интерфейса в routes.state — в таблице не трогаю"
+    elif [ "$(route_dev_exact "$net")" = "$dev" ]; then
+        run_quiet route -n delete -net "$net" -interface "$dev" || true
+        say "маршрут снят: $net ($dev)"
+    else
+        say "маршрута $net через $dev в таблице нет — чужой не трогаю"
     fi
-    say "маршрут снят: $1"
+    state_drop_route "$net"
+}
+state_drop_route() { # cidr
+    [ -f "$ROUTES_STATE" ] || return 0
+    awk -v n="$1" '$1 != n' "$ROUTES_STATE" > "$ROUTES_STATE.tmp" || true
+    mv "$ROUTES_STATE.tmp" "$ROUTES_STATE"
+}
+state_route_dev() { # cidr → utun из routes.state
+    [ -f "$ROUTES_STATE" ] || return 0
+    awk -v n="$1" '$1 == n {print $2; exit}' "$ROUTES_STATE"
 }
 apply_wanted_routes() { # utun
     [ -f "$ROUTES_WANTED" ] || return 0
     local n
     while read -r n; do
         [ -n "$n" ] || continue
-        valid_cidr "$n" || { say "пропускаю некорректный маршрут: $n"; continue; }
+        valid_net "$n" || { say "пропускаю некорректный маршрут: $n"; continue; }
         add_route "$n" "$1"
     done < "$ROUTES_WANTED"
 }
 clear_state_routes() {
     [ -f "$ROUTES_STATE" ] || return 0
     local n dev
-    while read -r n dev; do [ -n "$n" ] && del_route "$n"; done < "$ROUTES_STATE"
+    while read -r n dev _; do [ -n "$n" ] && del_route "$n" "${dev:-}"; done < "$ROUTES_STATE"
     rm -f "$ROUTES_STATE"
 }
 
 # ------------------------------------------------------------------- DNS ----
 resolver_body() { printf 'nameserver %s\n' "$1"; [ "$2" = 53 ] || printf 'port %s\n' "$2"; }
 manifest_zones() { [ -f "$MANIFEST" ] && cat "$MANIFEST" || true; }
+in_manifest() { manifest_zones | grep -Fxq -- "$1"; }
 
 flush_dns() {
     run dscacheutil -flushcache
     run killall -HUP mDNSResponder
 }
 
-# stdin: "<зона> <dns> [порт]". Чужие файлы в /etc/resolver не трогаем.
+# stdin: "<зона> <dns> [порт]". Чужие файлы в /etc/resolver не трогаем —
+# даже с совпавшим содержимым: «усыновлённый» файл потом удалялся бы как наш.
 apply_zones() {
     local zone dns port body current new_manifest="" n=0
     ensure_state_dir
@@ -271,12 +426,12 @@ apply_zones() {
         valid_zone "$zone" || { say "недопустимая зона, пропущена: $zone"; continue; }
         valid_ip "$dns"    || { say "недопустимый DNS, пропущено: $zone $dns"; continue; }
         valid_port "$port" || { say "недопустимый порт, пропущено: $zone $dns $port"; continue; }
-        body=$(resolver_body "$dns" "$port")
-        current=$([ -f "$RESOLVER_DIR/$zone" ] && cat "$RESOLVER_DIR/$zone" || true)
-        if [ -n "$current" ] && [ "$current" != "$body" ] && ! manifest_zones | grep -x "$zone" >/dev/null; then
+        if { [ -e "$RESOLVER_DIR/$zone" ] || [ -L "$RESOLVER_DIR/$zone" ]; } && ! in_manifest "$zone"; then
             say "$zone существует и создан не нами — пропускаю"
             continue
         fi
+        body=$(resolver_body "$dns" "$port")
+        current=$([ -f "$RESOLVER_DIR/$zone" ] && cat "$RESOLVER_DIR/$zone" || true)
         if [ "$current" != "$body" ]; then
             write_sys_file "$RESOLVER_DIR/$zone" "$body"
             say "зона: $zone → $dns:$port"
@@ -285,50 +440,80 @@ apply_zones() {
     done
     local old
     for old in $(manifest_zones); do
-        if ! printf '%s' "$new_manifest" | grep -x "$old" >/dev/null; then
+        valid_zone "$old" || continue
+        if ! printf '%s' "$new_manifest" | grep -Fxq -- "$old"; then
             run rm -f "$RESOLVER_DIR/$old"; say "зона снята: $old"
         fi
     done
-    if [ "$DRY_RUN" = 1 ] && [ "$(id -u)" != 0 ] && [ ! -w "$STATE_DIR" ]; then
-        printf '  $ манифест ← %d зон\n' "$n"
-    else
-        printf '%s' "$new_manifest" > "$MANIFEST"
-    fi
+    printf '%s' "$new_manifest" > "$MANIFEST"
     flush_dns
 }
 
 clear_zones() {
     local z
     for z in $(manifest_zones); do
+        valid_zone "$z" || continue
         [ -f "$RESOLVER_DIR/$z" ] && { run rm -f "$RESOLVER_DIR/$z"; say "зона снята: $z"; }
     done
     rm -f "$MANIFEST" 2>/dev/null || true
     flush_dns
 }
 
+# Строка зоны из spec или аргументов → "<зона> <dns|vpn> <порт>" или отказ.
+zone_line() { # зона dns [порт] [лишнее]
+    local z="${1:-}" d="${2:-vpn}" p="${3:-53}"
+    [ -z "${4:-}" ] || return 1
+    valid_zone "$z" && valid_dns_word "$d" && valid_port "$p" || return 1
+    printf '%s %s %s' "$z" "$d" "$p"
+}
+
 # ------------------------------------------------------------- tunnel ----
+# Локальный пользователь, от имени которого openconnect запустит csd-wrapper:
+# тот, кто позвал sudo (SUDO_UID ставит сам sudo), а не логин VPN. Код,
+# скачанный со шлюза, от root не исполняется никогда.
+csd_local_user() {
+    local uid name
+    if [ "$(id -u)" = 0 ]; then uid="${SUDO_UID:-}"; else uid=$(id -u); fi
+    case "$uid" in ''|*[!0-9]*) die "CSD: не знаю, от чьего имени запускать csd-wrapper (нет SUDO_UID)" ;; esac
+    [ "$uid" != 0 ] || die "CSD: csd-wrapper от root не запускаю"
+    name=$(id -un "$uid" 2>/dev/null) || die "CSD: нет пользователя с uid $uid"
+    valid_user "$name" && [ "$name" != root ] || die "CSD: странное имя пользователя uid $uid"
+    printf '%s' "$name"
+}
+
 cmd_tunnel_start() {
     local url="${1:-}" hash="${2:-}" mode="${3:-}" user="${4:-}" ua="${5:-}" csd="${6:-}"
     valid_url "$url"   || die "некорректный url: $url"
     valid_hash "$hash" || die "некорректный servercert"
-    valid_mode "$mode" || die "режим: split (full убран, см. networks.conf)"
+    valid_mode "$mode" || die "режим: только split (full убран, полный туннель — сети 0.0.0.0/1 и 128.0.0.0/1 в networks.conf)"
     valid_user "$user" || die "некорректное имя пользователя"
     [ -z "$ua" ] || valid_ua "$ua" || die "некорректный user-agent"
     [ -z "$csd" ] || valid_name "$csd" || die "некорректное имя csd-wrapper"
-    if [ -n "$csd" ] && [ ! -x "$LIBDIR/csd/$csd" ]; then die "нет $LIBDIR/csd/$csd (sudo ocbar install кладёт его туда)"; fi
+    local csd_user=""
+    if [ -n "$csd" ]; then
+        [ -f "$LIBDIR/csd/$csd" ] && [ -x "$LIBDIR/csd/$csd" ] || die "нет $LIBDIR/csd/$csd (sudo ocbar install кладёт его туда)"
+        csd_user=$(csd_local_user)
+    fi
 
     if tunnel_alive; then die "openconnect уже запущен (pid $(tunnel_pid)) — сначала tunnel-stop"; fi
     ensure_state_dir
 
     # stdin: cookie и списки. Cookie не должна попасть ни в argv, ни в лог.
-    local cookie="" line key rest nets="" zones=""
+    # Сети и зоны проверяются ДО записи: в файл состояния попадает только то,
+    # что прошло валидацию.
+    local cookie="" line rest nets="" zones="" zl z d p extra
     while IFS= read -r line; do
         case "$line" in
             cookie=*) cookie="${line#cookie=}" ;;
-            "net "*)  rest="${line#net }"; valid_cidr "$rest" && nets="$nets$rest"$'\n' || say "пропускаю сеть: $rest" ;;
-            "zone "*) rest="${line#zone }"; zones="$zones$rest"$'\n' ;;
+            "net "*)  rest="${line#net }"
+                      if valid_net "$rest"; then nets="$nets$rest"$'\n'; else say "пропускаю сеть: $(clean "$rest")"; fi ;;
+            "zone "*) rest="${line#zone }"
+                      read -r z d p extra <<< "$rest" || true
+                      if plain "$rest" && zl=$(zone_line "${z:-}" "${d:-vpn}" "${p:-53}" "${extra:-}"); then
+                          zones="$zones$zl"$'\n'
+                      else say "пропускаю зону: $(clean "$rest")"; fi ;;
             ''|\#*) ;;
-            *) say "неизвестная строка в spec: ${line%% *}" ;;
+            *) say "неизвестная строка в spec: $(clean "${line%% *}")" ;;
         esac
     done
     [ -n "$cookie" ] || die "в stdin нет cookie=…"
@@ -341,13 +526,7 @@ cmd_tunnel_start() {
     rm -f "$ROUTES_STATE" "$GW_ROUTE"
 
     local oc; oc=$(verify_trust)
-    local script
-    if [ "$mode" = split ]; then
-        script="$(self_path) vpnc"
-    else
-        script="$LIBDIR/vpnc-script-full"
-        [ -x "$script" ] || die "нет $script для full-режима — sudo ocbar install"
-    fi
+    local script; script="$(self_path) vpnc"
 
     {
         printf 'STATE=starting\nMODE=%s\nURL=%s\nSTARTED=%s\n' "$mode" "$url" "$(date +%s)"
@@ -360,11 +539,13 @@ cmd_tunnel_start() {
     # requested address»), и пять минут ожидания — впустую. Полторы минуты
     # покрывают обычные провалы связи, а безнадёжный случай супервизор
     # распознаёт по событию смены интерфейса и не ждёт вовсе.
+    local rto="${OCBAR_RECONNECT_TIMEOUT:-90}"
+    matches "$rto" '^[0-9]{1,5}$' || rto=90
     local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$user"
                   --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel
-                  --reconnect-timeout="${OCBAR_RECONNECT_TIMEOUT:-90}")
+                  --reconnect-timeout="$rto")
     [ -z "$ua" ]  || cmd+=(--useragent "$ua")
-    [ -z "$csd" ] || cmd+=(--csd-user "$user" --csd-wrapper "$LIBDIR/csd/$csd")
+    [ -z "$csd" ] || cmd+=(--csd-user "$csd_user" --csd-wrapper "$LIBDIR/csd/$csd")
     case "$url" in https://*) cmd+=("$url") ;; *) cmd+=("https://$url") ;; esac
 
     if [ "$DRY_RUN" = 1 ]; then
@@ -398,13 +579,13 @@ cmd_tunnel_start() {
 }
 
 cmd_tunnel_stop() {
-    local p; p=$(tunnel_pid)
-    if [ -n "$p" ] && ps -p "$p" >/dev/null 2>&1; then
+    local p; p=$(live_pid)
+    if [ -n "$p" ]; then
         say "останавливаю openconnect (pid $p)"
         run kill -INT "$p"
         local i=0
-        while [ "$DRY_RUN" = 0 ] && ps -p "$p" >/dev/null 2>&1 && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
-        if [ "$DRY_RUN" = 0 ] && ps -p "$p" >/dev/null 2>&1; then
+        while [ "$DRY_RUN" = 0 ] && is_openconnect "$p" && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
+        if [ "$DRY_RUN" = 0 ] && is_openconnect "$p"; then
             say "не вышел за 10 с — SIGKILL"; kill -KILL "$p" 2>/dev/null || true
             vpnc_disconnect   # vpnc-script не отработал — убираем сами
         fi
@@ -423,39 +604,54 @@ self_path() { printf '%s' "$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"; }
 # openconnect зовёт нас с окружением: reason, TUNDEV, INTERNAL_IP4_ADDRESS,
 # INTERNAL_IP4_MTU, INTERNAL_IP4_DNS, CISCO_DEF_DOMAIN, CISCO_SPLIT_INC_*,
 # VPNGATEWAY. Делаем ТОЛЬКО интерфейс, свои маршруты и свои зоны. Никакого
-# OverridePrimary и networksetup -setdnsservers.
+# OverridePrimary и networksetup -setdnsservers. Всё от шлюза проверяется:
+# ни одно значение не уходит в ifconfig и tunnel.env как есть.
+IN_VPNC=0
 vpnc_connect() {
     local dev="${TUNDEV:-}" ip="${INTERNAL_IP4_ADDRESS:-}" mtu="${INTERNAL_IP4_MTU:-1400}"
-    valid_utun "$dev" || die "vpnc: странный TUNDEV='$dev'"
-    valid_ip "$ip"    || die "vpnc: странный INTERNAL_IP4_ADDRESS='$ip'"
+    valid_utun "$dev" || die "vpnc: странный TUNDEV='$(clean "$dev")'"
+    valid_ip "$ip"    || die "vpnc: странный INTERNAL_IP4_ADDRESS='$(clean "$ip")'"
+    valid_mtu "$mtu"  || { say "vpnc: странный MTU '$(clean "$mtu")' — беру 1400"; mtu=1400; }
     ensure_state_dir
 
     run ifconfig "$dev" inet "$ip" "$ip" netmask 255.255.255.255 mtu "$mtu" up
     if [ -n "${INTERNAL_IP6_ADDRESS:-}" ]; then
-        run ifconfig "$dev" inet6 "$INTERNAL_IP6_ADDRESS" prefixlen "${INTERNAL_IP6_NETMASK:-128}" up || true
+        local ip6="${INTERNAL_IP6_ADDRESS%%/*}" pl="${INTERNAL_IP6_NETMASK:-128}"
+        pl="${pl##*/}"
+        matches "$pl" '^[0-9]{1,3}$' && [ "$pl" -ge 1 ] && [ "$pl" -le 128 ] || pl=128
+        if valid_ip6 "$ip6"; then
+            run ifconfig "$dev" inet6 "$ip6" prefixlen "$pl" up || true
+        else
+            say "vpnc: странный INTERNAL_IP6_ADDRESS — IPv6 не настраиваю"
+        fi
     fi
 
     # Host-route до шлюза через текущий default gateway, как в штатном скрипте:
     # иначе после добавления широких сетей туннель может поехать сам в себя.
     local gw; gw=$(default_gateway)
-    if [ -n "${VPNGATEWAY:-}" ] && valid_ip "$VPNGATEWAY" && [ -n "$gw" ]; then
+    if [ -n "${VPNGATEWAY:-}" ] && valid_ip "$VPNGATEWAY" && valid_ip "${gw:-x}"; then
         case "$VPNGATEWAY" in 127.*) ;; *)
-            run route -n add -host "$VPNGATEWAY" "$gw" >/dev/null 2>&1 || true
+            run_quiet route -n add -host "$VPNGATEWAY" "$gw" || true
             printf '%s %s\n' "$VPNGATEWAY" "$gw" > "$GW_ROUTE" ;;
         esac
     fi
 
     # Сети, которые прислал шлюз (только для сведения — решаем мы, не он).
-    local i=0 inc=""
-    while [ $i -lt "${CISCO_SPLIT_INC:-0}" ]; do
-        eval "inc=\"\$inc \${CISCO_SPLIT_INC_${i}_ADDR}/\${CISCO_SPLIT_INC_${i}_MASKLEN}\""
+    # Счётчик может не совпасть с числом записей: пустое значение — не повод
+    # обрывать скрипт (set -u), просто пропуск.
+    local i=0 inc="" cnt="${CISCO_SPLIT_INC:-0}" a m
+    matches "$cnt" '^[0-9]{1,4}$' || cnt=0
+    [ "$cnt" -le 1024 ] || cnt=1024
+    while [ $i -lt "$cnt" ]; do
+        eval "a=\${CISCO_SPLIT_INC_${i}_ADDR:-}; m=\${CISCO_SPLIT_INC_${i}_MASKLEN:-}"
+        if valid_ip "$a" && matches "$m" '^[0-9]{1,2}$' && [ "$m" -le 32 ]; then inc="$inc $a/$m"; fi
         i=$((i+1))
     done
 
     {
         printf 'STATE=connected\nREASON=%s\nTUNDEV=%s\nIP4=%s\nMTU=%s\nGATEWAY=%s\nDNS=%s\nDEF_DOMAIN=%s\nGW_SPLIT_INC=%s\nCONNECTED=%s\n' \
-            "${reason:-}" "$dev" "$ip" "$mtu" "${VPNGATEWAY:-}" "${INTERNAL_IP4_DNS:-}" \
-            "${CISCO_DEF_DOMAIN:-}" "${inc# }" "$(date +%s)"
+            "$(clean "${reason:-}")" "$dev" "$ip" "$mtu" "$(clean "${VPNGATEWAY:-}")" "$(clean "${INTERNAL_IP4_DNS:-}")" \
+            "$(clean "${CISCO_DEF_DOMAIN:-}")" "${inc# }" "$(date +%s)"
         [ -f "$TUNNEL_ENV" ] && grep -E '^(MODE|URL|STARTED)=' "$TUNNEL_ENV" || true
     } > "$TUNNEL_ENV.tmp"
     mv "$TUNNEL_ENV.tmp" "$TUNNEL_ENV"; chmod 644 "$TUNNEL_ENV"
@@ -475,15 +671,18 @@ vpnc_connect() {
 vpnc_disconnect() {
     clear_state_routes
     if [ -f "$GW_ROUTE" ]; then
-        local g via; read -r g via < "$GW_ROUTE"
-        [ -n "$g" ] && run route -n delete -host "$g" "$via" >/dev/null 2>&1 || true
+        local g via; read -r g via _ < "$GW_ROUTE" || true
+        if valid_ip "${g:-x}" && valid_ip "${via:-x}"; then run_quiet route -n delete -host "$g" "$via" || true; fi
         rm -f "$GW_ROUTE"
     fi
     if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; fi
-    # Интерфейс гасим только если он точно наш: пришёл от openconnect (env)
-    # или записан у нас как connected. Чужой utun с тем же номером не трогаем.
-    local dev="${TUNDEV:-}"
-    if [ -z "$dev" ] && [ "$(tunnel_state)" = connected ]; then dev=$(tunnel_dev); fi
+    # Интерфейс гасим только если он точно наш: его назвал сам openconnect
+    # (мы вызваны как vpnc-script) или жив наш openconnect, а запись говорит
+    # connected. Без живого процесса utun исчезает сам, а номер из устаревшей
+    # записи мог занять другой VPN.
+    local dev=""
+    if [ "$IN_VPNC" = 1 ]; then dev="${TUNDEV:-}"
+    elif [ "$(tunnel_state)" = connected ] && tunnel_alive; then dev=$(tunnel_dev); fi
     if valid_utun "$dev"; then run ifconfig "$dev" down 2>/dev/null || true; fi
     if [ -f "$TUNNEL_ENV" ]; then
         { printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)"; grep -E '^(MODE|URL|STARTED|TUNDEV)=' "$TUNNEL_ENV" || true; } > "$TUNNEL_ENV.tmp"
@@ -492,12 +691,13 @@ vpnc_disconnect() {
 }
 
 cmd_vpnc() {
+    IN_VPNC=1
     case "${reason:-}" in
         pre-init) ;;
         connect|reconnect) vpnc_connect ;;
         disconnect) vpnc_disconnect ;;
         attempt-reconnect) ;;
-        *) say "vpnc: неизвестный reason='${reason:-}'" ;;
+        *) say "vpnc: неизвестный reason='$(clean "${reason:-}")'" ;;
     esac
 }
 
@@ -510,14 +710,16 @@ cmd_suspend() {
     if [ -f "$PAUSED" ]; then say "уже на паузе"; return 0; fi
     clear_state_routes
     [ "$(manifest_zones | grep -c .)" -gt 0 ] && clear_zones || flush_dns
-    if [ "$DRY_RUN" = 1 ]; then printf '  $ touch %s\n' "$PAUSED"; else : > "$PAUSED"; fi
+    : > "$PAUSED"
     say "пауза: маршруты и зоны сняты, туннель (pid $(tunnel_pid)) оставлен поднятым"
 }
 
 # Применить зоны из wanted, подставив резолвер шлюза вместо слова vpn.
 apply_wanted_zones() {
     [ -s "$ZONES_WANTED" ] || { clear_zones; return 0; }
-    local vpndns; vpndns=$(sed -n 's/^DNS=//p' "$TUNNEL_ENV" 2>/dev/null | head -1); vpndns="${vpndns%% *}"
+    # Без tunnel.env (туннель ещё не поднимался) sed падает, и под pipefail
+    # zone-add/zone-del молча выходили с кодом 1 — отсюда || true.
+    local vpndns; vpndns=$(sed -n 's/^DNS=//p' "$TUNNEL_ENV" 2>/dev/null | head -1 || true); vpndns="${vpndns%% *}"
     [ -n "$vpndns" ] || say "шлюз не прислал DNS — зоны со значением vpn пропущены"
     awk -v d="$vpndns" '$2=="vpn" { if (d=="") next; $2=d } {print}' "$ZONES_WANTED" | apply_zones
 }
@@ -528,7 +730,7 @@ cmd_resume() {
     valid_utun "$dev" || die "не знаю интерфейс туннеля (нет TUNDEV в $TUNNEL_ENV)"
     apply_wanted_routes "$dev"
     apply_wanted_zones
-    if [ "$DRY_RUN" = 1 ]; then printf '  $ rm -f %s\n' "$PAUSED"; else rm -f "$PAUSED"; fi
+    rm -f "$PAUSED"
     say "возобновлено: маршруты и зоны на месте"
 }
 
@@ -538,44 +740,63 @@ cmd_resume() {
 # аргумент; имя сервиса сверяется со списком системы; чужой включённый SOCKS
 # не перезаписывается — вернуть его было бы некому, если ocbar умрёт;
 # свои изменения помнятся манифестом, снимается только своё.
+#
+# Манифест: "<сервис>\t<порт>" — табуляция не бывает в имени сервиса, и
+# «Wi-Fi» не совпадает с «Wi-Fi 2». Строки старого формата "<сервис> <порт>"
+# читаются так же точно: порт — последнее поле, имя — всё до него. CLI
+# (socks_state_services) разбирает оба формата одинаково.
 socks_current() { # сервис → "enabled server port"
     networksetup -getsocksfirewallproxy "$1" 2>/dev/null \
         | awk -F': ' '/^Enabled:/{e=$2} /^Server:/{s=$2} /^Port:/{p=$2} END{print e, s, p}'
 }
-socks_manifest_port() { # сервис → порт, если ставили мы
+# Манифест в нормальном виде: "<сервис>\t<порт>" на строку.
+socks_manifest_norm() {
     [ -f "$SOCKS_STATE" ] || return 0
-    awk -v s="$1" 'substr($0, 1, length(s) + 1) == s " " { print $NF; exit }' "$SOCKS_STATE"
+    awk '{
+        if (index($0, "\t")) { n = substr($0, 1, index($0, "\t") - 1); p = substr($0, index($0, "\t") + 1) }
+        else { n = $0; sub(/ [^ ]*$/, "", n); p = $NF }
+        if (n != "" && p ~ /^[0-9]+$/) printf "%s\t%s\n", n, p
+    }' "$SOCKS_STATE"
+}
+socks_manifest_port() { # сервис → порт, если ставили мы
+    socks_manifest_norm | awk -F'\t' -v s="$1" '$1 == s { print $2; exit }'
 }
 socks_manifest_without() { # сервис → манифест без него
-    [ -f "$SOCKS_STATE" ] || return 0
-    awk -v s="$1" 'substr($0, 1, length(s) + 1) != s " "' "$SOCKS_STATE"
+    socks_manifest_norm | awk -F'\t' -v s="$1" '$1 != s'
 }
 write_socks_manifest() { # содержимое
-    if [ "$DRY_RUN" = 1 ] && [ "$(id -u)" != 0 ] && [ ! -w "$STATE_DIR" ]; then
-        printf '  $ socks.state ← %s\n' "$(printf '%s' "$1" | tr '\n' ';')"
-    elif [ -n "$1" ]; then printf '%s\n' "$1" > "$SOCKS_STATE"
+    if [ -n "$1" ]; then printf '%s\n' "$1" > "$SOCKS_STATE"
     else rm -f "$SOCKS_STATE"; fi
 }
 
 cmd_socks_set() {
     local svc="${1:-}" port="${2:-}"
-    valid_service "$svc" || die "неизвестный сетевой сервис: '$svc' (см. networksetup -listallnetworkservices)"
-    valid_user_port "$port" || die "порт 1024–65535, а не '$port'"
+    valid_service "$svc" || die "неизвестный сетевой сервис: '$(clean "$svc")' (см. networksetup -listallnetworkservices)"
+    valid_user_port "$port" || die "порт 1024–65535, а не '$(clean "$port")'"
     ensure_state_dir
-    local en srv prt; read -r en srv prt <<< "$(socks_current "$svc")"
-    if [ "$en" = Yes ] && [ -z "$(socks_manifest_port "$svc")" ] \
-       && ! { [ "$srv" = 127.0.0.1 ] && [ "$prt" = "$port" ]; }; then
-        die "на «${svc}» уже включён чужой SOCKS ${srv:-?}:${prt:-?} — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле"
+    local ours en srv prt; ours=$(socks_manifest_port "$svc")
+    read -r en srv prt <<< "$(socks_current "$svc")"
+    if [ "$en" = Yes ]; then
+        if [ "$srv" = 127.0.0.1 ] && [ "$prt" = "$port" ]; then
+            :   # уже стоит ровно наш адрес
+        elif [ -n "$ours" ] && [ "$srv" = 127.0.0.1 ] && [ "$prt" = "$ours" ]; then
+            :   # наш, с прежним портом — меняем
+        else
+            # Запись устарела (после падения) или SOCKS сменили без нас:
+            # включённое сейчас — чужое. Запись убираем, чужое не трогаем.
+            [ -z "$ours" ] || write_socks_manifest "$(socks_manifest_without "$svc")"
+            die "на «${svc}» включён чужой SOCKS ${srv:-?}:${prt:-?} — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле"
+        fi
     fi
     run networksetup -setsocksfirewallproxy "$svc" 127.0.0.1 "$port"
     run networksetup -setsocksfirewallproxystate "$svc" on
-    write_socks_manifest "$(socks_manifest_without "$svc"; printf '%s %s\n' "$svc" "$port")"
+    write_socks_manifest "$(socks_manifest_without "$svc"; printf '%s\t%s\n' "$svc" "$port")"
     say "системный SOCKS: $svc → 127.0.0.1:$port"
 }
 
 cmd_socks_clear() {
     local svc="${1:-}"
-    valid_service "$svc" || die "неизвестный сетевой сервис: '$svc'"
+    valid_service "$svc" || die "неизвестный сетевой сервис: '$(clean "$svc")'"
     local ours; ours=$(socks_manifest_port "$svc")
     [ -n "$ours" ] || { say "на «${svc}» мы SOCKS не ставили — не трогаю"; return 0; }
     local en srv prt; read -r en srv prt <<< "$(socks_current "$svc")"
@@ -589,30 +810,19 @@ cmd_socks_clear() {
 }
 
 # --------------------------------------------------------------- cleanup ----
-# lsof без root не видит чужие сокеты, поэтому просто стучимся в порт.
-port53_busy() { nc -z -G 1 127.0.0.1 53 >/dev/null 2>&1; }
-services_with_localhost_dns() {
-    local svc
-    networksetup -listallnetworkservices 2>/dev/null | tail -n +2 | while IFS= read -r svc; do
-        case "$svc" in ''|\**) continue ;; esac
-        networksetup -getdnsservers "$svc" 2>/dev/null | grep -x '127.0.0.1' >/dev/null && printf '%s\n' "$svc"
-    done
-}
-
+# DNS сетевых сервисов здесь не трогаем. Раньше cleanup стирал весь список
+# серверов сервиса, если среди них был 127.0.0.1 и порт 53 молчал, — наследие
+# 0.1.0. ocbar системный DNS не ставит никогда (только /etc/resolver), значит,
+# 127.0.0.1 там поставил кто-то другой, и снимать его — не наше дело. doctor
+# об этом предупреждает и говорит, как сбросить руками.
 cmd_cleanup() {
-    local did=0 svc
-    if ! port53_busy; then
-        while IFS= read -r svc; do
-            [ -n "$svc" ] || continue
-            run networksetup -setdnsservers "$svc" Empty; say "DNS сброшен на DHCP: $svc"; did=1
-        done <<< "$(services_with_localhost_dns)"
-    fi
+    local did=0
     if ! tunnel_alive; then
         if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; did=1; fi
         if [ -s "$ROUTES_STATE" ]; then clear_state_routes; did=1; fi
         if [ -f "$GW_ROUTE" ]; then vpnc_disconnect; did=1; fi
         # осиротевший openconnect не из нашего pidfile
-        if pgrep -x openconnect >/dev/null 2>&1 && [ -z "$(tunnel_pid)" ]; then
+        if pgrep -x openconnect >/dev/null 2>&1; then
             say "найден openconnect без нашего pidfile — не трогаю (возможно, чужая сессия)"
         fi
         rm -f "$PIDFILE" 2>/dev/null || true
@@ -620,8 +830,60 @@ cmd_cleanup() {
     [ "$did" = 1 ] && flush_dns || say "убирать нечего"
 }
 
+# ------------------------------------------------------ перенос состояния ----
+# До 0.8.0 состояние жило в $PREFIX/var/ocbar. Переносим переименованием:
+# в пределах тома mv — это rename, и живой openconnect продолжает писать
+# журнал в тот же файл. Переносится только обычный файл root-а с одной
+# жёсткой ссылкой: старый каталог мог быть доступен пользователю, и симлинк
+# или жёсткая ссылка на системный файл, перенесённые к нам, стали бы целью
+# записи от root. После переноса файл проверяется ещё раз — на случай
+# подмены в промежутке.
+cmd_migrate_state() {
+    if [ "$OLD_STATE_DIR" = "$STATE_DIR" ]; then say "старый и новый каталог совпадают"; return 0; fi
+    ensure_state_dir
+    local f src dst moved=0
+    if [ -d "$OLD_STATE_DIR" ] && [ ! -L "$OLD_STATE_DIR" ]; then
+        for f in $STATE_FILES; do
+            src="$OLD_STATE_DIR/$f"; dst="$STATE_DIR/$f"
+            [ -e "$src" ] || [ -L "$src" ] || continue
+            if ! file_trusted "$src"; then say "не переношу $src: не обычный файл root-а с одной ссылкой"; continue; fi
+            if [ -e "$dst" ] || [ -L "$dst" ]; then say "$dst уже есть — $src оставляю"; continue; fi
+            run mv "$src" "$dst"
+            if [ "$DRY_RUN" = 0 ] && ! file_trusted "$dst"; then
+                rm -f "$dst"; say "$f подменён во время переноса — удалён"; continue
+            fi
+            moved=$((moved+1))
+        done
+        say "состояние: перенесено файлов — $moved ($OLD_STATE_DIR → $STATE_DIR)"
+    else
+        say "старого каталога состояния нет — переносить нечего"
+    fi
+    # Манифест доверия пересобирает trust (install зовёт его всегда): старый
+    # лежал в каталоге, который мог писать пользователь, переносить его не
+    # во что верить. Просто убираем.
+    if [ -f "$OLD_TRUST" ] && [ ! -L "$OLD_TRUST" ]; then run rm -f "$OLD_TRUST"; say "старый манифест доверия убран: $OLD_TRUST"; fi
+    rmdir_if_ours "$OLD_STATE_DIR"
+    rmdir_if_ours "$(dirname "$OLD_TRUST")"
+    return 0
+}
+# Убрать пустой каталог, если он root-овый и не симлинк.
+rmdir_if_ours() {
+    local d="$1"
+    [ -d "$d" ] && [ ! -L "$d" ] || return 0
+    [ "$(stat -f %u "$d" 2>/dev/null)" = 0 ] || { say "$d не root-овый — оставляю"; return 0; }
+    if [ -n "$(ls -A "$d" 2>/dev/null)" ]; then say "$d не пуст — оставляю"; return 0; fi
+    run rmdir "$d" && say "убран пустой каталог $d"
+    return 0
+}
+
 # ------------------------------------------------------------------ main ----
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; }
+
 cmd="${1:-}"; shift || true
+case "$cmd" in
+    version|help|-h|--help|'') ;;
+    *) require_secure_dirs ;;
+esac
 case "$cmd" in
     tunnel-start) cmd_tunnel_start "$@" ;;
     tunnel-stop)  cmd_tunnel_stop ;;
@@ -629,20 +891,18 @@ case "$cmd" in
         # SIGUSR1 просит openconnect выписать в лог подробную статистику
         # соединения: транспорт (DTLS или TLS), шифры, счётчики пакетов.
         # Ничего не меняет, только пишет.
-        p=$(tunnel_pid); [ -n "$p" ] || die "туннель не поднят"
-        tunnel_alive || die "процесс $p — не наш openconnect"
+        p=$(live_pid); [ -n "$p" ] || die "туннель не поднят (нет живого openconnect из pidfile)"
         run kill -USR1 "$p" && say "статистика запрошена, смотрите $LOG" ;;
     reconnect-now)
         # SIGUSR2 — немедленное переподключение по той же сессии. Именно то,
         # что нужно при смене адреса в локальной сети: не тратит новый вход.
-        p=$(tunnel_pid); [ -n "$p" ] || die "туннель не поднят"
-        tunnel_alive || die "процесс $p — не наш openconnect"
+        p=$(live_pid); [ -n "$p" ] || die "туннель не поднят (нет живого openconnect из pidfile)"
         run kill -USR2 "$p" && say "запрошено переподключение по текущей сессии" ;;
     suspend)      cmd_suspend ;;
     resume)       cmd_resume ;;
     vpnc)         cmd_vpnc ;;
     route-add)
-        valid_cidr "${1:-}" || die "некорректный CIDR: ${1:-}"
+        valid_net "${1:-}" || die "некорректный CIDR (маршрут по умолчанию не ставлю): $(clean "${1:-}")"
         ensure_state_dir
         grep -Fqx "$1" "$ROUTES_WANTED" 2>/dev/null || printf '%s\n' "$1" >> "$ROUTES_WANTED"
         # На паузе список правим, а таблицу — нет: применится при resume.
@@ -651,17 +911,20 @@ case "$cmd" in
         [ "$(tunnel_state)" = connected ] || die "туннель не в состоянии connected"
         add_route "$1" "$dev" ;;
     route-del)
-        valid_cidr "${1:-}" || die "некорректный CIDR: ${1:-}"
+        valid_net "${1:-}" || die "некорректный CIDR (маршрут по умолчанию не снимаю никогда): $(clean "${1:-}")"
         if [ -f "$ROUTES_WANTED" ]; then grep -Fvx "$1" "$ROUTES_WANTED" > "$ROUTES_WANTED.tmp" || true; mv "$ROUTES_WANTED.tmp" "$ROUTES_WANTED"; fi
         [ -f "$PAUSED" ] && { say "маршрут убран из списка: $1 (стоит пауза)"; exit 0; }
-        del_route "$1" ;;
+        dev=$(state_route_dev "$1")
+        if [ -z "$dev" ]; then say "маршрута $1 среди наших нет (routes.state) — в таблице не трогаю"; exit 0; fi
+        del_route "$1" "$dev" ;;
     zone-add)
         # Правка списка зон переживает реконнект: раньше zones.wanted писался
         # один раз при подключении, и выключенная зона возвращалась сама.
-        valid_zone "${1:-}" || die "zone-add <зона> <dns|vpn> [порт]"
+        zl=$(zone_line "${1:-}" "${2:-vpn}" "${3:-53}") || die "zone-add <зона> <dns|vpn> [порт]"
         ensure_state_dir
-        grep -Fv "${1} " "$ZONES_WANTED" 2>/dev/null > "$ZONES_WANTED.tmp" || true
-        printf '%s %s %s\n' "$1" "${2:-vpn}" "${3:-53}" >> "$ZONES_WANTED.tmp"
+        # Сравнение имени точное: подстрока снимала бы поддомены и соседей.
+        awk -v z="$1" '$1 != z' "$ZONES_WANTED" 2>/dev/null > "$ZONES_WANTED.tmp" || true
+        printf '%s\n' "$zl" >> "$ZONES_WANTED.tmp"
         mv "$ZONES_WANTED.tmp" "$ZONES_WANTED"
         say "зона в списке: $1 → ${2:-vpn}"
         [ -f "$PAUSED" ] && { say "стоит пауза — применю при возобновлении"; exit 0; }
@@ -669,7 +932,7 @@ case "$cmd" in
     zone-del)
         valid_zone "${1:-}" || die "zone-del <зона>"
         if [ -f "$ZONES_WANTED" ]; then
-            grep -Fv "${1} " "$ZONES_WANTED" > "$ZONES_WANTED.tmp" || true
+            awk -v z="$1" '$1 != z' "$ZONES_WANTED" > "$ZONES_WANTED.tmp" || true
             mv "$ZONES_WANTED.tmp" "$ZONES_WANTED"
         fi
         say "зона убрана из списка: $1"
@@ -682,8 +945,9 @@ case "$cmd" in
     cleanup)      cmd_cleanup ;;
     flush-dns)    flush_dns ;;
     trust)        cmd_trust ;;
+    migrate-state) cmd_migrate_state ;;
     version)      printf 'ocbar-helper %s\n' "$VERSION" ;;
     *)
-        sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+        usage
         exit 2 ;;
 esac

@@ -53,13 +53,24 @@ PROXY_LOG="$LOG_DIR/openconnect-proxy.log"
 PREFIX="/usr/local"
 HELPER_INSTALLED="$PREFIX/libexec/ocbar-helper"
 LIBDIR="$PREFIX/libexec/ocbar"
-STATE_DIR="${OCBAR_STATE_DIR:-$PREFIX/var/ocbar}"   # пишет только хелпер (root)
+# Манифест доверия — рядом с копией openconnect (с хелпера 0.8.0). Прежний
+# путь в $PREFIX/etc/ocbar на Intel принадлежит пользователю.
+TRUST="$LIBDIR/trust.sha256"
+TRUST_OLD="$PREFIX/etc/ocbar/trust.sha256"
+# Каталог состояния пишет только хелпер (root). С 0.8.0 — /var/db/ocbar,
+# у которого все предки root-овые; до `sudo ocbar install` у людей стоит
+# старый хелпер, и состояние лежит по-старому — поэтому выбор по наличию.
+STATE_DIR_ROOT="/var/db/ocbar"
+STATE_DIR_OLD="$PREFIX/var/ocbar"
+if [ -n "${OCBAR_STATE_DIR:-}" ]; then STATE_DIR="$OCBAR_STATE_DIR"
+elif [ -d "$STATE_DIR_ROOT" ]; then STATE_DIR="$STATE_DIR_ROOT"
+else STATE_DIR="$STATE_DIR_OLD"; fi
 TUNNEL_ENV="$STATE_DIR/tunnel.env"
 PIDFILE="$STATE_DIR/openconnect.pid"
 MANIFEST="$STATE_DIR/zones.state"
 PAUSED_FLAG="$STATE_DIR/paused"
 ROUTES_STATE="$STATE_DIR/routes.state"
-SOCKS_STATE="$STATE_DIR/socks.state"     # системный SOCKS, который поставили мы: "<сервис> <порт>"
+SOCKS_STATE="$STATE_DIR/socks.state"     # системный SOCKS, который поставили мы: "<сервис>\t<порт>" (старый формат — через пробел)
 OC_LOG="$STATE_DIR/openconnect.log"
 RESOLVER_DIR="/etc/resolver"
 AGENT_LABEL="ru.ocbar.supervisor"
@@ -127,6 +138,10 @@ AS
 
 # ------------------------------------------------------------ бинарники ----
 helper_path() {
+    # Холостой прогон — копией рядом с CLI: он показывает, что сделает этот
+    # код, и не запускает установленный root-овый файл (самопроверка зовёт
+    # cleanup --dry-run, и прежде это доходило до /usr/local/libexec).
+    if [ "$DRY_RUN" = 1 ] && helper_source >/dev/null; then helper_source; return 0; fi
     if [ -x "$HELPER_INSTALLED" ]; then printf '%s' "$HELPER_INSTALLED"
     elif [ -x "$SELF_DIR/../libexec/ocbar-helper" ]; then printf '%s' "$(cd "$SELF_DIR/../libexec" && pwd)/ocbar-helper"
     else return 1; fi
@@ -1791,19 +1806,61 @@ cmd_doctor() {
     ok "Платформа" "$(sw_vers -productVersion 2>/dev/null || uname -r) $(uname -m)"
     if oc=$(openconnect_bin); then ok "openconnect (brew)" "$oc ($("$oc" --version 2>&1 | head -1 | awk '{print $3}'))"; else bad "openconnect" "не найден — brew install openconnect"; issues=$((issues+1)); fi
     if [ -x "$LIBDIR/openconnect" ]; then ok "openconnect (root-копия)" "$LIBDIR/openconnect"; else warn "openconnect (root-копия)" "нет — sudo ocbar install"; fi
-    if [ -f "$PREFIX/etc/ocbar/trust.sha256" ]; then
-        if shasum -a 256 -c --status "$PREFIX/etc/ocbar/trust.sha256" 2>/dev/null; then ok "Манифест доверия" "$(grep -c . "$PREFIX/etc/ocbar/trust.sha256") файлов, хеши совпадают"
+    local trust="$TRUST"; [ -f "$trust" ] || [ ! -f "$TRUST_OLD" ] || trust="$TRUST_OLD"
+    if [ -f "$trust" ]; then
+        if shasum -a 256 -c --status "$trust" 2>/dev/null; then ok "Манифест доверия" "$(grep -c . "$trust") файлов, хеши совпадают"
         else bad "Манифест доверия" "хеши НЕ совпадают — после brew upgrade: sudo ocbar install --trust"; issues=$((issues+1)); fi
+        [ "$trust" = "$TRUST" ] || warn "Манифест доверия" "по старому пути $TRUST_OLD — sudo ocbar install перенесёт в $TRUST"
     else warn "Манифест доверия" "нет — sudo ocbar install"; fi
     if h=$(auth_path); then ok "ocbar-auth" "$h"; else bad "ocbar-auth" "не найден"; issues=$((issues+1)); fi
     if [ -x "$HELPER_INSTALLED" ]; then
-        local own; own=$(stat -f '%Su:%Sg %Lp' "$HELPER_INSTALLED")
+        local own hv src; own=$(stat -f '%Su:%Sg %Lp' "$HELPER_INSTALLED")
         if [ "$own" = "root:wheel 755" ]; then ok "ocbar-helper" "$HELPER_INSTALLED ($own)"; else bad "ocbar-helper" "$HELPER_INSTALLED — $own, должно быть root:wheel 755"; issues=$((issues+1)); fi
         if helper_nopasswd; then ok "sudoers" "NOPASSWD на хелпер есть"; else warn "sudoers" "нет NOPASSWD — из меню/супервизора не сработает: sudo ocbar install"; fi
-        if helper_supports_pause; then ok "Версия хелпера" "$("$HELPER_INSTALLED" version 2>/dev/null | awk '{print $2}') — умеет pause/resume"
-        else warn "Версия хелпера" "$("$HELPER_INSTALLED" version 2>/dev/null | awk '{print $2}') старее CLI: sudo ocbar install"; fi
+        hv=$("$HELPER_INSTALLED" version 2>/dev/null | awk '{print $2}')
+        # Хелпер обновляется только через sudo ocbar install, brew upgrade его
+        # не трогает. Сверяем с копией рядом с CLI байт в байт, а не по версии.
+        if src=$(helper_source) && [ "$src" != "$HELPER_INSTALLED" ]; then
+            if cmp -s "$src" "$HELPER_INSTALLED"; then ok "Версия хелпера" "${hv:-?} — совпадает с $src"
+            else warn "Версия хелпера" "${hv:-?}: хелпер отстал от $src — sudo $SELF_ENTRY install"; fi
+        elif helper_supports_pause; then ok "Версия хелпера" "${hv:-?} — умеет pause/resume"
+        else warn "Версия хелпера" "${hv:-?} старее CLI: sudo $SELF_ENTRY install"; fi
     elif h=$(helper_path); then warn "ocbar-helper" "не установлен, есть только $h (sudo спросит пароль)"
     else bad "ocbar-helper" "не найден"; issues=$((issues+1)); fi
+    # Каталоги, куда пишет root: сам каталог и все предки — root и без записи
+    # для группы и остальных. Иначе подмена каталога симлинком заставит
+    # хелпер записать файл куда угодно (на Intel Homebrew отдаёт пользователю
+    # /usr/local/var и /usr/local/etc). Хелпер 0.8.0 в таком случае откажет.
+    _doctor_path_secure() { # путь → пусто, если безопасно, иначе причина
+        local cur="$1" o m deepest=""
+        while :; do
+            if [ -e "$cur" ] || [ -L "$cur" ]; then
+                [ -n "$deepest" ] || deepest="$cur"
+                read -r o m <<< "$(stat -f '%u %p' "$cur" 2>/dev/null || true)"
+                [ "${o:-x}" = 0 ] || { printf '%s принадлежит uid %s' "$cur" "${o:-?}"; return 0; }
+                if [ ! -L "$cur" ] && [ $(( 0${m:-0} & 022 )) -ne 0 ]; then printf '%s пишется группой или всеми' "$cur"; return 0; fi
+            fi
+            [ "$cur" = / ] && break
+            cur=$(dirname "$cur")
+        done
+        [ -n "$deepest" ] || return 0
+        cur=$(cd -P "$deepest" 2>/dev/null && pwd -P) || return 0
+        [ "$cur" = "$deepest" ] || _doctor_path_secure "$cur"
+        return 0
+    }
+    local d why label
+    for d in "$STATE_DIR" "$LIBDIR"; do
+        if [ "$d" = "$STATE_DIR" ]; then
+            [ -z "${OCBAR_STATE_DIR:-}" ] || continue
+            label="Каталог состояния"
+        else label="Каталог копии openconnect"; fi
+        why=$(_doctor_path_secure "$d")
+        if [ -z "$why" ]; then ok "$label" "$d — root, без записи для других"
+        else bad "$label" "$why — хелпер откажется писать; chown root:wheel, chmod go-w, затем sudo ocbar install"; issues=$((issues+1)); fi
+    done
+    if [ -z "${OCBAR_STATE_DIR:-}" ] && [ "$STATE_DIR" = "$STATE_DIR_OLD" ] && [ -d "$STATE_DIR_OLD" ]; then
+        warn "Каталог состояния" "старый путь $STATE_DIR_OLD — sudo ocbar install перенесёт в $STATE_DIR_ROOT"
+    fi
     if [ -f "$PROFILES" ]; then ok "Профили" "$(profile_list | wc -l | tr -d ' ') в $PROFILES, default=$(profile_default)"; else warn "Профили" "нет $PROFILES — см. etc/profiles.conf.example"; fi
     [ -f "$ZONES_CONF" ] && ok "zones.conf" "$(read_zones 2>/dev/null | wc -l | tr -d ' ') зон" || warn "zones.conf" "нет — ocbar dns init"
     [ -f "$NETWORKS_CONF" ] && ok "networks.conf" "$(read_networks 2>/dev/null | tr '\n' ' ')" || warn "networks.conf" "нет — см. etc/networks.conf.example"
@@ -1831,7 +1888,9 @@ cmd_doctor() {
     esac
     info "----------------------------------------"; info "Мусор от прошлых сессий"
     local n; n=$(services_with_localhost_dns | grep -c . || true)
-    if [ "${n:-0}" -gt 0 ] && ! port53_busy; then bad "интерфейсов с DNS 127.0.0.1 при мёртвом резолвере: $n"; issues=$((issues+1))
+    # ocbar системный DNS не ставит, и cleanup его больше не трогает (хелпер
+    # 0.8.0): 127.0.0.1 поставил кто-то другой. Только подсказка.
+    if [ "${n:-0}" -gt 0 ] && ! port53_busy; then warn "DNS интерфейсов" "у $n сервисов DNS 127.0.0.1, а резолвер не отвечает — не наше, сбросьте сами: networksetup -setdnsservers <сервис> Empty"
     elif [ "${n:-0}" -gt 0 ]; then skip "интерфейсов с DNS 127.0.0.1: $n (на :53 кто-то отвечает — похоже, штатно)"
     else ok "DNS интерфейсов" "чисто"; fi
     if [ "$(manifest_zones | grep -c .)" -gt 0 ] && ! tunnel_alive; then bad "наши зоны /etc/resolver есть, а туннель не поднят"; issues=$((issues+1)); fi
@@ -2126,20 +2185,24 @@ cmd_supervise() {
 # Единственная команда с sudo. Каждое действие печатается; --dry-run — только печать.
 cmd_install() {
     local trust_only=0 a; for a in "$@"; do case "$a" in --trust) trust_only=1 ;; esac; done
-    local me="${SUDO_USER:-$(id -un)}" home uid
+    local me="${SUDO_USER:-$(id -un)}" home uid is_root=0
+    [ "$(id -u)" = 0 ] && is_root=1
+    if [ "$is_root" = 0 ] && [ "$DRY_RUN" = 0 ]; then die "нужен root: sudo $SELF_ENTRY install"; fi
     home=$(dscl . -read "/Users/$me" NFSHomeDirectory 2>/dev/null | awk '{print $2}'); home="${home:-$HOME}"
     uid=$(id -u "$me")
-    if [ "$(id -u)" != 0 ] && [ "$DRY_RUN" = 0 ]; then die "нужен root: sudo $SELF_ENTRY install"; fi
     local src_helper; src_helper=$(helper_source) \
         || die "нет libexec/ocbar-helper рядом с $SELF — установка возможна только из дерева проекта"
     [ "$src_helper" = "$HELPER_INSTALLED" ] && die "источник и приёмник совпали ($src_helper) — запускайте install из каталога проекта"
     local oc; oc=$(openconnect_bin) || die "brew install openconnect"
-    local vpnc="$(dirname "$(dirname "$oc")")/etc/vpnc/vpnc-script"
     local -a steps=()
     if [ "$trust_only" = 0 ]; then
-        steps+=("install -d -o root -g wheel -m 755 $LIBDIR $LIBDIR/csd $PREFIX/etc/ocbar $STATE_DIR")
+        # Каталог состояния — /var/db/ocbar (root-овые предки), манифест
+        # доверия — в $LIBDIR. Старые $PREFIX/var/ocbar и $PREFIX/etc/ocbar
+        # разбирает migrate-state ниже.
+        steps+=("install -d -o root -g wheel -m 755 $LIBDIR $LIBDIR/csd $STATE_DIR_ROOT")
         steps+=("install -o root -g wheel -m 755 $src_helper $HELPER_INSTALLED")
-        [ -f "$vpnc" ] && steps+=("install -o root -g wheel -m 755 $vpnc $LIBDIR/vpnc-script-full")
+        # Режим full убран (D4) — его штатный скрипт больше не нужен.
+        [ -e "$LIBDIR/vpnc-script-full" ] && steps+=("rm -f $LIBDIR/vpnc-script-full")
         local p csd
         while read -r p; do
             [ -n "$p" ] || continue
@@ -2150,12 +2213,27 @@ cmd_install() {
     steps+=("install -o root -g wheel -m 755 $oc $LIBDIR/openconnect")
     steps+=("$HELPER_INSTALLED trust")
     if [ "$trust_only" = 0 ]; then
+        # Перенос состояния — переименованием файлов: живой openconnect
+        # продолжит писать журнал в тот же файл. Уже установленным новым
+        # хелпером: он проверяет каждый файл и убирает старые каталоги.
+        if [ -d "$STATE_DIR_OLD" ] || [ -f "$TRUST_OLD" ]; then
+            steps+=("$HELPER_INSTALLED migrate-state")
+            # Живой супервизор помнит старый путь к состоянию. Изменённый
+            # файл он замечает сам и перезапускается через exec (туннель
+            # это не задевает) — после этого читает /var/db/ocbar.
+            steps+=("touch $SELF")
+        fi
         steps+=("printf '%%admin ALL=(root) NOPASSWD: $HELPER_INSTALLED\\n' > /etc/sudoers.d/ocbar && chmod 440 /etc/sudoers.d/ocbar && visudo -cf /etc/sudoers.d/ocbar")
         steps+=("install -d -o $me -m 755 $home/Library/LaunchAgents $home/Library/Logs/ocbar")
         steps+=("write-plist $home/Library/LaunchAgents/$AGENT_LABEL.plist")
         # Загруженный агент не трогаем: супервизор подхватывает новый код сам
         # (следит за mtime), а bootout убил бы живой туннель вместе с задачей.
-        if sudo -u "$me" launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1; then
+        # Холостой прогон без root не зовёт sudo: он и так от имени того же
+        # пользователя.
+        local loaded=0
+        if [ "$is_root" = 1 ]; then sudo -u "$me" launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1 && loaded=1
+        else launchctl print "gui/$uid/$AGENT_LABEL" >/dev/null 2>&1 && loaded=1; fi
+        if [ "$loaded" = 1 ]; then
             steps+=("echo '  агент уже загружен — не перезапускаю (супервизор подхватит код сам); принудительно: ocbar supervisor restart'")
         else
             steps+=("sudo -u $me launchctl bootstrap gui/$uid $home/Library/LaunchAgents/$AGENT_LABEL.plist")
@@ -2167,7 +2245,7 @@ cmd_install() {
         [ "$DRY_RUN" = 1 ] && continue
         rc=0
         case "$s" in
-            "write-plist "*) write_plist "${s#write-plist }" "$me" || rc=$? ;;
+            "write-plist "*) write_plist "${s#write-plist }" "$me" "$home" || rc=$? ;;
             "$HELPER_INSTALLED trust") "$HELPER_INSTALLED" trust || rc=$? ;;
             *) bash -c "$s" || rc=$? ;;
         esac
@@ -2175,10 +2253,11 @@ cmd_install() {
         # исход: часть файлов новая, часть старая, и это не видно.
         [ "$rc" = 0 ] || die "шаг не выполнен (код $rc): $s"$'\n'"состояние установки неполное — исправьте причину и повторите"
     done
-    [ "$DRY_RUN" = 1 ] && { info "[dry-run] ничего не сделано. Плист выглядел бы так:"; plist_body "$me" | sed 's/^/    /'; return 0; }
+    [ "$DRY_RUN" = 1 ] && { info "[dry-run] ничего не сделано. Плист выглядел бы так:"; plist_body "$me" "$home" | sed 's/^/    /'; return 0; }
     ok "установлено. Проверка: ocbar doctor"
 }
-plist_body() { # user
+# Домашний каталог — из dscl, как в install: не у всех он /Users/<имя>.
+plist_body() { # user home
     cat <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -2189,12 +2268,12 @@ plist_body() { # user
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
   <key>LimitLoadToSessionType</key><string>Aqua</string>
-  <key>StandardOutPath</key><string>/Users/$1/Library/Logs/ocbar/supervisor.out</string>
-  <key>StandardErrorPath</key><string>/Users/$1/Library/Logs/ocbar/supervisor.err</string>
+  <key>StandardOutPath</key><string>${2:-/Users/$1}/Library/Logs/ocbar/supervisor.out</string>
+  <key>StandardErrorPath</key><string>${2:-/Users/$1}/Library/Logs/ocbar/supervisor.err</string>
 </dict></plist>
 PLIST
 }
-write_plist() { plist_body "$2" > "$1"; chown "$2" "$1"; chmod 644 "$1"; plutil -lint "$1" >/dev/null; }
+write_plist() { plist_body "$2" "${3:-}" > "$1"; chown "$2" "$1"; chmod 644 "$1"; plutil -lint "$1" >/dev/null; }
 
 # ------------------------------------------------------------ supervisor ----
 cmd_supervisor() {
@@ -2221,15 +2300,46 @@ cmd_supervisor() {
 }
 
 cmd_uninstall() {
-    local me="${SUDO_USER:-$(id -un)}" uid; uid=$(id -u "$me")
-    # Приложение меню-бара — от пользователя: остановить и снять автозапуск,
-    # иначе после удаления оно продолжит показывать «ocbar не найден».
-    local -a steps=("sudo -u $me launchctl bootout gui/$uid/$APP_LABEL" "rm -f /Users/$me/Library/LaunchAgents/$APP_LABEL.plist"
-                    "pkill -f ocbar.app/Contents/MacOS/ocbar-app"
-                    "launchctl bootout gui/$uid/$AGENT_LABEL" "rm -f /Users/$me/Library/LaunchAgents/$AGENT_LABEL.plist"
-                    "rm -f /etc/sudoers.d/ocbar" "rm -rf $LIBDIR $HELPER_INSTALLED $PREFIX/etc/ocbar")
+    # Без root удаление молча ничего не делало: каждый шаг падал, ошибки
+    # глотались. Теперь — отказ с подсказкой.
+    if [ "$(id -u)" != 0 ] && [ "$DRY_RUN" = 0 ]; then
+        die "нужен root: sudo $SELF_ENTRY uninstall (посмотреть шаги — ocbar uninstall --dry-run)"
+    fi
+    local me="${SUDO_USER:-$(id -un)}" home uid
+    home=$(dscl . -read "/Users/$me" NFSHomeDirectory 2>/dev/null | awk '{print $2}'); home="${home:-$HOME}"
+    uid=$(id -u "$me")
+    local q_self q_home q_helper; q_self=$(printf '%q' "$SELF_ENTRY"); q_home=$(printf '%q' "$home"); q_helper=$(printf '%q' "$HELPER_INSTALLED")
+    local -a steps=()
+    # 1. Сессия. `ocbar disconnect` от имени пользователя гасит и туннель,
+    #    и прокси-сессию (она работает от него), снимает его системный SOCKS
+    #    и желание подключения — супервизор не поднимет туннель заново.
+    steps+=("sudo -H -u $me $q_self disconnect")
+    # 2. То же напрямую хелпером, пока он есть: туннель, наши маршруты и зоны,
+    #    наш системный SOCKS. Если disconnect не справился — здесь добьём.
+    if [ -x "$HELPER_INSTALLED" ]; then
+        steps+=("$q_helper tunnel-stop")
+        local svc
+        while IFS= read -r svc; do
+            [ -n "$svc" ] && steps+=("$q_helper socks-clear $(printf '%q' "$svc")")
+        done <<< "$(socks_state_services)"
+        steps+=("$q_helper dns-clear")
+    fi
+    # 3. Приложение меню-бара и супервизор — от пользователя: остановить и
+    #    снять автозапуск, иначе приложение продолжит показывать «ocbar не
+    #    найден», а launchd — перезапускать агента. pkill — только процессы
+    #    этого пользователя.
+    steps+=("sudo -u $me launchctl bootout gui/$uid/$APP_LABEL" "rm -f $q_home/Library/LaunchAgents/$APP_LABEL.plist"
+            "pkill -u $uid -f ocbar.app/Contents/MacOS/ocbar-app"
+            "launchctl bootout gui/$uid/$AGENT_LABEL" "rm -f $q_home/Library/LaunchAgents/$AGENT_LABEL.plist")
+    # 4. Беспарольное правило и файлы. Старый каталог манифеста — только
+    #    rmdir: если в нём есть чужое, пусть остаётся.
+    steps+=("rm -f /etc/sudoers.d/ocbar" "rm -rf $LIBDIR $q_helper")
+    [ -e "$TRUST_OLD" ] && steps+=("rm -f $TRUST_OLD")
+    [ -d "$(dirname "$TRUST_OLD")" ] && steps+=("rmdir $(dirname "$TRUST_OLD")")
     local s; for s in "${steps[@]}"; do printf '  %s$ %s%s\n' "$c_dim" "$s" "$c_off"; [ "$DRY_RUN" = 1 ] || bash -c "$s" || true; done
-    [ "$DRY_RUN" = 1 ] || info "состояние в $STATE_DIR оставлено; ocbar cleanup перед удалением"
+    info "состояние в $STATE_DIR оставлено (журнал openconnect, записи сессии); удалить: sudo rm -rf $STATE_DIR"
+    [ "$DRY_RUN" = 1 ] && info "[dry-run] ничего не сделано"
+    return 0
 }
 
 # --------------------------------------------------------- самопроверка ----
