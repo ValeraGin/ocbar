@@ -308,8 +308,13 @@ head -1 ~/Library/Logs/ocbar/app.log
 ```bash
 ocbar doctor                 # раздел «Прокси-режим»: есть ли ocproxy, свободен ли порт
 brew install ocproxy
-networksetup -getsocksfirewallproxy Wi-Fi   # кто сидит на порту, если он занят
+networksetup -getsocksfirewallproxy Wi-Fi   # включён ли на сервисе чужой SOCKS (настройка системы)
+lsof -nP -iTCP:<порт> -sTCP:LISTEN          # какой процесс занял порт
 ```
+
+`networksetup` показывает только настройку сетевого сервиса — какой SOCKS
+система раздаёт программам; кто слушает порт, он не знает. Занятый порт —
+это `lsof`.
 
 Порт настраивается в профиле (`[Proxy] Port`). `10808` на этой машине занят
 сторонним SOCKS — редактор так и скажет.
