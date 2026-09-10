@@ -42,7 +42,10 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     private var lastFillURL: String?
     private var fillAttempts = 0
     private var clicks = 0
-    private let maxClicks = 3        // больше — это уже цикл, а не вход
+    // Больше — это уже цикл, а не вход. Пять, а не три: у Microsoft с кодом и
+    // «Остаться в системе?» выходит четыре нажатия. Повторного нажатия на
+    // неизменившейся странице не бывает (lastClickSignature).
+    private let maxClicks = 5
     private var totpFills = 0        // код одноразовый: подставляем РОВНО один раз
     private var stoppedReason: String?
 
@@ -300,6 +303,15 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
                 }
                 let filled = (dict["filled"] as? [String]) ?? []
                 if !filled.isEmpty { Log.info("заполнено: \(filled.joined(separator: ", "))") }
+                // Кнопку не нажали, потому что видно пустое поле из правил и
+                // заполнить его нечем, — дальше решает человек.
+                if dict["clicked"] == nil, let waiting = dict["waiting"] as? String {
+                    if self.fillAttempts == 1 || !filled.isEmpty {
+                        Log.info("поле \(waiting) пустое, заполнить нечем — форму не отправляю, её увидит человек")
+                    }
+                    self.show()
+                    return
+                }
                 if filled.contains("totp") {
                     self.totpFills += 1
                     Log.info("код TOTP подставлен один раз — если форма спросит снова, вводит человек")

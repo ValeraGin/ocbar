@@ -6,7 +6,14 @@ import Foundation
 ///     stop   <селектор>              прервать заполнение, если элемент видим
 ///     fill   username|password|totp  <селектор>
 ///     click  <селектор>              нажать — ТОЛЬКО если в этом же проходе что-то заполнили
-///     click! <селектор>              нажать безусловно (навигация: «другой способ входа»)
+///     click! <селектор>              нажать и без заполнения: экран без полей
+///                                    («Остаться в системе?», «другой способ входа»)
+///
+/// Любая кнопка, и `click!` тоже, НЕ жмётся, пока на странице видно пустое
+/// поле из правил `fill`: заполнить его нечем (пароль вводит человек, код уже
+/// потрачен) — значит, форму отправлять рано, её увидит человек. Иначе
+/// общая кнопка (у Microsoft одна на всех экранах) отправила бы пустой
+/// пароль, а несколько таких подряд блокируют учётную запись.
 ///
 /// Порядок важен: правила применяются сверху вниз. Правила `stop` идут первыми,
 /// чтобы не вводить пароль в форму, на которой уже показана ошибка.
@@ -73,6 +80,13 @@ enum Autofill {
         var body = "(function(){\n"
         body += "  var visible = function(e){ return e && e.offsetParent !== null; };\n"
         body += "  var filled = [];\n"
+        // Все поля из правил fill — и те, которым нечем заполниться: видимое
+        // пустое поле из этого списка запрещает любое нажатие.
+        let known = rules.compactMap { r -> String? in if case .fill = r.action { return r.selector }; return nil }
+        let knownJSON = String(data: (try? JSONSerialization.data(withJSONObject: known)) ?? Data("[]".utf8),
+                               encoding: .utf8) ?? "[]"
+        body += "  var known = \(knownJSON);\n"
+        body += "  var emptyKnown = function(){ for (var i = 0; i < known.length; i++) { var k; try { k = document.querySelector(known[i]); } catch (x) { continue; } if (visible(k) && !k.value) return known[i]; } return null; };\n"
         for r in rules {
             let sel = jsString(r.selector)
             switch r.action {
@@ -99,14 +113,14 @@ enum Autofill {
 
                 """
             case .click(let unconditional):
-                let cond = unconditional ? "visible(e)" : "visible(e) && filled.length > 0"
+                let cond = unconditional ? "visible(e) && !emptyKnown()" : "visible(e) && filled.length > 0 && !emptyKnown()"
                 body += "  { var e = document.querySelector(\(sel)); if (\(cond)) { e.click(); return {clicked: \(sel), filled: filled}; } }\n"
             }
         }
         // Что видит человек, если мы ничего не сделали: список видимых полей —
         // по нему в логе понятно, какую форму мы не распознали.
         body += "  var seen = []; document.querySelectorAll('input').forEach(function(i){ if (visible(i)) seen.push((i.type||'')+':'+(i.name||i.id||'')); });\n"
-        body += "  return {filled: filled, inputs: seen};\n})()"
+        body += "  return {filled: filled, inputs: seen, waiting: emptyKnown()};\n})()"
         return body
     }
 

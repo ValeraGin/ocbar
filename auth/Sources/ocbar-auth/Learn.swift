@@ -37,7 +37,8 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         ("username", "Логин",  "Щёлкните по полю, куда вводится логин"),
         ("password", "Пароль", "Щёлкните по полю пароля"),
         ("totp",     "Код",    "Щёлкните по полю одноразового кода"),
-        ("click",    "Кнопка", "Щёлкните по кнопке, которая отправляет это окно формы"),
+        ("click",    "Кнопка", "Щёлкните по кнопке, которая отправляет это окно формы; на окне без полей её будут жать всегда"),
+        ("click!",   "Всегда", "Щёлкните по кнопке, которую жать всегда: «Остаться в системе?», «Другой способ входа». Пока на странице пустое поле из правил, не жмётся и она"),
         ("stop",     "Ошибка", "Щёлкните по строке, где показывается ошибка входа — увидев её, автозаполнение остановится"),
     ]
 
@@ -100,11 +101,11 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         kindPicker = NSSegmentedControl(labels: Self.kinds.map(\.title), trackingMode: .selectOne,
                                         target: self, action: #selector(kindChanged))
         kindPicker.selectedSegment = 0
-        kindPicker.frame = NSRect(x: 10, y: webHeight + 74, width: 420, height: 24)
+        kindPicker.frame = NSRect(x: 10, y: webHeight + 74, width: 500, height: 24)
 
         modeButton = NSButton(checkboxWithTitle: "Отмечать элементы", target: self, action: #selector(modeChanged))
         modeButton.state = .on
-        modeButton.frame = NSRect(x: 440, y: webHeight + 76, width: 170, height: 20)
+        modeButton.frame = NSRect(x: 520, y: webHeight + 76, width: 170, height: 20)
         modeButton.toolTip = "Выключите, чтобы пользоваться страницей обычным образом: нажать «Далее», закрыть баннер, выбрать другой способ входа."
 
         status = NSTextField(labelWithString: Self.kinds[0].hint)
@@ -237,7 +238,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     /// приходилось добираться, выключив разметку и введя пароль руками.
     @objc private func passStep() {
         let here = marks.filter { $0.step == step }
-        guard here.contains(where: { $0.kind == "click" }) else {
+        guard here.contains(where: { $0.kind == "click" || $0.kind == "click!" }) else {
             status.stringValue = here.isEmpty
                 ? "на этом шаге ничего не отмечено: отметьте поля и кнопку, которая ведёт дальше"
                 : "отметьте кнопку, которая отправляет это окно, — без неё идти дальше нечем"
@@ -265,7 +266,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 }
                 return (m.kind, m.selector, (v?.isEmpty ?? true) ? nil : v)
             }
-        let clicks = here.filter { $0.kind == "click" }.map(\.selector)
+        let clicks = here.filter { $0.kind == "click" || $0.kind == "click!" }.map(\.selector)
         // Щелчок программы — тоже щелчок: пока разметка включена, страница
         // перехватит его и запишет как отметку. Выключаем на время нажатия.
         let js = "window.__ocbarSet(false, \(Self.jsString(kind))); " + Self.passScript(fills: fills, clicks: clicks)
@@ -387,7 +388,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         if let i = marks.firstIndex(where: { $0.selector == selector && $0.step == step }) {
             let old = marks[i]
             if kind != "auto" && old.kind != kind {
-                if kind != "click" && kind != "stop" {
+                if !["click", "click!", "stop"].contains(kind) {
                     marks.removeAll { $0.kind == kind && $0.step == step && $0.selector != selector }
                 }
                 if let j = marks.firstIndex(where: { $0.selector == selector && $0.step == step }) {
@@ -404,7 +405,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         // Логин, пароль и код — по одному на окно формы: второе правило того
         // же вида на том же окне молча перебило бы первое. На разных окнах
         // одинаковые виды законны.
-        if what != "click" && what != "stop" {
+        if !["click", "click!", "stop"].contains(what) {
             marks.removeAll { $0.kind == what && $0.step == step }
         }
         marks.append(Mark(kind: what, selector: selector, hint: hint, step: step))
@@ -437,7 +438,8 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let steps = Array(Set(marks.filter { $0.kind != "stop" }.map(\.step))).sorted()
         let groups = steps.map { s -> String in
             let items = marks.filter { $0.step == s && $0.kind != "stop" }
-                .map { "\(title(for: $0.kind))\($0.why == nil ? "" : "*")=\($0.selector)" }.joined(separator: ", ")
+                .map { "\(title(for: Self.effectiveKind($0, in: marks)))\($0.why == nil ? "" : "*")=\($0.selector)" }
+                .joined(separator: ", ")
             return (steps.count > 1 ? "шаг \(displayNumber(s)): " : "") + items
         }
         collected.stringValue = (stops + groups).joined(separator: " · ")
@@ -538,9 +540,23 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             for what in ["username", "password", "totp"] {
                 for m in marks where m.step == s && m.kind == what { out += "fill  \(what) \(m.selector)\n" }
             }
-            for m in marks where m.step == s && m.kind == "click" { out += "click \(m.selector)\n" }
+            for m in marks where m.step == s && (m.kind == "click" || m.kind == "click!") {
+                out += (effectiveKind(m, in: marks) == "click!" ? "click! " : "click ") + m.selector + "\n"
+            }
         }
         return out
+    }
+
+    /// Какой кнопкой отметка станет в правилах. Обычная кнопка жмётся, только
+    /// если на странице что-то заполнили; на окне, где не отмечено ни одного
+    /// поля, она не сработала бы никогда — значит, это экран без полей
+    /// («Остаться в системе?») и жать её надо всегда. Это следует из правил
+    /// движка, а не из догадки. Движок всё равно не нажмёт её, пока на
+    /// странице видно пустое поле из правил.
+    static func effectiveKind(_ m: Mark, in marks: [Mark]) -> String {
+        guard m.kind == "click" else { return m.kind }
+        let hasFields = marks.contains { $0.step == m.step && ["username", "password", "totp"].contains($0.kind) }
+        return hasFields ? "click" : "click!"
     }
 
     /// Скрипт «Пройти шаг»: заполнить видимые пустые поля шага и нажать
@@ -617,7 +633,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         if (!el || el.nodeType !== 1) return el;
         if (kind === 'username' || kind === 'password' || kind === 'totp')
           return el.closest('input,textarea') || el;
-        if (kind === 'click')
+        if (kind === 'click' || kind === 'click!')
           return el.closest('button,a,input,[role=button],[type=submit]') || el;
         if (kind === 'auto')
           return el.closest('input,textarea,button,a,[role=button],[type=submit]') || el;
@@ -921,6 +937,10 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
           <button type="button" id="s2done" onclick="window.__twoDone = true">Войти</button>
         </div>
       </div>
+      <div id="ms">
+        <div id="msf"><input type="text" id="msu"><input type="password" id="msp"></div>
+        <input type="submit" id="msbtn" value="Войти" onclick="window.__msClick()">
+      </div>
       <form id="pf1"><input id="pfu" autocomplete="username"><input type="password" id="pfp" autocomplete="current-password"><button id="pfb">Войти</button></form>
       <form id="pf2"><input type="text" name="username" id="u2" autocomplete="on"><input type="password" id="p2" autocomplete="on"><input type="checkbox" id="rm2"><button type="submit" id="b2">Войти</button></form>
       <form id="pf3"><input type="text" name="totp" id="t3"><input type="submit" id="s3" value="Войти"></form>
@@ -928,6 +948,18 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
       <form id="pf5" style="display:none"><input id="h5" autocomplete="username"><button id="k5">Войти</button></form>
       <form id="pf6"><input id="w6" autocomplete="username webauthn"><button type="submit" id="b6">Далее</button></form>
       <script>
+        window.__msStage = 0;
+        window.__msClick = function () {
+          var f = document.getElementById('msf');
+          if (f.style.display !== 'none') { f.style.display = 'none'; document.getElementById('msbtn').value = 'Да'; window.__msStage = 1; }
+          else { window.__msStage = 2; }
+        };
+        window.__msReset = function () {
+          document.getElementById('msf').style.display = 'block';
+          ['msu', 'msp'].forEach(function (i) { document.getElementById(i).value = ''; });
+          document.getElementById('msbtn').value = 'Войти';
+          window.__msStage = 0;
+        };
         window.__twoReset = function () {
           document.getElementById('s1').style.display = 'block';
           document.getElementById('s2').style.display = 'none';
@@ -1005,7 +1037,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                     self.failures += 1
                 }
                 pending -= 1
-                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkPrefill { self.checkClick() } } } } }
+                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkPrefill { self.checkAlways { self.checkClick() } } } } } }
             }
         }
     }
@@ -1199,6 +1231,71 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
             }
         }
         run(0)
+    }
+
+    /// Экран без полей и общая кнопка — как у Microsoft: одна и та же кнопка
+    /// «Войти», потом «Да» на «Остаться в системе?». Разметка пишет кнопку
+    /// окна без полей как click!, движок проходит оба экрана — и главное:
+    /// без пароля не нажимает ни одну кнопку, пустой пароль не уходит.
+    private func checkAlways(_ then: @escaping () -> Void) {
+        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
+            if cond { print("  [ OK ] \(name)") }
+            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
+        }
+        typealias M = LearnSession.Mark
+        let marks = [
+            M(kind: "username", selector: "input[id=msu]", hint: "", step: 1),
+            M(kind: "password", selector: "input[id=msp]", hint: "", step: 1),
+            M(kind: "click", selector: "input[id=msbtn]", hint: "", step: 1),
+            M(kind: "click", selector: "input[id=msbtn]", hint: "", step: 2),
+        ]
+        let text = LearnSession.rulesText(marks: marks, pages: [1: "ms.test/login", 2: "ms.test/kmsi"],
+                                          portal: "ms.test", formHost: nil)
+        let body = text.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
+            .split(separator: "\n").map(String.init)
+        ok("экран без полей: кнопка записана как click!",
+           body == ["# шаг 1 — ms.test/login", "fill  username input[id=msu]", "fill  password input[id=msp]",
+                    "click input[id=msbtn]", "# шаг 2 — ms.test/kmsi", "click! input[id=msbtn]"], body.joined(separator: " | "))
+        let forced = LearnSession.rulesText(
+            marks: [M(kind: "username", selector: "input[id=msu]", hint: "", step: 1),
+                    M(kind: "click!", selector: "a[id=other]", hint: "", step: 1)],
+            pages: [:], portal: "ms.test", formHost: nil)
+        ok("вид «Всегда» остаётся click! и на окне с полями", forced.contains("click! a[id=other]"))
+
+        let rules = Autofill.parse(text: text)
+        let full = Autofill.script(rules: rules, creds: Credentials(username: "alice", password: "pw", totpSecret: nil), totpCode: nil)
+        let noPassword = Autofill.script(rules: rules, creds: Credentials(username: "alice", password: nil, totpSecret: nil), totpCode: nil)
+        let pass = LearnSession.passScript(fills: [], clicks: ["input[id=msbtn]"])
+        eval("window.__ocbarSet(false, 'auto'); window.__msReset(); 'ok'") { _ in
+            self.eval(full) { _ in
+                self.eval(full) { _ in
+                    self.eval("window.__msStage") { st in
+                        ok("движок: «Войти», затем «Да» на экране без полей", (st as? Int) == 2, "стадия \(st ?? "?")")
+                        self.eval("window.__msReset(); 'ok'") { _ in
+                            self.eval(noPassword) { r in
+                                let d = r as? [String: Any] ?? [:]
+                                self.eval(noPassword) { _ in
+                                    self.eval("[window.__msStage, document.getElementById('msu').value]") { v in
+                                        let a = v as? [Any] ?? []
+                                        ok("без пароля ни одна кнопка не нажата, пустой пароль не ушёл",
+                                           a.count == 2 && (a[0] as? Int) == 0 && (a[1] as? String) == "alice"
+                                           && d["clicked"] == nil && (d["waiting"] as? String) == "input[id=msp]", "\(a) \(d)")
+                                        self.eval("window.__msReset(); window.__msClick(); 'ok'") { _ in
+                                            self.eval(pass) { _ in
+                                                self.eval("window.__msStage") { st2 in
+                                                    ok("«Пройти шаг» на экране без полей жмёт кнопку", (st2 as? Int) == 2, "стадия \(st2 ?? "?")")
+                                                    then()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func checkClick() {
