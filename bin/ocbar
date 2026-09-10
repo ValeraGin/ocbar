@@ -1105,7 +1105,7 @@ do_connect() { # профиль уже загружен
             switch=1 ;;
         starting)  die "openconnect уже запускается — подожди или ocbar disconnect" ;;
     esac
-    [ "${P_KIND:-tunnel}" = proxy ] && proxy_precheck
+    if [ "${P_KIND:-tunnel}" = proxy ]; then proxy_precheck "$switch"; fi
     # Хвосты от прошлой сессии — убрать до подключения.
     if [ "$switch" = 0 ] && { [ "$(env_get STATE)" = connected ] || [ -s "$ROUTES_STATE" ] || [ "$(manifest_zones | grep -c .)" -gt 0 ]; }; then
         info "остались следы прошлой сессии — убираю"
@@ -1143,6 +1143,12 @@ do_connect() { # профиль уже загружен
         info "подключён профиль [$cur] — отключаю, чтобы подключить [$P_NAME]"
         log "смена профиля: $cur → $P_NAME"
         session_stop
+        # Новый ocproxy сядет на тот же порт — ждём, пока старый его отпустит.
+        if [ "${P_KIND:-tunnel}" = proxy ]; then
+            local w=0
+            while port_open "$P_PROXY_PORT" && [ $w -lt 10 ]; do sleep 0.5; w=$((w+1)); done
+            if port_open "$P_PROXY_PORT"; then die "порт 127.0.0.1:$P_PROXY_PORT не освободился после отключения [$cur]"; fi
+        fi
     fi
     if [ "${P_KIND:-tunnel}" = proxy ]; then
         proxy_start "$connect_url" "$hash" "$token"
@@ -1218,15 +1224,20 @@ session_stop() {
 # поднимает на них локальный SOCKS (docs/09-proxy-mode.md). Ни интерфейса,
 # ни маршрутов, ни /etc/resolver — поэтому хелпер не участвует, всё идёт от
 # пользователя, а openconnect берётся из Homebrew.
-proxy_precheck() {
+proxy_precheck() { # [1 — переключение с живой сессии]
     if ! ocproxy_bin >/dev/null; then
-        [ "$DRY_RUN" = 1 ] && { warn "ocproxy" "не найден — brew install ocproxy" >&2; return 0; }
-        die "прокси-режим: нет ocproxy — brew install ocproxy (в формулу он не входит: нужен только этому режиму)"
+        [ "$DRY_RUN" = 1 ] || die "прокси-режим: нет ocproxy — brew install ocproxy (в формулу он не входит: нужен только этому режиму)"
+        warn "ocproxy" "не найден — brew install ocproxy" >&2
     fi
     openconnect_bin >/dev/null || die "нет openconnect — brew install openconnect"
     if port_open "$P_PROXY_PORT"; then
+        # Порт держит наша же прокси-сессия, которую переключение сейчас
+        # остановит, — это не помеха. Раньше проверка шла до остановки старой
+        # сессии, и два прокси-профиля на одном порту не переключались вовсе.
+        if [ "${1:-0}" = 1 ] && proxy_alive && [ "$(proxy_port)" = "$P_PROXY_PORT" ]; then return 0; fi
         die "порт 127.0.0.1:$P_PROXY_PORT уже занят (чужой SOCKS? ocbar doctor покажет) — укажите другой в профиле, [Proxy] Port"
     fi
+    return 0
 }
 
 proxy_start() { # url servercert cookie
@@ -1291,16 +1302,37 @@ cmd_proxy_tun() {
         printf 'STATE=connected\nIP4=%s\nDNS=%s\nGATEWAY=%s\nMTU=%s\nDEF_DOMAIN=%s\nSINCE=%s\n' \
             "${INTERNAL_IP4_ADDRESS:-}" "${INTERNAL_IP4_DNS:-}" "${VPNGATEWAY:-}" \
             "${INTERNAL_IP4_MTU:-}" "${CISCO_DEF_DOMAIN:-}" "$(date +%s)"
+        # Номер будущего ocproxy: exec заменит этот процесс, pid останется.
+        # По нему уборка гасит только свой ocproxy, а не любой на этом порту.
+        printf 'OCPROXY_PID=%s\n' "$$"
         [ -f "$envf" ] && grep -E '^(PORT|URL|STARTED|PROFILE|SYS_PROXY)=' "$envf" || true
     } > "$envf.tmp" && mv "$envf.tmp" "$envf"
     exec "$ocp" -D "$port"
 }
 
+# ocproxy этой сессии: номер записал _proxy-tun перед exec. Сверяем имя —
+# номер переживает перезагрузку и достаётся кому попало. Искать по командной
+# строке нельзя: так гасился любой «ocproxy -D <порт>» в системе, в том
+# числе чужой, и даже из самопроверки.
+our_ocproxy_pid() {
+    local p; p=$(penv_get OCPROXY_PID)
+    case "$p" in ''|*[!0-9]*) return 0 ;; esac
+    case "$(ps -p "$p" -o comm= 2>/dev/null)" in *ocproxy) printf '%s' "$p" ;; esac
+    return 0
+}
+
 proxy_stop() {
-    local p port; p=$(proxy_pid); port=$(proxy_port)
+    local p; p=$(proxy_pid)
     # Сначала снять системный SOCKS: иначе между остановкой и снятием система
     # смотрит в мёртвый порт.
     socks_clear_all
+    if [ "$DRY_RUN" = 1 ]; then
+        # --dry-run процессы не гасит и состояние не трогает — только говорит.
+        if proxy_alive; then info "[dry-run] kill -INT $p (openconnect прокси-режима)"; fi
+        local od; od=$(our_ocproxy_pid)
+        if [ -n "$od" ]; then info "[dry-run] kill $od (ocproxy этой сессии)"; fi
+        return 0
+    fi
     if proxy_alive; then
         info "останавливаю openconnect прокси-режима (pid $p)"
         kill -INT "$p" 2>/dev/null || true
@@ -1309,12 +1341,16 @@ proxy_stop() {
         if ps -p "$p" >/dev/null 2>&1; then info "не вышел за 10 с — SIGKILL"; kill -KILL "$p" 2>/dev/null || true; fi
     fi
     # ocproxy — дочерний процесс openconnect и по закрытию VPNFD выходит сам.
-    # Если не вышел — это наш SOCKS на нашем порту, гасим.
-    local o; o=$(pgrep -f "ocproxy -D $port\$" 2>/dev/null | head -1 || true)
-    if [ -n "$o" ]; then sleep 1; pgrep -f "ocproxy -D $port\$" >/dev/null 2>&1 && { kill "$o" 2>/dev/null || true; }; fi
+    # Не вышел — гасим, но только свой.
+    local o; o=$(our_ocproxy_pid)
+    if [ -n "$o" ]; then sleep 1; o=$(our_ocproxy_pid); fi
+    if [ -n "$o" ]; then kill "$o" 2>/dev/null || true; sleep 0.5; fi
     rm -f "$PROXY_PID" 2>/dev/null || true
     if [ -f "$PROXY_ENV" ]; then
-        { printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)"; grep -E '^(PORT|URL|STARTED|PROFILE|SYS_PROXY)=' "$PROXY_ENV" || true; } > "$PROXY_ENV.tmp"
+        # Номер ocproxy остаётся в файле, только если процесс ещё жив.
+        local keep='^(PORT|URL|STARTED|PROFILE|SYS_PROXY)='
+        if [ -n "$(our_ocproxy_pid)" ]; then keep='^(PORT|URL|STARTED|PROFILE|SYS_PROXY|OCPROXY_PID)='; fi
+        { printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)"; grep -E "$keep" "$PROXY_ENV" || true; } > "$PROXY_ENV.tmp"
         mv "$PROXY_ENV.tmp" "$PROXY_ENV"
     fi
     log "прокси остановлен"
@@ -1389,13 +1425,21 @@ socks_ensure() { [ "$(penv_get SYS_PROXY)" = on ] && socks_apply >/dev/null || t
 # Следы прокси-сессии без живого процесса: файл состояния, осиротевший ocproxy.
 proxy_cleanup() {
     proxy_alive && return 0
-    local did=0 port; port=$(proxy_port)
     if [ -n "$(proxy_pid)" ] || [ "$(penv_get STATE)" = connected ] || [ "$(penv_get STATE)" = starting ]; then
-        info "прокси: процесса нет, а состояние говорит $(penv_get STATE) — помечаю отключённым"
-        proxy_stop >/dev/null; did=1
+        if [ "$DRY_RUN" = 1 ]; then
+            info "[dry-run] прокси: процесса нет, а состояние говорит $(penv_get STATE) — пометил бы отключённым"
+            proxy_stop
+        else
+            info "прокси: процесса нет, а состояние говорит $(penv_get STATE) — помечаю отключённым"
+            proxy_stop >/dev/null
+        fi
+        return 0
     fi
-    local o; o=$(pgrep -f "ocproxy -D $port\$" 2>/dev/null | head -1 || true)
-    [ -n "$o" ] && { info "осиротевший ocproxy на порту $port (pid $o) — гашу"; kill "$o" 2>/dev/null || true; did=1; }
+    local o; o=$(our_ocproxy_pid)
+    if [ -n "$o" ]; then
+        if [ "$DRY_RUN" = 1 ]; then info "[dry-run] kill $o (осиротевший ocproxy этой сессии)"
+        else info "осиротевший ocproxy этой сессии (pid $o) — гашу"; kill "$o" 2>/dev/null || true; fi
+    fi
     return 0
 }
 
