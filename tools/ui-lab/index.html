@@ -55,6 +55,20 @@
   .tog.on { background: var(--ok); }
   .tog i { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
   .tog.on i { left: auto; right: 2px; }
+  .sub { font-size: 11px; color: var(--tx2); }
+  .ttl .sw { margin-left: auto; }
+  .sw { width: 30px; height: 17px; border-radius: 20px; position: relative; background: var(--line2); flex: none; }
+  .sw.on { background: var(--ok); }
+  .sw i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; }
+  .sw.on i { left: auto; right: 2px; }
+  .row .r { margin-left: auto; font-size: 12px; color: var(--tx3); }
+  .row .r.m { font: 11.5px var(--mono); }
+  .banner { display: flex; gap: 6px; align-items: center; margin: 8px 0 0; padding: 5px 8px; border-radius: 6px;
+            background: var(--warnbg); color: var(--warn); font-size: 11.5px; }
+  .banner u { margin-left: auto; cursor: default; }
+  .pl { padding: 4px 13px 4px 30px; font-size: 12px; position: relative; }
+  .pl small { display: block; font-size: 10.5px; color: var(--tx3); }
+  .pl .ck { position: absolute; left: 13px; top: 4px; }
   svg.spark { width: 100%; height: 42px; display: block; margin: 8px 0 2px; }
   .legend { display: flex; gap: 10px; font-size: 11px; color: var(--tx3); }
   .legend span:last-child { margin-left: auto; }
@@ -74,6 +88,7 @@
     <button data-t="dark" aria-pressed="false">тёмная</button>
   </div>
   <label class="lbl"><input type="checkbox" id="live" checked> живой график</label>
+  <label class="lbl"><input type="checkbox" id="nonotify"> уведомления выключены</label>
   <span class="lbl" id="dataSrc" style="margin-left:auto"></span>
 </header>
 
@@ -85,22 +100,32 @@
 <script>
 const DEMO = {
   profile: "Основной", tundev: "utun8", ip: "10.20.30.40", gateway: "198.51.100.7",
-  mtu: 1294, dns: "192.0.2.10 +1", since: "2:14", rx: "7,2 ГБ", tx: "155 МБ",
+  mtu: 1294, dns: "192.0.2.10 +1", since: "2ч 14м", rx: "7,2 ГБ", tx: "155 МБ",
   latency: "41 мс", health: "wiki отвечает",
   routes: [["10.0.0.0/8", true], ["172.16.0.0/12", true], ["11.0.0.0/8", false]],
-  zones: 6
+  zones: 6, zonesOn: 5,
+  profiles: [["Основной", "Любые устройства"], ["Из офиса", "Изнутри сети"], ["Прокси", "SOCKS 127.0.0.1:11080"]]
 };
 let D = DEMO;
 
+// Как в приложении (D62): в шапке всегда профиль, под ним состояние и время,
+// справа выключатель; график — только там, где есть трафик.
 const STATES = {
-  connected: { label: "подключено", dot: "var(--ok)", title: d => d.profile, spark: true },
-  paused:    { label: "пауза",      dot: "var(--warn)", title: () => "На паузе", spark: false,
-               note: "Маршруты и зоны сняты. Сессия сохранена — возврат без входа." },
-  needlogin: { label: "нужен вход", dot: "var(--bad)", title: () => "Нужен вход", spark: false,
-               note: "Сессия истекла, молча войти не удалось. Автопопытки остановлены." },
-  lost:      { label: "связь пропала", dot: "var(--warn)", title: d => d.profile, spark: true,
-               note: "Восстанавливаю сессию… 18 с из 100. Вход не потребуется." },
-  off:       { label: "отключено",  dot: "var(--line2)", title: () => "Отключён", spark: false }
+  connected: { label: "подключено", dot: "var(--ok)", sub: "Подключено", time: true, spark: true, sw: true,
+               rows: ["Приостановить|⌥⌘P"] },
+  paused:    { label: "пауза", dot: "var(--warn)", sub: "На паузе", time: true, spark: false, sw: true,
+               note: "Маршруты и зоны сняты, туннель и сессия живы — возврат без входа.",
+               rows: ["*Возобновить|⌥⌘P"] },
+  lost:      { label: "связь пропала", dot: "var(--warn)", sub: "Нет связи", time: true, spark: true, sw: true,
+               note: "Связи нет 18 с. openconnect восстанавливает сессию сам — вход не потребуется.",
+               rows: ["Приостановить|⌥⌘P"] },
+  starting:  { label: "подключается", dot: "var(--warn)", sub: "Подключается…", spark: false, sw: true,
+               rows: ["Отменить подключение"] },
+  needlogin: { label: "нужен вход", dot: "var(--bad)", sub: "Нужен вход", spark: false, sw: false,
+               note: "Сессия истекла, молча войти не удалось. Автоподключение остановлено — решение за вами.",
+               rows: ["*Войти", "Войти и запомнить вход…", "Не подключаться"] },
+  off:       { label: "отключено", dot: "var(--line2)", sub: "Отключён", spark: false, sw: false,
+               rows: ["Подключить и запомнить вход…"] }
 };
 let state = "connected";
 
@@ -116,30 +141,50 @@ function spark(seed, active) {
     <polyline points="${pts2.join(' ')}" fill="none" stroke="var(--tx3)" stroke-width="1"/></svg>`;
 }
 
-function menuCompact(s, seed) {
-  const st = STATES[s], d = D;
-  return `<div class="menu"><div class="hd">
+function head(st, d, seed, active) {
+  const noNotify = document.getElementById("nonotify").checked;
+  return `<div class="hd">
     <div class="ttl"><span class="dot" style="background:${st.dot}"></span>
-      <span class="nm">${st.title(d)}</span>
-      ${s === "connected" || s === "lost" ? `<span class="tm">${d.since}</span>` : ""}</div>
+      <div><div class="nm">${d.profile}</div>
+      <div class="sub">${st.sub}${st.time ? " · " + d.since : ""}</div></div>
+      <span class="sw ${st.sw ? "on" : ""}" title="${st.sw ? "Отключить" : "Подключить"}"><i></i></span></div>
     ${st.note ? `<div class="note">${st.note}</div>` : ""}
-    ${st.spark ? spark(seed, s === "connected") +
+    ${noNotify ? `<div class="banner">Уведомления выключены<u>Разрешить</u></div>` : ""}
+    ${st.spark ? spark(seed, active) +
       `<div class="legend"><span>↓ 1,2 МБ/с</span><span>↑ 84 КБ/с</span><span>за минуту</span></div>` : ""}
-    </div><div class="sep"></div>
-    ${s === "connected" ? `<div class="row mut">Приостановить</div><div class="row mut">Отключить</div>` : ""}
-    ${s === "paused" ? `<div class="row act">Возобновить</div><div class="row mut">Отключить совсем</div>` : ""}
-    ${s === "needlogin" ? `<div class="row act">Войти</div>` : ""}
-    ${s === "lost" ? `<div class="row mut">Отключить</div>` : ""}
-    ${s === "off" ? `<div class="row act">Подключить</div>` : ""}
-    <div class="sep"></div><div class="row mut">Подробнее</div></div>`;
+    </div>`;
 }
 
-function menuDetails() {
+function row(text) {
+  const [t, r] = text.split("|"), act = t.startsWith("*");
+  return `<div class="row ${act ? "act" : "mut"}"${act ? ' style="font-weight:500"' : ""}>${act ? t.slice(1) : t}${r ? `<span class="r m">${r}</span>` : ""}</div>`;
+}
+
+function netsCount(d) {
+  return `${d.routes.filter(r => r[1]).length}/${d.routes.length} · ${d.zonesOn ?? d.zones}/${d.zones}`;
+}
+
+function tail() {
+  return `<div class="sep"></div>${row("Настройки…|⌘,")}${row("Диагностика и журналы…")}${row("Выйти|⌘Q")}`;
+}
+
+function menuCompact(s, seed) {
+  const st = STATES[s], d = D, up = ["connected", "paused", "lost"].includes(s);
+  return `<div class="menu">${head(st, d, seed, s === "connected")}<div class="sep"></div>
+    ${st.rows.map(row).join("")}
+    <div class="row mut">Профиль<span class="r">${d.profile} ›</span></div>
+    ${up ? `<div class="sep"></div><div class="row mut">Сети и DNS<span class="r m">${netsCount(d)} ⌄</span></div>` : ""}
+    ${tail()}</div>`;
+}
+
+function menuDetails(seed) {
   const d = D;
-  return `<div class="menu"><div class="hd" style="padding-bottom:4px">
-    <div class="ttl"><span class="dot" style="background:var(--ok)"></span>
-    <span class="nm">${d.profile}</span><span class="tm">${d.since}</span></div></div>
-    <div style="padding:4px 0 8px">
+  return `<div class="menu">${head(STATES.connected, d, seed, true)}<div class="sep"></div>
+    ${row("Приостановить|⌥⌘P")}
+    <div class="row mut">Профиль<span class="r">${d.profile} ›</span></div>
+    <div class="sep"></div>
+    <div class="row mut">Сети и DNS<span class="r m">${netsCount(d)} ⌃</span></div>
+    <div style="padding:0 0 6px">
       <div class="kv"><b>Адрес в туннеле</b><span>${d.ip}</span></div>
       <div class="kv"><b>Шлюз</b><span>${d.gateway}</span></div>
       <div class="kv"><b>MTU</b><span>${d.mtu}</span></div>
@@ -148,18 +193,32 @@ function menuDetails() {
       <div class="kv"><b>Задержка</b><span>${d.latency}</span></div>
     </div><div class="sep"></div>
     <div class="row mut" style="font-size:12px">Сети в туннеле
-      <span class="m" style="margin-left:auto;color:var(--tx3)">${d.routes.filter(r=>r[1]).length} из ${d.routes.length}</span></div>
+      <span class="r m">${d.routes.filter(r=>r[1]).length} из ${d.routes.length}</span></div>
     ${d.routes.map(([n, on]) => `<div class="rt"><span style="color:${on ? "var(--tx)" : "var(--tx3)"}">${n}</span>
       <span class="tog ${on ? "on" : ""}"><i></i></span></div>`).join("")}
     <div class="sep"></div>
-    <div class="row mut" style="font-size:12px">Зоны DNS<span class="m" style="margin-left:auto">${d.zones}</span></div></div>`;
+    <div class="row mut" style="font-size:12px">Зоны DNS<span class="r m">${d.zonesOn ?? d.zones} из ${d.zones}</span></div>
+    ${tail()}</div>`;
+}
+
+// Список профилей раскрыт: порядок тот, что расставлен перетаскиванием в
+// окне профиля (profiles.order, D63).
+function menuProfiles(seed) {
+  const d = D, list = d.profiles || DEMO.profiles;
+  return `<div class="menu">${head(STATES.connected, d, seed, true)}<div class="sep"></div>
+    ${row("Приостановить|⌥⌘P")}
+    <div class="row mut">Профиль<span class="r">${d.profile} ⌄</span></div>
+    ${list.map(([n, ds]) => `<div class="pl">${n === d.profile ? '<span class="ck">✓</span>' : ""}${n}<small>${ds}</small></div>`).join("")}
+    <div class="sep"></div><div class="row mut">Сети и DNS<span class="r m">${netsCount(d)} ⌄</span></div>
+    ${tail()}</div>`;
 }
 
 function render() {
   const seed = Date.now() / 900;
   document.getElementById("stages").innerHTML =
     `<div class="stage"><h2>меню — свёрнуто</h2>${menuCompact(state, seed)}</div>` +
-    `<div class="stage"><h2>меню — подробности</h2>${menuDetails()}</div>` +
+    `<div class="stage"><h2>меню — сети и DNS</h2>${menuDetails(seed)}</div>` +
+    `<div class="stage"><h2>меню — профили</h2>${menuProfiles(seed)}</div>` +
     `<div class="stage"><h2>все состояния подряд</h2>` +
       Object.keys(STATES).map((s, i) => menuCompact(s, seed + i)).join("") + `</div>`;
 }
@@ -179,6 +238,7 @@ document.getElementById("themes").onclick = e => {
   [...e.currentTarget.children].forEach(x => x.setAttribute("aria-pressed", x === b));
 };
 let timer = setInterval(() => { if (document.getElementById("live").checked) render(); }, 900);
+document.getElementById("nonotify").onchange = render;
 
 fetch("state.json").then(r => r.ok ? r.json() : null).then(j => {
   if (!j) throw 0;
