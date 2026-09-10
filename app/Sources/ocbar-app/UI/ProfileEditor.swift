@@ -122,6 +122,10 @@ struct ProfileEditorView: View {
                         }
                         .onChange(of: doc.totp) { _ in touched() }
                         if doc.totp == "command" { field("Команда", $doc.totpCommand, hint: "например: op item get VPN --otp") }
+                        if ["auto", "keychain"].contains(doc.totp) || doc.totpAlgorithm != "SHA1"
+                            || doc.totpDigits != "6" || doc.totpPeriod != "30" {
+                            totpParamsRow
+                        }
                         if doc.totp == "keepassxc" || doc.password == "keepassxc" || !doc.keepassEntry.isEmpty {
                             field("Запись KeePassXC", $doc.keepassEntry, hint: "Группа/Запись")
                             field("База KeePassXC", $doc.keepassDb)
@@ -241,6 +245,30 @@ struct ProfileEditorView: View {
                     learnResult = "не получилось: " + text
                 }
             }
+        }
+    }
+
+    // Параметры кода для секрета в связке ключей: ocbar пишет их сам при
+    // импорте QR и после «Запомнить, как я вхожу»; руками — редко.
+    private var totpParamsRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Параметры кода").font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                .frame(width: 150, alignment: .trailing)
+            Picker("", selection: $doc.totpAlgorithm) {
+                ForEach(ProfileDoc.totpAlgorithms, id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden().frame(width: 96)
+            .onChange(of: doc.totpAlgorithm) { _ in touched() }
+            Picker("", selection: $doc.totpDigits) {
+                ForEach(["6", "7", "8"], id: \.self) { Text("\($0) цифр").tag($0) }
+            }
+            .labelsHidden().frame(width: 96)
+            .onChange(of: doc.totpDigits) { _ in touched() }
+            TextField("30", text: $doc.totpPeriod)
+                .textFieldStyle(.roundedBorder).frame(width: 48)
+                .onChange(of: doc.totpPeriod) { _ in touched() }
+            Text("с · обычно SHA1, 6, 30").font(.system(size: 10)).foregroundStyle(Palette.tertiary)
+            Spacer()
         }
     }
 

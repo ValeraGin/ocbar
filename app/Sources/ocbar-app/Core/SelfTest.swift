@@ -104,6 +104,20 @@ enum SelfTest {
         check("Totp = sms предупреждает о молчаливом входе",
               ProfileCheck.check(sms).contains { $0.level == .warning && $0.text.contains("SMS") })
         check("Totp = sms переживает запись", ProfileDoc.parse(sms.render(), fileName: "s").totp == "sms")
+        let tp = ProfileDoc.parse("[Connection]\nName = p\nUrl = vpn.example.test/p\n\n[Auth]\nTotp = keychain\nTotpAlgorithm = sha256\nTotpDigits = 8\nTotpPeriod = 60\n", fileName: "p")
+        check("параметры кода: разобраны", tp.totpAlgorithm == "SHA256" && tp.totpDigits == "8" && tp.totpPeriod == "60")
+        let tpAgain = ProfileDoc.parse(tp.render(), fileName: "p")
+        check("параметры кода: переживают запись",
+              tpAgain.totpAlgorithm == "SHA256" && tpAgain.totpDigits == "8" && tpAgain.totpPeriod == "60", tp.render())
+        check("параметры кода по умолчанию в файл не пишутся", !doc.render().contains("TotpAlgorithm"))
+        var badDigits = tp
+        badDigits.totpDigits = "9"
+        check("параметры кода: 9 цифр — ошибка", ProfileCheck.check(badDigits).contains { $0.level == .error && $0.text.contains("цифр") })
+        var kpCustom = tp
+        kpCustom.totp = "keepassxc"
+        kpCustom.keepassEntry = "Группа/Запись"
+        check("параметры кода при KeePassXC — предупреждение",
+              ProfileCheck.check(kpCustom).contains { $0.level == .warning && $0.text.contains("готовый код") })
         check("режим по умолчанию — туннель", doc.mode == "tunnel")
         check("порт SOCKS", doc.proxyPort == "11080")
         check("галочка системного прокси", doc.systemProxy)

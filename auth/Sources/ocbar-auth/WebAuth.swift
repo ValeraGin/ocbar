@@ -21,6 +21,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         var creds = Credentials()
         var totpSecret: String? = nil     // код считаем в момент заполнения, не заранее
         var totpCode: String? = nil       // если код пришёл готовым (из внешней базы)
+        var totpParams = TOTPParams()     // алгоритм, цифры, период секрета — из профиля
         var autofill = true
         var cookieDomain: String? = nil   // домен шлюза: cookie принимаем только оттуда
         var fillHosts: [String] = []      // где разрешено заполнять форму; пусто = везде
@@ -333,7 +334,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             var code: String? = nil
             if self.totpFills == 0 {
                 if let secret = self.opts.totpSecret, !secret.isEmpty {
-                    code = TOTP.code(secretBase32: secret)
+                    code = TOTP.code(secretBase32: secret, params: self.opts.totpParams)
                 } else {
                     code = self.opts.totpCode
                 }

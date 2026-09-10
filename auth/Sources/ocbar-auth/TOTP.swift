@@ -2,15 +2,22 @@ import Foundation
 import CryptoKit
 
 enum TOTP {
-    /// RFC 6238, HMAC-SHA1, 6 цифр, шаг 30 секунд — то, что используют
-    /// Google Authenticator и корпоративные IdP.
+    /// RFC 6238. По умолчанию HMAC-SHA1, 6 цифр, шаг 30 секунд — то, что
+    /// используют Google Authenticator и большинство IdP; стандарт допускает
+    /// ещё SHA256 и SHA512, другое число цифр и другой период.
     static func code(secretBase32: String, at date: Date = Date(),
-                     digits: Int = 6, period: TimeInterval = 30) -> String? {
-        guard let key = base32Decode(secretBase32) else { return nil }
+                     digits: Int = 6, period: TimeInterval = 30, algorithm: String = "SHA1") -> String? {
+        guard let key = base32Decode(secretBase32), (1...9).contains(digits), period > 0 else { return nil }
         var counter = UInt64(date.timeIntervalSince1970 / period).bigEndian
         let msg = Data(bytes: &counter, count: 8)
-        let mac = HMAC<Insecure.SHA1>.authenticationCode(for: msg, using: SymmetricKey(data: key))
-        let h = Array(mac)
+        let k = SymmetricKey(data: key)
+        let h: [UInt8]
+        switch algorithm.uppercased() {
+        case "SHA1", "": h = Array(HMAC<Insecure.SHA1>.authenticationCode(for: msg, using: k))
+        case "SHA256": h = Array(HMAC<SHA256>.authenticationCode(for: msg, using: k))
+        case "SHA512": h = Array(HMAC<SHA512>.authenticationCode(for: msg, using: k))
+        default: return nil
+        }
         let offset = Int(h[h.count - 1] & 0x0f)
         let bin = (UInt32(h[offset] & 0x7f) << 24)
                 | (UInt32(h[offset + 1]) << 16)
@@ -35,6 +42,61 @@ enum TOTP {
         }
         return out.isEmpty ? nil : out
     }
+}
+
+/// Параметры кода для секрета (RFC 6238): алгоритм, число цифр, период. В
+/// связке ключей лежит только секрет — параметры живут в профиле
+/// (TotpAlgorithm, TotpDigits, TotpPeriod) и приходят через окружение.
+struct TOTPParams: Equatable {
+    var algorithm = "SHA1"
+    var digits = 6
+    var period = 30
+    static let algorithms = ["SHA1", "SHA256", "SHA512"]
+
+    var isDefault: Bool { self == TOTPParams() }
+    var isSupported: Bool { Self.algorithms.contains(algorithm) && (6...8).contains(digits) && (10...300).contains(period) }
+    var label: String { "\(algorithm), \(digits) цифр, \(period) с" }
+
+    static func fromEnvironment() -> TOTPParams {
+        let e = ProcessInfo.processInfo.environment
+        var p = TOTPParams()
+        if let a = e["OCBAR_TOTP_ALGORITHM"], !a.isEmpty { p.algorithm = a.uppercased() }
+        if let d = e["OCBAR_TOTP_DIGITS"].flatMap({ Int($0) }) { p.digits = d }
+        if let s = e["OCBAR_TOTP_PERIOD"].flatMap({ Int($0) }) { p.period = s }
+        return p
+    }
+}
+
+extension TOTP {
+    static func code(secretBase32: String, at date: Date = Date(), params p: TOTPParams) -> String? {
+        guard p.isSupported else { return nil }
+        return code(secretBase32: secretBase32, at: date, digits: p.digits, period: TimeInterval(p.period), algorithm: p.algorithm)
+    }
+
+    /// Контрольные векторы RFC 6238, приложение B, для HMAC-SHA256 и
+    /// HMAC-SHA512 (8 цифр). Сверены независимым расчётом 2026-09-10.
+    static func selfTestAlgorithms() -> [(alg: String, t: Int, want: String, got: String, ok: Bool)] {
+        let seeds = ["SHA256": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA",
+                     "SHA512": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA"]
+        let vectors: [(Int, String, String)] = [
+            (59, "46119246", "90693936"), (1111111109, "68084774", "25091201"),
+            (1111111111, "67062674", "99943326"), (1234567890, "91819424", "93441116"),
+            (2000000000, "90698825", "38618901"), (20000000000, "77737706", "47863826"),
+        ]
+        var out: [(alg: String, t: Int, want: String, got: String, ok: Bool)] = []
+        for (t, w256, w512) in vectors {
+            for (alg, want) in [("SHA256", w256), ("SHA512", w512)] {
+                let got = code(secretBase32: seeds[alg]!, at: Date(timeIntervalSince1970: TimeInterval(t)),
+                               digits: 8, algorithm: alg) ?? "?"
+                out.append((alg, t, want, got, got == want))
+            }
+        }
+        return out
+    }
+}
+
+extension QRImport.Entry {
+    var params: TOTPParams { TOTPParams(algorithm: algorithm, digits: digits, period: period) }
 }
 
 extension TOTP {

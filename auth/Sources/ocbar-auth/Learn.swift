@@ -303,7 +303,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     /// Код в момент нажатия: секрет из связки ключей, команда клиента
     /// (KeePassXC или свой источник) или готовый код, если дали только его.
     private func currentCode() -> String? {
-        if let s = totpSecret, !s.isEmpty { return TOTP.code(secretBase32: s) }
+        if let s = totpSecret, !s.isEmpty { return TOTP.code(secretBase32: s, params: TOTPParams.fromEnvironment()) }
         if let cmd = totpCommand, !cmd.isEmpty {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/sh")
@@ -1349,6 +1349,24 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
            TeachDialog.secretMatches("gezd gnbv gy3t qojq gezd gnbv gy3t qojq", code: c0, at: t0))
         ok("секрет TOTP: чужой секрет — отвергнут", !TeachDialog.secretMatches("JBSWY3DPEHPK3PXP", code: c0, at: t0))
         ok("секрет TOTP: код трёхминутной давности — отвергнут", !TeachDialog.secretMatches(rfc, code: c0, at: t0.addingTimeInterval(180)))
+        // Параметры кода (RFC 6238): запись со своими параметрами из ссылки,
+        // параметры голого секрета — по введённому коду, HOTP — нет.
+        let s256 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA"
+        let s512 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA"
+        let p256 = TOTPParams(algorithm: "SHA256", digits: 8, period: 60)
+        let c256 = TOTP.code(secretBase32: s256, at: t0, params: p256) ?? ""
+        if let e = (try? QRImport.parse("otpauth://totp/VPN:alice?secret=\(s256)&algorithm=SHA256&digits=8&period=60"))?.first {
+            ok("параметры: ссылка otpauth с SHA256, 8 цифр, 60 с — запись подходит",
+               TeachDialog.entryMatches(e, code: c256, at: t0.addingTimeInterval(40)), e.params.label)
+        } else { ok("параметры: ссылка otpauth разобрана", false, "") }
+        let p512 = TOTPParams(algorithm: "SHA512", digits: 8, period: 60)
+        let c512 = TOTP.code(secretBase32: s512, at: t0, params: p512) ?? ""
+        let found = TeachDialog.matchParams(s512, code: c512, at: t0)
+        ok("параметры: у голого секрета определены по введённому коду", found == p512, found?.label ?? "не определены")
+        if let h = (try? QRImport.parse("otpauth://hotp/VPN:alice?secret=\(rfc)&counter=1"))?.first {
+            ok("параметры: HOTP не принимается", !TeachDialog.entryMatches(h, code: c0, at: t0), "")
+        }
+        ok("параметры: MD5 не поддерживается", !TOTPParams(algorithm: "MD5").isSupported, "")
         let line = KeychainWriter.line(service: "ru.ocbar.client", account: "alice", label: "ocbar-VPN-password", secret: "a b\"") ?? ""
         ok("связка: значение идёт шестнадцатеричной строкой, не в открытом виде",
            line.contains("-X 61206222") && !line.contains("a b"), line)

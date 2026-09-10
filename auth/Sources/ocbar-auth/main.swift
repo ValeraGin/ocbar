@@ -40,6 +40,7 @@ struct Args {
     var learnSelfTest = false
     var learnProbe = false
     var teachOut: String?
+    var printParams = false
     var teachDialogShot: String?
     var cameraWindowShot: String?
     var teachOn = false
@@ -87,6 +88,8 @@ func usage() -> String {
       --verbose             подробный лог в stderr
 
     Окружение: OCBAR_USERNAME, OCBAR_PASSWORD, OCBAR_TOTP_SECRET | OCBAR_TOTP_CODE;
+    параметры кода для секрета — OCBAR_TOTP_ALGORITHM (SHA1|SHA256|SHA512),
+    OCBAR_TOTP_DIGITS (6–8), OCBAR_TOTP_PERIOD (10–300 с);
     для --learn ещё OCBAR_TOTP_COMMAND — команда, печатающая свежий код
     (им заполняет поле кода кнопка «Пройти шаг»).
     Коды выхода: 0 ок, 1 протокол/HTTP, 2 тайм-аут, 3 отменено, 4 аргументы,
@@ -121,6 +124,7 @@ func parseArgs() -> Args {
         case "--selftest": a.selfTest = true
         case "--import-qr": a.importQR = next(arg)
         case "--print-secret": a.printSecret = true
+        case "--print-params": a.printParams = true
         case "--list": a.listEntries = true
         case "--totp-now": a.totpNow = true
         case "--learn": a.learn = true
@@ -223,10 +227,13 @@ Log.verbose = args.verbose
 if args.help { out(usage()); exit(0) }
 
 if args.totpNow {
-    // Код из OCBAR_TOTP_SECRET — для проверки того, что лежит в Keychain.
-    guard let secret = ProcessInfo.processInfo.environment["OCBAR_TOTP_SECRET"], !secret.isEmpty,
-          let code = TOTP.code(secretBase32: secret) else {
-        Log.error("OCBAR_TOTP_SECRET пуст или не base32")
+    // Код из OCBAR_TOTP_SECRET с параметрами профиля — для проверки того,
+    // что лежит в Keychain. OCBAR_TOTP_AT — момент времени для самопроверки.
+    let env = ProcessInfo.processInfo.environment
+    let at = env["OCBAR_TOTP_AT"].flatMap { TimeInterval($0) }.map { Date(timeIntervalSince1970: $0) } ?? Date()
+    guard let secret = env["OCBAR_TOTP_SECRET"], !secret.isEmpty,
+          let code = TOTP.code(secretBase32: secret, at: at, params: TOTPParams.fromEnvironment()) else {
+        Log.error("OCBAR_TOTP_SECRET пуст или не base32, либо параметры кода не поддерживаются")
         exit(1)
     }
     out(code)
@@ -238,6 +245,11 @@ if args.selfTest {
     out("TOTP, RFC 6238 приложение B (HMAC-SHA1):")
     for v in TOTP.selfTest() {
         out("  T=\(v.t)  ожидалось \(v.want)  получено \(v.got)  \(v.ok ? "OK" : "FAIL")")
+        if !v.ok { failed += 1 }
+    }
+    out("TOTP, RFC 6238 приложение B (HMAC-SHA256, HMAC-SHA512, 8 цифр):")
+    for v in TOTP.selfTestAlgorithms() {
+        out("  \(v.alg) T=\(v.t)  ожидалось \(v.want)  получено \(v.got)  \(v.ok ? "OK" : "FAIL")")
         if !v.ok { failed += 1 }
     }
     out("Разбор XML init-ответа (образец):")
@@ -324,14 +336,20 @@ if let qr = args.importQR {
         }
         guard let e = chosen else { throw QRImport.ImportError.empty }
         Log.info("запись: \(e.issuer.isEmpty ? "(без issuer)" : e.issuer) / \(e.name), \(e.algorithm), \(e.digits) цифр, период \(e.period) с")
-        if !e.isTOTP { Log.info("ВНИМАНИЕ: это HOTP, а не TOTP — ocbar такой не умеет") }
-        if e.algorithm != "SHA1" || e.digits != 6 || e.period != 30 {
-            Log.info("ВНИМАНИЕ: параметры нестандартные, ocbar считает по SHA1/6/30 — код может не совпасть")
+        if !e.isTOTP {
+            Log.info("ВНИМАНИЕ: это HOTP (код по счётчику) — ocbar его не ведёт: счётчик живёт в приложении")
+        } else if !e.params.isSupported {
+            Log.info("ВНИМАНИЕ: параметры кода \(e.params.label) не поддерживаются")
+        } else if !e.params.isDefault {
+            Log.info("параметры кода: \(e.params.label) — ocbar запишет их в профиль")
         }
-        if args.printSecret {
+        if args.printParams {
+            // Для ocbar: решить, годится ли запись, до того как класть секрет.
+            out("\(e.isTOTP ? "TOTP" : "HOTP") \(e.algorithm) \(e.digits) \(e.period)")
+        } else if args.printSecret {
             out(e.secretBase32)              // ← только для пайпа в security
         } else {
-            let code = TOTP.code(secretBase32: e.secretBase32) ?? "??????"
+            let code = e.isTOTP ? (TOTP.code(secretBase32: e.secretBase32, params: e.params) ?? "??????") : "—"
             out("код сейчас: \(code)  (сверьте с приложением; секрет не печатается)")
         }
         exit(0)
@@ -508,12 +526,13 @@ DispatchQueue.global().async {
         opts.autofill = !args.noAutofill
         opts.rules = args.rulesFile.map { Autofill.parse(file: $0) } ?? Autofill.defaultRules
         opts.creds = Credentials.fromEnvironment()
+        opts.totpParams = TOTPParams.fromEnvironment()
         let env = ProcessInfo.processInfo.environment
         if let code = env["OCBAR_TOTP_CODE"], !code.isEmpty {
             opts.totpCode = code            // готовый код из внешней базы
         } else if let secret = opts.creds.totpSecret, !secret.isEmpty {
-            if TOTP.code(secretBase32: secret) == nil {
-                Log.info("OCBAR_TOTP_SECRET не разобрался как base32 — код вводит человек")
+            if TOTP.code(secretBase32: secret, params: opts.totpParams) == nil {
+                Log.info("OCBAR_TOTP_SECRET не разобрался как base32 или параметры кода не поддерживаются — код вводит человек")
             } else {
                 opts.totpSecret = secret    // считаем в момент заполнения
             }
