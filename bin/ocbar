@@ -105,19 +105,46 @@ rotate_log() { # файл [предел байт] [сколько хранить
     log "лог превысил $((max/1024)) КБ — предыдущий сохранён как $(basename "$f").1"
 }
 
-# Уведомление системы. Если приложение меню-бара запущено — через него, по
-# URL-схеме ocbar://notify: тогда уведомление приходит с именем и иконкой
-# ocbar, а не от «Script Editor». Без приложения — osascript, как раньше.
+# Уведомление системы. Через приложение меню-бара (URL-схема ocbar://notify,
+# D50) — только если оно запущено, система разрешила ему уведомления и есть
+# его токен. Приложение при запуске кладёт в USER_STATE notify.token (0600,
+# одна строка hex; адрес без верного токена оно отбрасывает — чужие
+# программы и страницы в браузере не покажут уведомление от имени ocbar) и
+# notify.allowed («1» — разрешены). Иначе — osascript: раньше при запрещённых
+# уведомлениях клиент считал уведомление доставленным, и «нужен вход» молча
+# пропадал.
+notify_token() {
+    local f="$USER_STATE/notify.token" t=""
+    [ -f "$f" ] && [ -O "$f" ] || return 0
+    case "$(stat -f %Lp "$f" 2>/dev/null)" in 600|400) ;; *) return 0 ;; esac
+    IFS= read -r t < "$f" || true
+    t=${t%$'\r'}
+    case "$t" in ''|*[!0-9a-fA-F]*) return 0 ;; esac
+    [ "${#t}" -ge 16 ] || return 0
+    printf '%s' "$t"
+}
+# Куда пойдёт уведомление: «app <адрес>» или «osascript». Решение отдельно от
+# показа, чтобы самопроверка проверяла его, ничего не показывая.
+# OCBAR_SELFTEST_APP=1|0 подменяет «запущено ли приложение» — только для неё.
+notify_route() { # заголовок, текст
+    local running="${OCBAR_SELFTEST_APP:-}" allowed tok url=""
+    if [ -z "$running" ]; then if [ -n "$(app_pid)" ]; then running=1; else running=0; fi; fi
+    allowed=$(head -1 "$USER_STATE/notify.allowed" 2>/dev/null | tr -d '[:space:]' || true)
+    tok=$(notify_token)
+    if [ "$running" = 1 ] && [ "$allowed" = 1 ] && [ -n "$tok" ]; then
+        url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2], "token": sys.argv[3]}))' "$1" "$2" "$tok" 2>/dev/null || true)
+    fi
+    if [ -n "$url" ]; then printf 'app %s\n' "$url"; else printf 'osascript\n'; fi
+}
 # Текст передаётся аргументом, а не подстановкой в текст скрипта: иначе
 # кавычки в сообщении ломают osascript.
 notify() { # заголовок, текст
     [ "${OCBAR_NOTIFY:-1}" = 1 ] || return 0
     [ "$NOTIFY_ENABLED" = 0 ] && return 0
-    if [ -n "$(app_pid)" ]; then
-        local url
-        url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2]}))' "$1" "$2" 2>/dev/null)
-        [ -n "$url" ] && open -g "$url" >/dev/null 2>&1 && return 0
-    fi
+    local r; r=$(notify_route "$1" "$2")
+    case "$r" in
+        "app "*) if open -g "${r#app }" >/dev/null 2>&1; then return 0; fi ;;
+    esac
     osascript - "$1" "$2" >/dev/null 2>&1 <<'AS' || true
 on run argv
     display notification (item 2 of argv) with title (item 1 of argv)
@@ -2963,6 +2990,7 @@ case "${1:-}" in
     # Загрузка и проверка профиля без входа: отрицательные проверки selftest
     # идут сюда, а не в connect — при поломке валидации дело не дойдёт до входа.
     _check-profile) shift; load_profile "${1:-}"; echo ok ;;
+    _notify-route) shift; notify_route "${1:-}" "${2:-}" ;;                                   # для selftest
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
     version)    shift; cmd_version "${1:-}" ;;
