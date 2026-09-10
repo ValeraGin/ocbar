@@ -5,7 +5,6 @@
 #   url              host/group — как в openconnect (https:// можно не писать)
 #   name             человеческое имя для меню
 #   description      подпись под профилем в списке и в меню
-#   keychain_service сервис Keychain для пароля и кода (по умолч. ru.ocbar.client)
 #   keepass_entry    путь записи в KeePassXC, чей одноразовый код брать;
 #                    задан — включает totp = keepassxc
 #   keepass_db       путь к файлу базы (по умолчанию — переменная KP_DB)
@@ -28,8 +27,17 @@
 #   healthcheck      что проверить после подключения: URL, «хост:порт» или имя
 #                    (тогда проверяется, что оно резолвится). Поднятый интерфейс
 #                    и работающий доступ — разные вещи
-#   totp             auto (по умолчанию: подставлять код, если секрет есть в Keychain) | off —
-#                    выключить, если IdP присылает код по SMS: чужой код в поле хуже пустого
+#   password         откуда брать пароль: auto (по умолчанию) | keychain | keepassxc |
+#                    command | ask. auto — команда, если задана password_command;
+#                    иначе Keychain, если пароль там есть; иначе KeePassXC, если
+#                    задан keepass_entry. ask — вводит человек
+#   password_command команда, печатающая пароль (для password = command)
+#   totp             откуда брать одноразовый код: auto (по умолчанию) | keychain |
+#                    keepassxc | command | sms | off. auto — команда, если задана
+#                    totp_command; иначе KeePassXC, если задан keepass_entry; иначе
+#                    Keychain. sms и off — код вводит человек: чужой код в поле
+#                    хуже пустого
+#   totp_command     команда, печатающая код из 6–8 цифр (для totp = command)
 
 # Глобальные ключи (до первой секции):
 #   notifications = on | off   уведомления системы о смене состояния (по умолчанию on)
