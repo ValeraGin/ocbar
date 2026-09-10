@@ -8,16 +8,23 @@ import UserNotifications
 // настройках → Уведомления», и они не выглядят как чужой скрипт.
 //
 // Клиент (bin/ocbar) отдаёт сообщение по URL-схеме: open -g
-// "ocbar://notify?title=…&body=…&token=…". Если приложение не запущено или
-// уведомления ему запрещены, клиент показывает уведомление прежним путём —
-// сам, через osascript.
+// "ocbar://notify?title=…&body=…&token=…". Приложение не запущено — клиент
+// запускает его в фоне и ждёт свежий токен. Уведомления запрещены — клиент
+// ничего не показывает сам (иначе система подписала бы их «Script Editor»,
+// D61), а меню показывает строку «Уведомления выключены — Разрешить…».
 //
 // URL-схему может открыть кто угодно — любое приложение и страница в
 // браузере, — поэтому без токена уведомление не показывается: иначе от имени
 // ocbar можно было бы показать что угодно («нужен вход — введите пароль
 // здесь»). Токен приложение кладёт при запуске в свой каталог состояния
 // (права 0600), клиент читает его оттуда; рядом — notify.allowed: «1», если
-// уведомления разрешены, иначе «0» — по нему клиент решает, звать ли osascript.
+// уведомления разрешены, иначе «0» — по нему клиент решает, отдавать ли адрес.
+/// Разрешены ли уведомления ocbar — для строки «Уведомления выключены» в меню.
+final class NotifyState: ObservableObject {
+    static let shared = NotifyState()
+    @Published var allowed = true
+}
+
 enum Notifier {
     static let scheme = "ocbar"
     private static let delegate = Delegate()
@@ -35,7 +42,7 @@ enum Notifier {
         guard !ready else { return }
         ready = true
         if prepareToken(in: stateDir) == nil {
-            AppLog.write("уведомления: не удалось записать notify.token в \(stateDir) — уведомления ocbar пойдут через osascript")
+            AppLog.write("уведомления: не удалось записать notify.token в \(stateDir) — уведомления ocbar показываться не будут")
         }
         let center = UNUserNotificationCenter.current()
         center.delegate = delegate
@@ -70,7 +77,18 @@ enum Notifier {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let allowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
             writeAllowed(allowed, in: stateDir)
+            DispatchQueue.main.async {
+                if NotifyState.shared.allowed != allowed { NotifyState.shared.allowed = allowed }
+            }
         }
+    }
+
+    /// Раздел уведомлений в Системных настройках (macOS 13+), с ocbar, если система умеет.
+    static func openSettings() {
+        let id = Bundle.main.bundleIdentifier ?? "ru.ocbar.app"
+        let urls = ["x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)",
+                    "x-apple.systempreferences:com.apple.preference.notifications"]
+        for s in urls { if let u = URL(string: s), NSWorkspace.shared.open(u) { return } }
     }
 
     private static func write(_ text: String, to path: String) -> Bool {
