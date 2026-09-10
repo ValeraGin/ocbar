@@ -28,11 +28,12 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let selector: String
         let hint: String        // что это было на странице — для строки состояния
         var step: Int = 1       // окно формы, на котором отмечено
+        var why: String? = nil  // предзаполнено: почему; nil — отметил человек
     }
 
     /// Что размечаем сейчас. Порядок кнопок — порядок обычной формы входа.
     private static let kinds: [(id: String, title: String, hint: String)] = [
-        ("auto",     "Авто",   "Щёлкайте по полям и кнопке — вид определится сам; не тот — выберите слева и щёлкните снова."),
+        ("auto",     "Авто",   "Щёлкайте по полям и кнопке — вид определится сам; щелчок по отмеченному снимает отметку."),
         ("username", "Логин",  "Щёлкните по полю, куда вводится логин"),
         ("password", "Пароль", "Щёлкните по полю пароля"),
         ("totp",     "Код",    "Щёлкните по полю одноразового кода"),
@@ -287,6 +288,8 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 // Одностраничные формы меняют окно без перехода: включаем
                 // разметку обратно сами, не дожидаясь загрузки страницы.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.applyState() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.prefill() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in self?.prefill() }
                 return
             }
             self.applyState()
@@ -378,10 +381,24 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         // по тому, которое ждёт мастер.
         let guessed = (body["guess"] as? String) ?? "username"
         let what = kind == "auto" ? guessed : kind
-        // Одно и то же поле дважды на одном окне не пишем: правило от этого
-        // не станет вернее.
-        if marks.contains(where: { $0.kind == what && $0.selector == selector && $0.step == step }) {
-            status.stringValue = "уже отмечено: \(selector)"
+        // Щелчок по уже отмеченному на этом окне снимает отметку — так же
+        // снимается и предзаполненное. Если слева выбран другой вид — вид
+        // меняется, а не снимается.
+        if let i = marks.firstIndex(where: { $0.selector == selector && $0.step == step }) {
+            let old = marks[i]
+            if kind != "auto" && old.kind != kind {
+                if kind != "click" && kind != "stop" {
+                    marks.removeAll { $0.kind == kind && $0.step == step && $0.selector != selector }
+                }
+                if let j = marks.firstIndex(where: { $0.selector == selector && $0.step == step }) {
+                    marks[j] = Mark(kind: kind, selector: selector, hint: hint, step: step)
+                }
+                status.stringValue = "теперь \(title(for: kind)): \(selector)"
+            } else {
+                marks.remove(at: i)
+                status.stringValue = "снято: \(title(for: old.kind)) \(selector)"
+            }
+            refreshCollected()
             return
         }
         // Логин, пароль и код — по одному на окно формы: второе правило того
@@ -420,10 +437,54 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let steps = Array(Set(marks.filter { $0.kind != "stop" }.map(\.step))).sorted()
         let groups = steps.map { s -> String in
             let items = marks.filter { $0.step == s && $0.kind != "stop" }
-                .map { "\(title(for: $0.kind))=\($0.selector)" }.joined(separator: ", ")
+                .map { "\(title(for: $0.kind))\($0.why == nil ? "" : "*")=\($0.selector)" }.joined(separator: ", ")
             return (steps.count > 1 ? "шаг \(displayNumber(s)): " : "") + items
         }
         collected.stringValue = (stops + groups).joined(separator: " · ")
+        showMarks()
+    }
+
+    /// Отметки текущего окна обводятся на странице: предзаполненное видно
+    /// сразу, и понятно, по чему щёлкнуть, чтобы снять.
+    private func showMarks() {
+        let sels = marks.filter { $0.step == step }.map(\.selector)
+        let json = String(data: (try? JSONSerialization.data(withJSONObject: sels)) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+        webView?.evaluateJavaScript("window.__ocbarShowMarks && window.__ocbarShowMarks(\(json))")
+    }
+
+    /// Предзаполнение: на новом окне формы отметить то, что узнаётся без
+    /// человека (__ocbarPrefill в скрипте страницы), — с причиной у каждой
+    /// отметки. Только если на этом окне ещё ничего не отмечено: отметки
+    /// человека не перекрываются.
+    private func prefill() {
+        guard !finished, !marks.contains(where: { $0.step == step }) else { return }
+        webView.evaluateJavaScript("JSON.stringify(window.__ocbarPrefill ? window.__ocbarPrefill() : [])") { [weak self] v, _ in
+            guard let self, !self.marks.contains(where: { $0.step == self.step }),
+                  let text = v as? String,
+                  let arr = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: String]],
+                  !arr.isEmpty else { return }
+            var added: [String] = []
+            for f in arr {
+                guard let k = f["kind"], let sel = f["selector"], !sel.isEmpty,
+                      !["html", "body"].contains(sel.lowercased()) else { continue }
+                self.marks.append(Mark(kind: k, selector: sel, hint: "", step: self.step, why: f["why"]))
+                added.append("\(self.title(for: k)) (\(f["why"] ?? ""))")
+            }
+            guard !added.isEmpty else { return }
+            if self.pages[self.step] == nil, let u = self.webView.url { self.pages[self.step] = (u.host ?? "") + u.path }
+            Log.info("разметка: предзаполнено на шаге \(self.displayNumber(self.step)): " + added.joined(separator: ", "))
+            self.refreshCollected()
+            self.status.stringValue = "предзаполнено*: " + added.joined(separator: ", ")
+                + " — проверьте; лишнее снимите щелчком по нему"
+        }
+    }
+
+    /// Форма часто строится скриптом уже после загрузки страницы — пробуем
+    /// дважды; вторая попытка ничего не делает, если первая что-то нашла.
+    private func schedulePrefill() {
+        for delay in [0.8, 2.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.prefill() }
+        }
     }
 
     private func applyState() {
@@ -443,6 +504,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             status.stringValue = "новое окно формы — шаг \(displayNumber(step)): отмечайте его поля и кнопку. Всё? — «Готово»"
         }
         refreshCollected()
+        schedulePrefill()
     }
 
     // MARK: - результат
@@ -670,6 +732,78 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         });
       }, true);
 
+      // Предзаполнение разметки: что узнаётся без человека, по убыванию
+      // надёжности, у каждой отметки — почему. Только видимые поля.
+      //   1) токены autocomplete из стандарта HTML: username, current-password, one-time-code;
+      //   2) единственное видимое поле type=password;
+      //   3) поле кода по имени или цифровое поле длиной 4–8 — это догадка;
+      //   4) логин — ближайшее текстовое поле перед паролем в той же форме
+      //      (так логин находят менеджеры паролей в браузерах);
+      //   5) кнопка — кнопка формы по умолчанию: её по стандарту жмёт Enter.
+      // Два поля пароля — пароль не угадывается; нет формы — кнопка тоже.
+      function visibleEl(e) { return e && e.offsetParent !== null; }
+      function typeOf(e) { return ((e.getAttribute('type') || 'text')).toLowerCase(); }
+      function acTokens(e) {
+        return (e.getAttribute('autocomplete') || '').toLowerCase().split(' ').filter(function (t) { return t; });
+      }
+      function otpLike(e) {
+        var n = (e.getAttribute('name') || '') + ' ' + (e.id || '');
+        if (/otp|totp|otc|one.?time|2fa|mfa|verif/i.test(n)) return true;
+        var mode = (e.getAttribute('inputmode') || '').toLowerCase();
+        var len = parseInt(e.getAttribute('maxlength') || '0', 10);
+        return (typeOf(e) === 'tel' || mode === 'numeric') && len >= 4 && len <= 8;
+      }
+      function defaultButton(form) {
+        if (!form) return null;
+        var b = form.querySelector('button:not([type]),button[type=submit],input[type=submit],input[type=image]');
+        return visibleEl(b) ? b : null;
+      }
+      window.__ocbarPrefill = function (root) {
+        root = root || document;
+        var skip = ['hidden', 'checkbox', 'radio', 'submit', 'button', 'image', 'reset', 'file'];
+        var inputs = Array.prototype.filter.call(root.querySelectorAll('input,textarea'), function (e) {
+          return visibleEl(e) && skip.indexOf(typeOf(e)) < 0;
+        });
+        var out = [], used = [];
+        function add(el, k, why) { if (used.indexOf(el) < 0) { used.push(el); out.push({el: el, kind: k, why: why}); } }
+        function has(k) { return out.some(function (o) { return o.kind === k; }); }
+        inputs.forEach(function (e) {
+          var ac = acTokens(e);
+          if (ac.indexOf('username') >= 0) add(e, 'username', 'autocomplete=username');
+          else if (ac.indexOf('current-password') >= 0) add(e, 'password', 'autocomplete=current-password');
+          else if (ac.indexOf('one-time-code') >= 0) add(e, 'totp', 'autocomplete=one-time-code');
+        });
+        var pw = inputs.filter(function (e) { return typeOf(e) === 'password'; });
+        if (!has('password') && pw.length === 1) add(pw[0], 'password', 'type=password');
+        if (!has('totp')) {
+          var otp = inputs.filter(function (e) { return used.indexOf(e) < 0 && typeOf(e) !== 'password' && otpLike(e); });
+          if (otp.length === 1) add(otp[0], 'totp', 'похоже на поле кода');
+        }
+        if (!has('username')) {
+          var p = out.filter(function (o) { return o.kind === 'password'; })[0];
+          if (p) {
+            var before = inputs.filter(function (e) {
+              return used.indexOf(e) < 0 && e.form === p.el.form && ['text', 'email'].indexOf(typeOf(e)) >= 0 &&
+                     (e.compareDocumentPosition(p.el) & Node.DOCUMENT_POSITION_FOLLOWING);
+            });
+            if (before.length) add(before[before.length - 1], 'username', 'поле перед паролем');
+          }
+        }
+        var btn = out.length ? defaultButton(out[0].el.form) : null;
+        if (btn) out.push({el: btn, kind: 'click', why: 'кнопка формы по умолчанию'});
+        return out.map(function (o) { return {kind: o.kind, selector: selectorFor(o.el), why: o.why}; });
+      };
+      var markStyle = null;
+      window.__ocbarShowMarks = function (sels) {
+        if (!markStyle) {
+          markStyle = document.createElement('style');
+          markStyle.textContent = '[data-ocbar-mark]{outline:2px solid #1d7a52 !important;outline-offset:2px !important}';
+          document.documentElement.appendChild(markStyle);
+        }
+        Array.prototype.forEach.call(document.querySelectorAll('[data-ocbar-mark]'), function (e) { e.removeAttribute('data-ocbar-mark'); });
+        (sels || []).forEach(function (s) { try { var e = document.querySelector(s); if (e) e.setAttribute('data-ocbar-mark', '1'); } catch (x) {} });
+      };
+
       window.__ocbarSet = function (m, k) { marking = m; kind = k; if (!m) hide(); };
       // Наружу — для проверки: по элементу вернуть тот же селектор, который
       // записался бы при щелчке (ocbar-auth --learn-selftest).
@@ -682,6 +816,73 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     """
 }
 
+
+/// Предзаполнение на живой странице без окна и без щелчков:
+/// `ocbar-auth --learn-probe --url …` открывает форму входа так же, как
+/// разметка, ждёт, пока скрипт портала её построит, и печатает, что
+/// предзаполнение отметило бы. Учётных данных не нужно, ничего не нажимает.
+/// Нужен, чтобы проверять надёжность на настоящем портале, не открывая окно
+/// поверх работы человека (окно разметки однажды перехватило чужие щелчки).
+final class LearnProbe: NSObject, WKNavigationDelegate {
+    private var webView: WKWebView!
+    private let url: URL
+    private let done: (Int32) -> Void
+    private var generation = 0
+    private var reported = false
+
+    init(url: URL, completion: @escaping (Int32) -> Void) {
+        self.url = url
+        self.done = completion
+        super.init()
+    }
+
+    func start() {
+        let cfg = WKWebViewConfiguration()
+        cfg.websiteDataStore = .nonPersistent()
+        let c = WKUserContentController()
+        c.addUserScript(WKUserScript(source: LearnSession.pageScript, injectionTime: .atDocumentEnd,
+                                     forMainFrameOnly: true))
+        cfg.userContentController = c
+        webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 900, height: 900), configuration: cfg)
+        webView.navigationDelegate = self
+        webView.load(URLRequest(url: url))
+        Log.info("пробник: открываю \(url.host ?? url.absoluteString) без окна")
+        // Страница, которая так и не успокоилась, — тоже ответ.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in self?.report() }
+    }
+
+    // Портал может пройти несколько перенаправлений и промежуточных форм:
+    // отчёт — через три секунды после последней загрузки.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        generation += 1
+        let g = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self, g == self.generation else { return }
+            self.report()
+        }
+    }
+
+    private func report() {
+        guard !reported else { return }
+        reported = true
+        let js = "JSON.stringify({page: location.host + location.pathname, marks: window.__ocbarPrefill ? window.__ocbarPrefill() : null})"
+        webView.evaluateJavaScript(js) { [weak self] v, error in
+            guard let self else { return }
+            guard let text = v as? String,
+                  let d = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] else {
+                print("пробник: страница не ответила (\(error.map { $0.localizedDescription } ?? "нет данных"))")
+                self.done(1); return
+            }
+            print("страница: \(d["page"] as? String ?? "?")")
+            let marks = d["marks"] as? [[String: String]] ?? []
+            if marks.isEmpty { print("  предзаполнение ничего не узнало — размечать руками") }
+            for m in marks {
+                print("  \((m["kind"] ?? "").padding(toLength: 9, withPad: " ", startingAt: 0)) \(m["selector"] ?? "")  — \(m["why"] ?? "")")
+            }
+            self.done(0)
+        }
+    }
+}
 
 /// Проверка разметки без человека: страница-образец грузится в такой же
 /// WKWebView с тем же внедрённым скриптом, у неё спрашиваются селекторы для
@@ -720,6 +921,12 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
           <button type="button" id="s2done" onclick="window.__twoDone = true">Войти</button>
         </div>
       </div>
+      <form id="pf1"><input id="pfu" autocomplete="username"><input type="password" id="pfp" autocomplete="current-password"><button id="pfb">Войти</button></form>
+      <form id="pf2"><input type="text" name="username" id="u2" autocomplete="on"><input type="password" id="p2" autocomplete="on"><input type="checkbox" id="rm2"><button type="submit" id="b2">Войти</button></form>
+      <form id="pf3"><input type="text" name="totp" id="t3"><input type="submit" id="s3" value="Войти"></form>
+      <form id="pf4"><input type="password" id="a4"><input type="password" id="c4"><button id="d4">Сменить</button></form>
+      <form id="pf5" style="display:none"><input id="h5" autocomplete="username"><button id="k5">Войти</button></form>
+      <form id="pf6"><input id="w6" autocomplete="username webauthn"><button type="submit" id="b6">Далее</button></form>
       <script>
         window.__twoReset = function () {
           document.getElementById('s1').style.display = 'block';
@@ -798,7 +1005,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                     self.failures += 1
                 }
                 pending -= 1
-                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkClick() } } } }
+                if pending == 0 { self.checkVerify { self.checkSteps { self.checkRootClick { self.checkPrefill { self.checkClick() } } } } }
             }
         }
     }
@@ -937,6 +1144,61 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
                 then()
             }
         }
+    }
+
+    /// Предзаполнение разметки: что узнаётся без человека и почему. Случай
+    /// «autocomplete=on» повторяет первое окно рабочего портала, снятое
+    /// 2026-09-10: стандарт там молчит, узнаются пароль по типу, логин как
+    /// поле перед паролем и кнопка формы по умолчанию. «name=totp» — второе
+    /// окно того же портала по журналу входа.
+    private func checkPrefill(_ then: @escaping () -> Void) {
+        func ok(_ name: String, _ cond: Bool, _ detail: String = "") {
+            if cond { print("  [ OK ] \(name)") }
+            else { print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)"); failures += 1 }
+        }
+        let cases: [(String, String, [String])] = [
+            ("предзаполнение: токены autocomplete из стандарта", "#pf1",
+             ["username input[id=pfu] autocomplete=username",
+              "password input[id=pfp] autocomplete=current-password",
+              "click button[id=pfb] кнопка формы по умолчанию"]),
+            ("предзаполнение: autocomplete=on, как на рабочем портале", "#pf2",
+             ["password input[id=p2] type=password",
+              "username input[id=u2] поле перед паролем",
+              "click button[id=b2] кнопка формы по умолчанию"]),
+            ("предзаполнение: окно кода name=totp", "#pf3",
+             ["totp input[id=t3] похоже на поле кода",
+              "click input[id=s3] кнопка формы по умолчанию"]),
+            ("предзаполнение: два поля пароля — не угадываем", "#pf4", []),
+            ("предзаполнение: скрытая форма не смотрится", "#pf5", []),
+            ("предзаполнение: «username webauthn», селектор без пробелов", "#pf6",
+             ["username input[id=w6] autocomplete=username",
+              "click button[id=b6] кнопка формы по умолчанию"]),
+        ]
+        func run(_ i: Int) {
+            guard i < cases.count else { showMarksCheck(); return }
+            let (name, root, want) = cases[i]
+            eval("JSON.stringify(window.__ocbarPrefill(document.querySelector(\(LearnSession.js(root)))))") { v in
+                let arr = ((v as? String).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) }
+                           as? [[String: String]]) ?? []
+                let got = arr.map { "\($0["kind"] ?? "") \($0["selector"] ?? "") \($0["why"] ?? "")" }
+                ok(name, got.count == want.count && Set(got) == Set(want), got.joined(separator: " | "))
+                run(i + 1)
+            }
+        }
+        func showMarksCheck() {
+            eval("""
+            window.__ocbarShowMarks(['input[id=pfu]']); window.__ocbarShowMarks(['input[id=pfp]']);
+            var r = [document.getElementById('pfu').hasAttribute('data-ocbar-mark'),
+                     document.getElementById('pfp').hasAttribute('data-ocbar-mark')];
+            window.__ocbarShowMarks([]); r
+            """) { v in
+                let a = v as? [Any] ?? []
+                ok("подсветка отметок: прежняя снимается, текущая видна",
+                   a.count == 2 && (a[0] as? Bool) == false && (a[1] as? Bool) == true, "\(a)")
+                then()
+            }
+        }
+        run(0)
     }
 
     private func checkClick() {

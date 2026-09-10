@@ -38,6 +38,7 @@ struct Args {
     var totpNow = false
     var learn = false
     var learnSelfTest = false
+    var learnProbe = false
     var outFile: String?
     var help = false
 }
@@ -59,6 +60,8 @@ func usage() -> String {
                             мышью, где логин, пароль, код и кнопка, — правила
                             составятся сами (--out куда записать); форма в
                             несколько окон проходится кнопкой «Пройти шаг»
+      --learn-probe         открыть форму входа без окна и напечатать, что
+                            предзаполнение разметки узнало бы; ничего не жмёт
       --out FILE            файл для --learn (иначе печать в stdout)
       --rules FILE          правила автозаполнения (см. etc/autofill.rules)
       --no-autofill         не заполнять форму
@@ -114,6 +117,7 @@ func parseArgs() -> Args {
         case "--totp-now": a.totpNow = true
         case "--learn": a.learn = true
         case "--learn-selftest": a.learnSelfTest = true
+        case "--learn-probe": a.learnProbe = true
         case "--out": a.outFile = next(arg)
         case "--select": a.selectEntry = next(arg)
         case "--json": a.json = true
@@ -382,6 +386,30 @@ if args.learnSelfTest {
     DispatchQueue.main.async {
         check = LearnCheck { code in exit(code) }
         check?.start()
+    }
+    app.run()
+}
+
+// Пробник предзаполнения: та же страница, что у разметки, но без окна.
+if args.learnProbe {
+    guard let raw = args.url, let groupURL = normalize(raw) else {
+        FileHandle.standardError.write(Data("ocbar-auth: --learn-probe требует --url\n".utf8)); exit(4)
+    }
+    let app = NSApplication.shared
+    app.setActivationPolicy(.prohibited)
+    var probe: LearnProbe?
+    DispatchQueue.global().async {
+        var target = groupURL
+        do {
+            let r = try runInit(args, http: http)
+            if let u = URL(string: r.request.loginURL) { target = u }
+        } catch {
+            Log.info("шлюз не ответил (\(error)) — открываю адрес как есть")
+        }
+        DispatchQueue.main.async {
+            probe = LearnProbe(url: target) { code in exit(code) }
+            probe?.start()
+        }
     }
     app.run()
 }
