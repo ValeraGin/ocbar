@@ -97,6 +97,13 @@ enum SelfTest {
         check("окна формы: заголовки шагов в [Autofill] сохраняются",
               steps.autofill.count == 5 && steps.render().contains("# шаг 2 — idp.test/otp"), "\(steps.autofill)")
         check("окна формы: заголовок шага — не ошибка", ProfileCheck.check(steps).allSatisfy { !$0.text.contains("правило") })
+        check("правило fill manual принимается", ProfileCheck.validRule("fill manual input[id=cap]"))
+        var sms = doc
+        sms.totp = "sms"
+        check("Totp = sms — источник из списка", ProfileDoc.totpSources.contains("sms"))
+        check("Totp = sms предупреждает о молчаливом входе",
+              ProfileCheck.check(sms).contains { $0.level == .warning && $0.text.contains("SMS") })
+        check("Totp = sms переживает запись", ProfileDoc.parse(sms.render(), fileName: "s").totp == "sms")
         check("режим по умолчанию — туннель", doc.mode == "tunnel")
         check("порт SOCKS", doc.proxyPort == "11080")
         check("галочка системного прокси", doc.systemProxy)

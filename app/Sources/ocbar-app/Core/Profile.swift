@@ -63,7 +63,8 @@ struct ProfileDoc {
         "Open AnyConnect VPN Agent v9.21",
     ]
 
-    static let totpSources = ["auto", "keychain", "keepassxc", "command", "off"]
+    // sms — код приходит по SMS и вводится человеком (как off, но с причиной).
+    static let totpSources = ["auto", "keychain", "keepassxc", "command", "sms", "off"]
     // Источник пароля — один из нескольких, как и источник кода: связка
     // ключей, база KeePassXC, произвольная команда, «вводит человек».
     static let passwordSources = ["auto", "keychain", "keepassxc", "command", "ask"]
@@ -329,6 +330,8 @@ enum ProfileCheck {
         }
 
         switch d.totp {
+        case "sms":
+            warn("код приходит по SMS и вводится руками — молчаливое переподключение работать не будет")
         case "command" where d.totpCommand.trimmed.isEmpty:
             err("Totp = command, но TotpCommand пуст")
         case "keepassxc" where d.keepassEntry.trimmed.isEmpty:
@@ -387,7 +390,7 @@ extension ProfileCheck {
         guard let kind = f.first else { return false }
         switch kind {
         case "stop", "click", "click!": return f.count == 2
-        case "fill": return f.count == 3 && ["username", "password", "totp"].contains(f[1])
+        case "fill": return f.count == 3 && ["username", "password", "totp", "manual"].contains(f[1])
         default: return false
         }
     }

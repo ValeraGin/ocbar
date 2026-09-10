@@ -214,8 +214,10 @@ final class StatusStore: ObservableObject {
         actionNote = nil
     }
 
-    func connect(profile: String? = nil, show: Bool = false) {
-        perform("Подключаюсь…") { OcbarClient.shared.connect(profile: profile, show: show) }
+    func connect(profile: String? = nil, show: Bool = false, teach: Bool = false) {
+        perform(teach ? "Вход с запоминанием…" : "Подключаюсь…") {
+            OcbarClient.shared.connect(profile: profile, show: show, teach: teach)
+        }
     }
     func disconnect() { perform("Отключаю…") { OcbarClient.shared.disconnect() } }
     func pause() { perform("Ставлю на паузу…") { OcbarClient.shared.pause() } }

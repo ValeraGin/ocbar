@@ -24,6 +24,10 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         var autofill = true
         var cookieDomain: String? = nil   // домен шлюза: cookie принимаем только оттуда
         var fillHosts: [String] = []      // где разрешено заполнять форму; пусто = везде
+        // Запомнить вход: человек входит руками, ocbar записывает форму и
+        // после входа предлагает сохранить (TeachRecorder, TeachFlow).
+        var teach = false                 // галочка доступна
+        var teachOn = false               // и включена сразу (ocbar connect --teach)
     }
 
     private let request: AuthRequest
@@ -47,6 +51,15 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     // неизменившейся странице не бывает (lastClickSignature).
     private let maxClicks = 5
     private var totpFills = 0        // код одноразовый: подставляем РОВНО один раз
+    // Пароль — не больше двух раз за вход. Два, а не один: Microsoft прячет
+    // на странице логина второе поле пароля для менеджеров паролей. Третий
+    // раз — это уже неверный пароль по кругу, а порталы блокируют учётку
+    // после трёх-пяти попыток.
+    private var passwordFills = 0
+    private let maxPasswordFills = 2
+    private(set) var recorder: TeachRecorder?
+    private var teachBox: NSButton?
+    private(set) var shownToHuman = false
     private var stoppedReason: String?
 
     enum WebAuthError: Error, CustomStringConvertible {
@@ -77,6 +90,13 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .default()          // persistent: IdP-сессия переживает перезапуск
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
+        if opts.teach {
+            let r = TeachRecorder(username: opts.creds.username)
+            r.enabled = opts.teachOn
+            r.install(into: cfg.userContentController)
+            r.onChange = { [weak self] summary in self?.statusLabel?.stringValue = "запоминаю: " + summary }
+            recorder = r
+        }
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 520, height: 680), configuration: cfg)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -93,6 +113,18 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         statusLabel.frame = NSRect(x: 8, y: 3, width: 504, height: 16)
         content.addSubview(webView)
         content.addSubview(statusLabel)
+        if let r = recorder {
+            let box = NSButton(checkboxWithTitle: "Запомнить, как я вхожу", target: self, action: #selector(teachToggled))
+            box.state = r.enabled ? .on : .off
+            box.font = .systemFont(ofSize: 11)
+            box.frame = NSRect(x: 520 - 200, y: 2, width: 192, height: 18)
+            box.autoresizingMask = [.minXMargin]
+            box.toolTip = "Входите как обычно — ocbar запомнит, как устроена форма, и после входа предложит сохранить правила, пароль и источник кода. Без вашего подтверждения ничего не сохраняется."
+            content.addSubview(box)
+            teachBox = box
+            statusLabel.frame.size.width = 520 - 16 - 200
+            if r.enabled { statusLabel.stringValue = "запоминаю: входите как обычно" }
+        }
 
         window = NSWindow(contentRect: content.frame,
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -147,6 +179,21 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         NSApp.setActivationPolicy(.regular)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        shownToHuman = true
+    }
+
+    @objc private func teachToggled() {
+        guard let r = recorder else { return }
+        r.enabled = teachBox?.state == .on
+        r.apply(to: webView)
+        statusLabel.stringValue = r.enabled ? "запоминаю: входите как обычно" : "запись входа выключена"
+    }
+
+    /// Есть что предложить сохранить: запись была включена, окно видел
+    /// человек и хоть одно окно формы отправлено.
+    var teachOutcome: TeachRecorder? {
+        guard let r = recorder, r.enabled, shownToHuman, !r.steps.isEmpty else { return nil }
+        return r
     }
 
     private func finish(_ r: Result<String, WebAuthError>) {
@@ -198,6 +245,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         let u = webView.url?.absoluteString ?? "?"
         Log.debug("страница загружена: \(u)")
+        recorder?.apply(to: webView)
         statusLabel.stringValue = u
         if urlLooksFinal(webView.url) {
             Log.info("достигнут sso-v2-login-final, жду cookie")
@@ -290,7 +338,9 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
                     code = self.opts.totpCode
                 }
             }
-            let js = Autofill.script(rules: self.opts.rules, creds: self.opts.creds, totpCode: code)
+            var creds = self.opts.creds
+            if self.passwordFills >= self.maxPasswordFills { creds.password = nil }
+            let js = Autofill.script(rules: self.opts.rules, creds: creds, totpCode: code)
             self.webView.evaluateJavaScript(js) { result, err in
                 if let err = err { Log.debug("autofill JS: \(err.localizedDescription)"); return }
                 guard let dict = result as? [String: Any] else { return }
@@ -312,7 +362,14 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
                     self.show()
                     return
                 }
+                if filled.contains("password") {
+                    self.passwordFills += 1
+                    if self.passwordFills >= self.maxPasswordFills {
+                        Log.info("пароль подставлен \(self.passwordFills) раза — дальше вводит человек: неверный пароль не должен уходить по кругу")
+                    }
+                }
                 if filled.contains("totp") {
+                    self.recorder?.engineFilledCode = true
                     self.totpFills += 1
                     Log.info("код TOTP подставлен один раз — если форма спросит снова, вводит человек")
                 }

@@ -39,6 +39,9 @@ struct Args {
     var learn = false
     var learnSelfTest = false
     var learnProbe = false
+    var teachOut: String?
+    var teachDialogShot: String?
+    var teachOn = false
     var outFile: String?
     var help = false
 }
@@ -63,6 +66,10 @@ func usage() -> String {
       --learn-probe         открыть форму входа без окна и напечатать, что
                             предзаполнение разметки узнало бы; ничего не жмёт
       --out FILE            файл для --learn (иначе печать в stdout)
+      --teach-out FILE      при входе показать галочку «Запомнить, как я вхожу»;
+                            после входа предложить сохранить правила, пароль и
+                            источник кода, итог (без секретов) — в FILE
+      --teach-on            галочка включена сразу
       --rules FILE          правила автозаполнения (см. etc/autofill.rules)
       --no-autofill         не заполнять форму
       --fill-hosts a,b      заполнять только на этих хостах (иначе — на любом)
@@ -118,6 +125,9 @@ func parseArgs() -> Args {
         case "--learn": a.learn = true
         case "--learn-selftest": a.learnSelfTest = true
         case "--learn-probe": a.learnProbe = true
+        case "--teach-out": a.teachOut = next(arg)
+        case "--teach-on": a.teachOn = true
+        case "--teach-dialog-shot": a.teachDialogShot = next(arg)
         case "--out": a.outFile = next(arg)
         case "--select": a.selectEntry = next(arg)
         case "--json": a.json = true
@@ -390,6 +400,18 @@ if args.learnSelfTest {
     app.run()
 }
 
+// Снимок окна «Запомнить для следующего входа?» — вид без человека.
+if let shotPath = args.teachDialogShot {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.async {
+        let ok = TeachDialog.shot(to: shotPath)
+        out(ok ? "снимок: \(shotPath)" : "снимок не получился")
+        exit(ok ? 0 : 1)
+    }
+    app.run()
+}
+
 // Пробник предзаполнения: та же страница, что у разметки, но без окна.
 if args.learnProbe {
     guard let raw = args.url, let groupURL = normalize(raw) else {
@@ -484,6 +506,8 @@ DispatchQueue.global().async {
         }
         opts.cookieDomain = r.postURL.host
         opts.fillHosts = args.fillHosts
+        opts.teach = args.teachOut != nil && !args.noWindow
+        opts.teachOn = args.teachOn
         if !opts.fillHosts.isEmpty { Log.debug("автозаполнение разрешено на: \(opts.fillHosts.joined(separator: ", "))") }
         DispatchQueue.main.async {
             webAuth = WebAuth(request: r.request, options: opts) { result in
@@ -512,7 +536,17 @@ DispatchQueue.global().async {
                                 "post_url": r.postURL.absoluteString,
                                 "host": r.postURL.host ?? "",
                             ]))
-                            exit(0)
+                            // Вход прошёл и сессия уже у клиента — теперь можно
+                            // спросить, что сохранить на следующий раз. Токен
+                            // сессии живёт минуты, а не секунды: спрашиваем
+                            // после auth-reply, не до.
+                            DispatchQueue.main.async {
+                                if let path = args.teachOut, let rec = webAuth?.teachOutcome {
+                                    TeachFlow.finish(recorder: rec, outFile: path,
+                                                     portal: r.groupURL.host ?? "")
+                                }
+                                exit(0)
+                            }
                         } catch {
                             Log.error("\(error)")
                             exit(1)
