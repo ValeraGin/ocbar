@@ -20,7 +20,29 @@ enum AuthSelfTest {
     static func run() -> Int {
         failures = 0
         gate()
+        journal()
         return failures
+    }
+
+    // MARK: - журнал в --verbose
+
+    static func journal() {
+        out("Журнал --verbose — без токенов и query:")
+        let two = "<a><session-token>AAA111</session-token><x/><session-token>BBB222</session-token></a>"
+        let m2 = mask(two)
+        ok("mask: скрыты все вхождения тега", !m2.contains("AAA111") && !m2.contains("BBB222"), m2)
+        let attr = "<sso-token id=\"t\">SECRETSSO</sso-token><session-id>SID42</session-id>\n<session-token\n>MULTI\nLINE</session-token>"
+        let ma = mask(attr)
+        ok("mask: тег с атрибутами, многострочное значение, session-id",
+           !ma.contains("SECRETSSO") && !ma.contains("SID42") && !ma.contains("MULTI"), ma)
+        ok("mask: пустой тег и прочее не трогает",
+           mask("<session-token/><opaque>x</opaque>") == "<session-token/><opaque>x</opaque>")
+        let u = Log.redact("https://idp.example.test:8443/saml/login?SAMLRequest=abc&RelayState=zzz#frag")
+        ok("адрес в журнале — без query и fragment",
+           u == "https://idp.example.test:8443/saml/login?…" && !u.contains("SAMLRequest") && !u.contains("frag"), u)
+        ok("адрес без query — как есть", Log.redact("https://vpn.example.test/grp") == "https://vpn.example.test/grp")
+        ok("адрес с логином и паролем — без них",
+           !Log.redact("https://user:pw@h.test/p").contains("pw@"), Log.redact("https://user:pw@h.test/p"))
     }
 
     // MARK: - цикл автозаполнения (AutofillGate)

@@ -172,7 +172,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         webView.load(URLRequest(url: startURL))
-        Log.info("разметка: открыл \(startURL.absoluteString)")
+        Log.info("разметка: открыл \(Log.redact(startURL))")
         Log.debug("номер окна: \(window.windowNumber)")
     }
 

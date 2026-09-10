@@ -149,28 +149,6 @@ func parseArgs() -> Args {
 
 func out(_ s: String) { FileHandle.standardOutput.write(Data((s + "\n").utf8)) }
 
-/// Прячет значения токенов в отладочной печати. Тело auth-reply содержит
-/// рабочий session-token, а супервизор пишет весь вывод в журнал, который
-/// живёт до ротации.
-func mask(_ s: String) -> String {
-    var out = s
-    for tag in ["session-token", "sso-token", "session-id"] {
-        // Ищем заново на каждой итерации: строка меняется, старые индексы
-        // после замены недействительны.
-        while let open = out.range(of: "<\(tag)>"),
-              let close = out.range(of: "</\(tag)>", range: open.upperBound..<out.endIndex),
-              open.upperBound < close.lowerBound {
-            let n = out.distance(from: open.upperBound, to: close.lowerBound)
-            guard n > 0 else { break }
-            out.replaceSubrange(open.upperBound..<close.lowerBound, with: "\(n) символов скрыто")
-            // Дальше искать нечего: следующий поиск найдёт уже замаскированное
-            // и n станет нулём, поэтому выходим сразу.
-            break
-        }
-    }
-    return out
-}
-
 func jsonString(_ obj: Any) -> String {
     let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data("{}".utf8)
     return String(data: data, encoding: .utf8) ?? "{}"
@@ -211,7 +189,7 @@ func runInit(_ a: Args, http: HTTPClient) throws -> InitResult {
         (data, postURL) = try http.post(postURL, body: body)
     }
     if a.verbose, let s = String(data: data, encoding: .utf8) {
-        Log.debug("ответ init:\n\(s)")
+        Log.debug("ответ init:\n\(mask(s))")
     }
     let req = try VPNProtocol.parseAuthRequest(data)
     return InitResult(groupURL: groupURL, postURL: postURL, hops: hops, raw: data, request: req,
