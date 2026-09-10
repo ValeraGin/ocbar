@@ -24,7 +24,32 @@ enum AuthSelfTest {
         qr()
         scope()
         gatewayOnly()
+        teachOffer()
         return failures
+    }
+
+    // MARK: - окно «Запомнить для следующего входа?» — пароль
+
+    static func teachOffer() {
+        out("Запомнить вход — что предложить про пароль:")
+        typealias F = TeachFlow
+        ok("«новый пароль» из цифр (код) при сохранённом пароле — «Обновить» не предлагается",
+           F.passwordOffer(recorded: "123456", stored: "старый", source: "keychain") == .none,
+           "\(F.passwordOffer(recorded: "123456", stored: "старый", source: "keychain"))")
+        ok("код вместо пароля без сохранённого — «Сохранить» не предлагается",
+           F.passwordOffer(recorded: "48291357", stored: "", source: "keychain") == .none
+           && F.passwordOffer(recorded: " 4829 ", stored: "", source: "ask") == .none)
+        let upd = F.passwordOffer(recorded: "Новый пароль!", stored: "старый", source: "keychain")
+        ok("пароль изменился — «Обновить», галочка по умолчанию выключена",
+           upd == .update && !TeachDialog.defaultOn(upd), "\(upd) \(TeachDialog.defaultOn(upd))")
+        let save = F.passwordOffer(recorded: "пароль1", stored: "", source: "keychain")
+        ok("пароля ещё нет — «Сохранить», галочка включена", save == .save && TeachDialog.defaultOn(save), "\(save)")
+        ok("тот же пароль — ничего", F.passwordOffer(recorded: "p@ss", stored: "p@ss", source: "keychain") == .none)
+        let ask = F.passwordOffer(recorded: "p@ss", stored: "", source: "ask")
+        ok("вводите сами — предложить связку, галочка выключена", ask == .askToKeychain && !TeachDialog.defaultOn(ask))
+        ok("пароль из KeePassXC — не сохраняем",
+           F.passwordOffer(recorded: "p@ss", stored: "", source: "keepassxc") == .elsewhere("KeePassXC"))
+        ok("длинный цифровой пароль — пароль, не код", F.passwordOffer(recorded: "1234567890", stored: "", source: "keychain") == .save)
     }
 
     // MARK: - где можно заполнять форму (FillScope)

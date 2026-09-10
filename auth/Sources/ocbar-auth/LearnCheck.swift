@@ -71,7 +71,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
       <form id="pf6"><input id="w6" autocomplete="username webauthn"><button type="submit" id="b6">Далее</button></form>
       <form id="cf" onsubmit="event.preventDefault()"><input type="text" id="cu"><input type="password" id="cp"><input type="text" id="ccap"><button type="submit" id="cgo">Войти</button></form>
       <form id="hf" onsubmit="event.preventDefault()"><input type="text" id="hu"><input type="password" id="hp"></form>
-      <form id="of" onsubmit="event.preventDefault(); window.__ofDone = true;">
+      <form id="of" onsubmit="event.preventDefault(); this.style.display = 'none'; document.getElementById('og').style.display = 'block';">
         <input type="text" id="ou"><input type="password" id="opw"><button type="submit" id="ogo">Войти</button>
       </form>
       <form id="og" style="display:none" onsubmit="event.preventDefault(); window.__ogDone = true;">
@@ -510,8 +510,81 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
                 self.after(0.4) {
                     self.ok("изоляция: страница не видит обработчик записи", (seen as? String) == "undefined", "\(seen ?? "?")")
                     self.ok("изоляция: страница не включает запись сама", rec.steps.isEmpty, "\(rec.steps.count) окон")
+                    // Запись включена, синтетические события — не в счёт.
                     rec.apply(to: self.webView)
-                    self.after(0.3) { self.checkTeachCapture(rec, then) }
+                    self.after(0.3) {
+                        self.checkForgedSubmit(rec) {
+                            // Дальше «человек» — синтетические события теста.
+                            rec.trustSynthetic = true
+                            rec.apply(to: self.webView)
+                            self.after(0.2) { self.checkTeachCapture(rec) { self.checkCodeAsPassword(rec, then) } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Страница сама «отправляет форму» с подложным паролем: el.click(),
+    /// form.requestSubmit() (WebKit помечает такой submit как isTrusted),
+    /// dispatchEvent. Ни одно не должно стать окном записи и паролем.
+    private func checkForgedSubmit(_ rec: TeachRecorder, _ then: @escaping () -> Void) {
+        eval("""
+        window.__teachReset();
+        document.getElementById('tu').value = 'alice'; document.getElementById('tp').value = 'верный подложный 1';
+        document.getElementById('tgo').click();
+        window.__teachReset();
+        document.getElementById('tu').value = 'alice'; document.getElementById('tp').value = 'верный подложный 2';
+        document.getElementById('tf1').requestSubmit();
+        window.__teachReset();
+        document.getElementById('tu').value = 'alice'; document.getElementById('tp').value = 'верный подложный 3';
+        document.getElementById('tf1').dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+        window.__twoReset();
+        document.getElementById('s1user').value = 'alice'; document.getElementById('s1pass').value = 'подложный 4';
+        document.getElementById('s1next').click();
+        window.__twoReset(); window.__teachReset();
+        'ok'
+        """) { _ in
+            self.after(0.4) {
+                self.ok("запись: отправку, которую страница сделала сама (click, requestSubmit, dispatchEvent), не записывает",
+                        rec.steps.isEmpty && rec.password == nil,
+                        "окон \(rec.steps.count), пароль \(rec.password == nil ? "нет" : "записан")")
+                then()
+            }
+        }
+    }
+
+    /// Поле кода с type=password (autocomplete one-time-code, inputmode
+    /// numeric, maxlength 6, name=otp): код, а не пароль. Паролем остаётся
+    /// введённый на первом окне.
+    private func checkCodeAsPassword(_ rec: TeachRecorder, _ then: @escaping () -> Void) {
+        rec.enabled = true
+        rec.trustSynthetic = true
+        rec.apply(to: webView)
+        let before = rec.steps.count
+        after(0.2) {
+            self.eval("""
+            document.getElementById('of').style.display = ''; document.getElementById('og').style.display = 'none';
+            document.getElementById('ou').value = 'alice'; document.getElementById('opw').value = 'настоящий пароль';
+            document.getElementById('ogo').click();
+            document.getElementById('ocode').value = '482913';
+            document.getElementById('ogo2').click();
+            'ok'
+            """) { _ in
+                self.after(0.5) {
+                    let new = rec.steps.dropFirst(before)
+                    let shape = new.map { s in s.fields.map { "\($0.kind) \($0.selector)" }.joined(separator: ", ") + " → " + (s.button ?? "-") }
+                    self.ok("запись: поле кода с type=password записано как код",
+                            shape == ["username input[id=ou], password input[id=opw] → button[id=ogo]",
+                                      "totp input[id=ocode] → button[id=ogo2]"], shape.joined(separator: " | "))
+                    self.ok("запись: паролем остался пароль, а не код", rec.password == "настоящий пароль",
+                            rec.password == "482913" ? "паролем записан код" : "")
+                    self.ok("запись: код из поля type=password запомнен для проверки секрета", rec.code == "482913")
+                    rec.enabled = false
+                    rec.trustSynthetic = false
+                    rec.apply(to: self.webView)
+                    rec.forgetSecrets()
+                    self.eval("document.getElementById('of').style.display = 'none'; document.getElementById('og').style.display = 'none'; 'ok'") { _ in then() }
                 }
             }
         }
