@@ -415,6 +415,7 @@ ocbar resume    # вернуть, мгновенно и без входа
 | [06-distribution.md](docs/06-distribution.md) | Раздача и автообновление без Developer ID |
 | [07-requirements.md](docs/07-requirements.md) | Требования со статусом |
 | [08-references.md](docs/08-references.md) | Ссылки |
+| [10-review-2026-09-10.md](docs/10-review-2026-09-10.md) | Проверка 0.2.10 семью агентами: находки по важности |
 | [DECISIONS.md](DECISIONS.md) | Решения этой реализации и почему |
 
 Практическое:
