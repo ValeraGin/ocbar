@@ -648,6 +648,7 @@ read_zones() {
     if [ -n "${P_FILE:-}" ] && [ -f "$P_FILE" ]; then
         local zone dns port
         pf_section "$P_FILE" DNS | while read -r zone dns port _; do
+            case "${port:-}" in \#*|\;*) port="" ;; esac
             [ -n "${zone:-}" ] && [ -n "${dns:-}" ] || continue
             valid_zone "$zone" || { warn "недопустимое имя зоны, пропущено: $zone" >&2; continue; }
             [ "$dns" = vpn ] || valid_ip "$dns" || { warn "недопустимый адрес, пропущено: $zone $dns" >&2; continue; }
@@ -660,6 +661,7 @@ read_zones() {
     while read -r zone dns port _; do
         zone=${zone#"$BOM"}; zone=${zone%$'\r'}; dns=${dns%$'\r'}; port=${port%$'\r'}
         case "${zone:-}" in ''|\#*) continue ;; esac
+        case "${port:-}" in \#*|\;*) port="" ;; esac
         [ -n "${dns:-}" ] || { warn "строка без DNS пропущена: $zone" >&2; continue; }
         valid_zone "$zone" || { warn "недопустимое имя зоны, пропущено: $zone" >&2; continue; }
         [ "$dns" = vpn ] || valid_ip "$dns" || { warn "недопустимый адрес, пропущено: $zone $dns" >&2; continue; }
@@ -1461,7 +1463,12 @@ proxy_stop() {
 # требует прав администратора, поэтому через хелпер (socks-set/socks-clear),
 # со своим манифестом socks.state по образцу zones.state: снимаем только то,
 # что ставили сами, чужой SOCKS хелпер не перезаписывает (D40).
-socks_state_services() { [ -f "$SOCKS_STATE" ] && awk 'NF { $NF = ""; sub(/ $/, ""); print }' "$SOCKS_STATE" || true; }
+# Формат хелпера 0.8.0 — «сервис<TAB>порт»; старый — «сервис порт» (порт — последнее слово).
+socks_state_services() {
+    [ -f "$SOCKS_STATE" ] || return 0
+    awk '/\t/ { sub(/\t[^\t]*$/, ""); print; next } NF { sub(/[ ]+[^ ]+[ ]*$/, ""); print }' "$SOCKS_STATE"
+    return 0
+}
 # Сервисы, где SOCKS включён не нами.
 services_with_foreign_socks() {
     local svc ours; ours=$(socks_state_services)
@@ -1947,7 +1954,8 @@ cmd_export() {
         if [ -n "${P_CSD:-}" ]; then printf 'CsdWrapper  = %s\n' "$P_CSD"; fi
         if [ "${P_AUTH:-sso}" != sso ]; then printf 'Auth        = %s\n' "$P_AUTH"; fi
         if [ "${P_KIND:-tunnel}" != tunnel ]; then printf 'Mode        = %s\n' "$P_KIND"; fi
-        if [ "${P_KIND:-tunnel}" != tunnel ] || [ "${P_SYS_PROXY:-off}" != off ]; then
+        if [ "${P_KIND:-tunnel}" != tunnel ] || [ "${P_SYS_PROXY:-off}" != off ] \
+           || [ "${P_PROXY_PORT:-11080}" != 11080 ]; then
             printf '\n[Proxy]\nPort         = %s\nSystemProxy  = %s\n' "${P_PROXY_PORT:-11080}" "${P_SYS_PROXY:-off}"
         fi
         printf '\n[Routes]\n'
@@ -2723,6 +2731,13 @@ PROFILE
     matches "профиль-файл с BOM и CRLF: Url из первой секции" '^Url += vpn\.example\.test/bom$' "$out"
     has "профиль-файл с BOM и CRLF: сеть на месте" "10.20.0.0/16" "$out"
     rm -f "$tmp/profiles/bom.ocbar"
+    # Хвостовой комментарий в строке DNS — не порт; [Proxy] с нестандартным портом
+    # не теряется при выгрузке туннельного профиля (так же пишет приложение).
+    printf '[Connection]\nName = Хвост\nUrl = vpn.example.test/tail\n\n[DNS]\nint.example.test = 192.0.2.53 # офис\n\n[Proxy]\nPort = 11999\n' > "$tmp/profiles/tail.ocbar"
+    out=$(run export tail || true)
+    matches "DNS: комментарий в конце строки — не порт" '^int\.example\.test +\= 192\.0\.2\.53$' "$out"
+    matches "export: [Proxy] с портом 11999 в туннельном профиле сохранён" '^Port += 11999$' "$out"
+    rm -f "$tmp/profiles/tail.ocbar"
 
     # Переключатели без туннеля меняют только состояние — привилегий не надо.
     run routes del 10.11.12.0/24 >/dev/null || true
