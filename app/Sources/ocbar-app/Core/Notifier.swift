@@ -119,7 +119,14 @@ enum Notifier {
     /// без приставки «ocbar:»: имя приложения система показывает сама.
     static func verdict(_ url: URL, token expected: String? = expectedToken) -> Verdict {
         guard url.scheme == scheme, url.host == "notify" else { return .notOurs }
-        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        // «+» — пробел: так кодирует формы urllib (клиент до 0.3.4), а
+        // URLComponents оставляет плюс плюсом — в уведомлении он стоял между слов.
+        let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQueryItems ?? []
+        let items = raw.map { item in
+            URLQueryItem(name: item.name, value: item.value.map {
+                $0.replacingOccurrences(of: "+", with: "%20").removingPercentEncoding ?? $0
+            })
+        }
         let given = items.first { $0.name == "token" }?.value ?? ""
         guard let expected, !expected.isEmpty, !given.isEmpty, sameBytes(given, expected) else {
             return .rejected(given.isEmpty ? "без токена" : "с чужим токеном")
