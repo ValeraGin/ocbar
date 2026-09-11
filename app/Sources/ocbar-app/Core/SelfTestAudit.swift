@@ -143,6 +143,14 @@ extension SelfTest {
         t.check("уведомление: без токена отвергнуто", Notifier.parse(none) == nil)
         t.check("уведомление: при незаписанном токене не принимается ничего",
                 Notifier.verdict(good, token: nil) != .show(title: "t", body: "b"))
+        // Пробелы: «+» (так кодировал клиент до 0.3.4) и %20 — пробел, %2B — плюс.
+        let tk = "0123456789abcdef0123456789abcdef"
+        let plus = URL(string: "ocbar://notify?title=a+b&body=c+d%2Be&token=\(tk)")!
+        t.check("уведомление: «+» — пробел, %2B — плюс",
+                Notifier.verdict(plus, token: tk) == .show(title: "a b", body: "c d+e"))
+        let pct = URL(string: "ocbar://notify?title=a%20b&body=%D0%B2%D1%85%D0%BE%D0%B4%20%D0%BD%D1%83%D0%B6%D0%B5%D0%BD&token=\(tk)")!
+        t.check("уведомление: %20 — пробел",
+                Notifier.verdict(pct, token: tk) == .show(title: "a b", body: "вход нужен"))
 
         // Токен в файле: одна строка hex, права 0600, notify.allowed рядом.
         let dir = NSTemporaryDirectory() + "ocbar-notify-\(getpid())/state"

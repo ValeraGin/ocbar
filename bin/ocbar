@@ -152,7 +152,7 @@ notify_route() { # заголовок, текст
     if [ "$allowed" != 1 ]; then printf 'off уведомления ocbar не разрешены в Системных настройках\n'; return 0; fi
     tok=$(notify_token)
     if [ -z "$tok" ]; then printf 'off нет токена приложения\n'; return 0; fi
-    url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2], "token": sys.argv[3]}))' "$1" "$2" "$tok" 2>/dev/null || true)
+    url=$(/usr/bin/python3 -c 'import sys, urllib.parse as u; print("ocbar://notify?" + u.urlencode({"title": sys.argv[1], "body": sys.argv[2], "token": sys.argv[3]}, quote_via=u.quote))' "$1" "$2" "$tok" 2>/dev/null || true)
     if [ -z "$url" ]; then printf 'off не удалось собрать адрес\n'; return 0; fi
     printf 'app %s\n' "$url"
 }
@@ -3076,6 +3076,9 @@ PROFILE
     printf '1\n' > "$tmp/state/notify.allowed"
     out=$(OCBAR_SELFTEST_APP=1 run _notify-route 'ocbar: нужен вход' 'Сессия & «истекла»' || true)
     matches "уведомление: через приложение, с токеном" "^app ocbar://notify\?title=[^&]+&body=[^&]+&token=${tok}\$" "$out"
+    # Пробел — %20, а не «+»: приложение разбирает адрес как URL, и «+» в
+    # тексте уведомления показывался плюсом между слов.
+    is "уведомление: пробелы — %20, без «+»" 0 "$(printf '%s' "$out" | grep -c '+' || true)"
     is "уведомление: приложение не запущено — запустить его" launch "$(OCBAR_SELFTEST_APP=0 run _notify-route t b)"
     printf '0\n' > "$tmp/state/notify.allowed"
     matches "уведомление: уведомления запрещены — только журнал" '^off ' "$(OCBAR_SELFTEST_APP=1 run _notify-route t b)"
