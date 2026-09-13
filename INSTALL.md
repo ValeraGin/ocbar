@@ -300,8 +300,14 @@ ocbar запомнит форму входа, а после входа пред�
 ocbar app start                 # запустить сейчас
 ocbar app autostart on          # запускать при входе в систему
 ocbar app status                # где бандл, работает ли, включён ли автозапуск
-ocbar app stop && ocbar app start   # после brew upgrade — подхватить новую сборку
+ocbar app stop && ocbar app start   # после brew upgrade — подхватить новую сборку (и копию в ~/Applications)
 ```
+
+Homebrew кладёт бандл в свой каталог, а лаунчер и Spotlight видят программы
+только в `/Applications` и `~/Applications`. Поэтому `ocbar app start`
+держит копию в `~/Applications/ocbar.app` и обновляет её, когда версия в
+Homebrew другая; из лаунчера запускается она же. Убирает копию
+`sudo ocbar uninstall`.
 
 Из репозитория, без Homebrew, приложение собирается отдельно:
 

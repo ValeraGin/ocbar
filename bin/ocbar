@@ -78,6 +78,7 @@ RESOLVER_DIR="/etc/resolver"
 AGENT_LABEL="ru.ocbar.supervisor"
 AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 APP_LABEL="ru.ocbar.app"                 # приложение меню-бара, запуск при входе
+APP_USER_COPY="${OCBAR_APP_COPY:-$HOME/Applications/ocbar.app}"   # копия для лаунчера (D64)
 APP_PLIST="$HOME/Library/LaunchAgents/$APP_LABEL.plist"
 
 DRY_RUN=0
@@ -164,6 +165,7 @@ notify() { # заголовок, текст
     if [ "$r" = launch ]; then
         a=$(app_path || true)
         if [ -z "$a" ]; then log "уведомление не показано (нет ocbar.app): $1 — $2"; return 0; fi
+        a=$(app_sync_copy "$a" 2>/dev/null)
         # Старый токен недействителен: запущенное приложение кладёт новый.
         rm -f "$USER_STATE/notify.token" "$USER_STATE/notify.allowed"
         open -g -j "$a" >/dev/null 2>&1 || true
@@ -2639,7 +2641,7 @@ cmd_uninstall() {
     #    найден», а launchd — перезапускать агента. pkill — только процессы
     #    этого пользователя.
     steps+=("sudo -u $me launchctl bootout gui/$uid/$APP_LABEL" "rm -f $q_home/Library/LaunchAgents/$APP_LABEL.plist"
-            "pkill -u $uid -f ocbar.app/Contents/MacOS/ocbar-app"
+            "pkill -u $uid -f ocbar.app/Contents/MacOS/ocbar-app" "rm -rf $q_home/Applications/ocbar.app"
             "launchctl bootout gui/$uid/$AGENT_LABEL" "rm -f $q_home/Library/LaunchAgents/$AGENT_LABEL.plist")
     # 4. Беспарольное правило и файлы. Старый каталог манифеста — только
     #    rmdir: если в нём есть чужое, пусть остаётся.
@@ -3069,6 +3071,22 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Копия приложения для лаунчера: бандл из Homebrew копируется, одинаковый
+    # не перекладывается, новая версия заменяет старую, сборка проекта — как есть.
+    mkb() { mkdir -p "$1/Contents/MacOS"; printf '#!/bin/sh\n# %s\n' "$2" > "$1/Contents/MacOS/ocbar-app"
+            printf '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>%s</string></dict></plist>\n' "$2" > "$1/Contents/Info.plist"; }
+    src="$tmp/Cellar/ocbar/9.9.1/ocbar.app"; dst="$tmp/Applications/ocbar.app"; mkb "$src" 9.9.1
+    out=$(OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$src" || true)
+    is "лаунчер: бандл из Homebrew запускается из копии" "$dst" "$out"
+    is "лаунчер: в копии та же версия" 9.9.1 "$(plutil -extract CFBundleShortVersionString raw "$dst/Contents/Info.plist" 2>/dev/null || true)"
+    : > "$dst/marker"; OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$src" >/dev/null || true
+    is "лаунчер: одинаковая копия не перекладывается" yes "$([ -f "$dst/marker" ] && echo yes || echo no)"
+    mkb "$src" 9.9.2; OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$src" >/dev/null || true
+    is "лаунчер: новая версия заменяет копию" "9.9.2 no" "$(plutil -extract CFBundleShortVersionString raw "$dst/Contents/Info.plist" 2>/dev/null) $([ -f "$dst/marker" ] && echo yes || echo no)"
+    mkb "$tmp/proj/app/.build/ocbar.app" 9.9.3
+    is "лаунчер: сборка проекта не копируется" "$tmp/proj/app/.build/ocbar.app" "$(OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$tmp/proj/app/.build/ocbar.app" || true)"
+    rm -rf "$tmp/Cellar" "$tmp/Applications" "$tmp/proj"
+
     # Уведомления: только через приложение, с его токеном и разрешением
     # системы; своего запасного показа («Script Editor») у клиента нет (D61).
     tok=0123456789abcdef0123456789abcdef
@@ -3238,12 +3256,41 @@ app_path() {
     local c
     for c in "${OCBAR_APP:-}" "$SELF_DIR/../ocbar.app" "$SELF_DIR/../app/.build/ocbar.app" \
              /opt/homebrew/opt/ocbar/ocbar.app /usr/local/opt/ocbar/ocbar.app \
-             /Applications/ocbar.app; do
+             /Applications/ocbar.app "$APP_USER_COPY"; do
         [ -n "$c" ] && [ -d "$c" ] && { printf '%s' "$(cd "$c" && pwd)"; return 0; }
     done
     return 1
 }
 app_pid() { pgrep -f 'ocbar\.app/Contents/MacOS/ocbar-app' 2>/dev/null | head -1 || true; }
+
+# Лаунчер и Spotlight видят программы только в /Applications и ~/Applications,
+# а Homebrew кладёт бандл в свой Cellar и за пределы префикса писать не может.
+# Поэтому бандл из Homebrew запускается из копии в ~/Applications, и копия
+# обновляется, когда отличается от источника (D64). Символическая ссылка не
+# годится — лаунчер ссылки не показывает. Сборка из дерева проекта не
+# копируется: это сборка разработчика. Печатает путь, который запускать.
+app_bundle_version() { plutil -extract CFBundleShortVersionString raw "$1/Contents/Info.plist" 2>/dev/null || true; }
+app_sync_copy() { # источник
+    local src="$1" dst="$APP_USER_COPY"
+    case "$src" in */opt/ocbar/ocbar.app|*/Cellar/ocbar/*/ocbar.app) ;; *) printf '%s' "$src"; return 0 ;; esac
+    if [ -d "$dst" ] && [ "$(app_bundle_version "$dst")" = "$(app_bundle_version "$src")" ] \
+       && cmp -s "$src/Contents/MacOS/ocbar-app" "$dst/Contents/MacOS/ocbar-app"; then
+        printf '%s' "$dst"; return 0
+    fi
+    if [ "$DRY_RUN" = 1 ]; then info "[dry-run] копия для лаунчера: $src → $dst" >&2; printf '%s' "$src"; return 0; fi
+    local tmp="$dst.new.$$" old="$dst.old.$$"
+    mkdir -p "${dst%/*}" && rm -rf "$tmp" && cp -R "$src" "$tmp" 2>/dev/null || {
+        rm -rf "$tmp"; warn "копия для лаунчера" "не записалась в ${dst%/*} — запускаю из $src" >&2
+        printf '%s' "$src"; return 0; }
+    if [ -d "$dst" ]; then mv "$dst" "$old"; fi
+    mv "$tmp" "$dst" && rm -rf "$old"
+    # Лаунчеру — сразу, не дожидаясь, пока Spotlight найдёт сам. Самопроверка
+    # (OCBAR_APP_COPY) временный бандл в базу LaunchServices не заносит.
+    if [ -z "${OCBAR_APP_COPY:-}" ]; then
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$dst" >/dev/null 2>&1 || true
+    fi
+    printf '%s' "$dst"
+}
 
 app_plist_body() { # путь к бандлу
     cat <<PLIST
@@ -3265,13 +3312,23 @@ cmd_app() {
         start)
             [ -n "$a" ] || die "не найден ocbar.app (соберите: app/make-app.sh, или brew install)"
             [ -n "$(app_pid)" ] && { info "уже работает (pid $(app_pid))"; return 0; }
-            open "$a" && ok "запущено" "$a" ;;
+            local run; run=$(app_sync_copy "$a")
+            open "$run" && ok "запущено" "$run" ;;
         stop)
             local p; p=$(app_pid)
             [ -n "$p" ] || { info "не работает"; return 0; }
             kill "$p" && ok "остановлено" "pid $p" ;;
         status)
             [ -n "$a" ] && ok "Бандл" "$a" || bad "Бандл" "не найден"
+            if [ -d "$APP_USER_COPY" ]; then
+                if [ -n "$a" ] && [ "$(app_bundle_version "$APP_USER_COPY")" != "$(app_bundle_version "$a")" ]; then
+                    warn "Копия для лаунчера" "$APP_USER_COPY — версия $(app_bundle_version "$APP_USER_COPY"), обновит ocbar app stop && ocbar app start"
+                else
+                    ok "Копия для лаунчера" "$APP_USER_COPY"
+                fi
+            else
+                skip "Копия для лаунчера" "нет — появится при ocbar app start"
+            fi
             local p; p=$(app_pid)
             [ -n "$p" ] && ok "Процесс" "pid $p" || skip "Процесс" "не запущено"
             if [ -f "$APP_PLIST" ]; then
@@ -3284,15 +3341,11 @@ cmd_app() {
             case "${2:-}" in
                 on)
                     [ -n "$a" ] || die "не найден ocbar.app"
-                    # В плист пишем путь, который переживает переустановку:
-                    # каталог opt Homebrew не меняется от версии к версии, а
-                    # путь внутри дерева проекта меняется вместе с деревом.
-                    local stable="$a" c
-                    for c in /opt/homebrew/opt/ocbar/ocbar.app /usr/local/opt/ocbar/ocbar.app; do
-                        [ -d "$c" ] && { stable="$c"; break; }
-                    done
+                    # В плист — копия в ~/Applications: путь не меняется от
+                    # версии к версии. Сборка из дерева проекта — как есть.
+                    local stable; stable=$(app_sync_copy "$a")
                     case "$stable" in
-                        */opt/ocbar/ocbar.app) ;;
+                        "$APP_USER_COPY"|*/opt/ocbar/ocbar.app) ;;
                         *) warn "автозапуск" "путь $stable из дерева проекта; после переустановки повторите ocbar app autostart on" ;;
                     esac
                     mkdir -p "$HOME/Library/LaunchAgents"
@@ -3376,7 +3429,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar rules show [профиль]          правила автозаполнения профиля
   ocbar rules import <файл> [профиль] положить правила из файла в [Autofill]
   ocbar rules clear [профиль]         убрать [Autofill] из профиля
-  ocbar app [start|stop|status]       приложение меню-бара; autostart on|off
+  ocbar app [start|stop|status]       приложение меню-бара; autostart on|off;
+                                      start держит копию в ~/Applications — для лаунчера
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
   ocbar doctor                        диагностика, ничего не меняет
@@ -3438,7 +3492,8 @@ case "${1:-}" in
         shift; [ -n "${OCBAR_SELFTEST_HELPER:-}" ] || die "_selftest-fn — только для selftest (нет OCBAR_SELFTEST_HELPER)"
         case "${1:-}" in
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
-            *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup" ;;
+            app_sync_copy) app_sync_copy "${2:-}" ;;
+            *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;
     install)    shift; cmd_install "$@" ;;
     uninstall)  cmd_uninstall ;;
