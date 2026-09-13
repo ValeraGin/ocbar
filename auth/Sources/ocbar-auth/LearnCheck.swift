@@ -832,7 +832,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
                 ok("капча, форма перерисовывается: пароль уходит в поле не больше двух раз",
                    passwordSeen == 2 && gate.passwordFills == 2, "пароль в поле \(passwordSeen) раз, учтено \(gate.passwordFills)")
                 ok("капча: дальше — ждать человека на пустом пароле", last == .waitingHuman("input[id=cp]"), "\(last)")
-                eval("window.__capRedraw(); 'ok'") { _ in self.checkLateButton(then) }
+                eval("window.__capRedraw(); 'ok'") { _ in self.checkLateButton { self.checkForgetSessions(then) } }
                 return
             }
             gate.newPage()
@@ -848,6 +848,27 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
             }
         }
         attempt(0)
+    }
+
+    // MARK: - выйти совсем (D68)
+
+    /// Сброс сессий стирает cookie провайдера — на временном хранилище:
+    /// настоящие сессии владельца проверка не трогает.
+    private func checkForgetSessions(_ then: @escaping () -> Void) {
+        let store = WKWebsiteDataStore.nonPersistent()
+        let cookie = HTTPCookie(properties: [.domain: "idp.example.test", .path: "/", .name: "KEYCLOAK_SESSION",
+                                             .value: "x", .secure: "TRUE", .expires: Date().addingTimeInterval(3600)])!
+        store.httpCookieStore.setCookie(cookie) {
+            store.httpCookieStore.getAllCookies { before in
+                WebAuth.forgetSessions(in: store) { _ in
+                    store.httpCookieStore.getAllCookies { left in
+                        self.ok("выйти совсем: cookie провайдера входа стёрты", before.count == 1 && left.isEmpty,
+                                "было \(before.count), осталось \(left.count)")
+                        then()
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - кнопка включается не сразу после ввода (D67)

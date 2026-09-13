@@ -82,6 +82,22 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         return cfg
     }
 
+    /// Стереть сессии провайдеров входа: все данные сайтов и cookie хранилища
+    /// окна входа. Для проверок «войти с нуля» (ocbar logout, D68); обычному
+    /// пользователю живая сессия провайдера — удобство: вход без формы.
+    static func forgetSessions(in store: WKWebsiteDataStore = .default(), completion: @escaping (Int) -> Void) {
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        store.fetchDataRecords(ofTypes: types) { records in
+            store.removeData(ofTypes: types, for: records) {
+                store.httpCookieStore.getAllCookies { left in
+                    let group = DispatchGroup()
+                    for c in left { group.enter(); store.httpCookieStore.delete(c) { group.leave() } }
+                    group.notify(queue: .main) { completion(records.count) }
+                }
+            }
+        }
+    }
+
     /// Cookie токена и cookie ошибки — только с точного хоста шлюза, без
     /// родительского домена: хранилище общее и постоянное, и cookie с тем
     /// же именем мог поставить на весь домен любой соседний хост (или

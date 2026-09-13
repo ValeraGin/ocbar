@@ -521,6 +521,15 @@ struct MenuView: View {
             }
             // Разметка формы входа — в окне профиля: там видно, куда лягут правила.
             MenuRow(action: { open(WindowID.diagnostics) }) { Text("Диагностика и журналы…") }
+            // Только в режиме разработчика (ocbar app devmode on): войти с
+            // нуля, с формой. Обычному пользователю живая сессия — удобство.
+            if UserDefaults.standard.bool(forKey: "DeveloperMode") {
+                MenuRow(enabled: idle && OcbarClient.shared.binary != nil, action: { store.logout() }) {
+                    Text("Выйти совсем (сброс входа)")
+                    Spacer()
+                    Text("dev").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+                }
+            }
             MenuRow(action: { NSApplication.shared.terminate(nil) }) {
                 Text("Выйти")
                 Spacer()

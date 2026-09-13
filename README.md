@@ -295,6 +295,7 @@ ocbar connect [профиль] [--show] [--teach] [-v]
                                       SSO и туннель; окно покажется, если за 2 с не прошло молча;
                                       --teach — войти руками и запомнить форму, пароль, код
 ocbar disconnect
+ocbar logout                          выйти совсем: отключиться и забыть сессии входа (проверки)
 ocbar status [--short]                --short — машинный вид для меню
 ocbar profiles | import <файл> | export <профиль> [файл]
 ocbar profiles order [имя…]           порядок профилей в меню; без имён — текущий
@@ -306,7 +307,7 @@ ocbar secret set-password|set-totp|status|code [профиль]
 ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
 ocbar learn [профиль] [--probe] [--out <файл>]   разметить форму входа
 ocbar rules show|import <файл>|clear [профиль]  правила в [Autofill] профиля
-ocbar app start|stop|status           приложение меню-бара; autostart on|off
+ocbar app start|stop|status           приложение меню-бара; autostart on|off; devmode on|off
 ocbar supervisor status|start|stop|restart       агент супервизора
 ocbar version [--all]                 версия; --all — версии и пути всех частей
 ocbar doctor                          диагностика, ничего не меняет
