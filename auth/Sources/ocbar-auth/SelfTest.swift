@@ -78,6 +78,16 @@ enum AuthSelfTest {
         p.committed(u("https://vpn.example.test/saml"))
         ok("автоотправка SAML-формы со страницы шлюза — в цепочке",
            p.navigation(to: u("https://idp2.example.test/sso"), humanRecent: false) == .gatewayChain)
+        // Балансировщик: адрес группы vpn.example.test, страница входа — с узла
+        // vpn-1.example.test, и уже она отправляет SAML-форму провайдеру.
+        var lb = FillScope(explicit: [], gatewayHosts: WebAuth.scopeGatewayHosts(
+            ["vpn.example.test"], loginURL: "https://vpn-1.example.test/+CSCOE+/saml/sp/login?tgname=X",
+            loginFinalURL: "https://vpn-1.example.test/+CSCOE+/saml_ac_login.html"))
+        _ = lb.navigation(to: u("https://vpn-1.example.test/+CSCOE+/saml/sp/login?tgname=X"), humanRecent: false)
+        lb.committed(u("https://vpn-1.example.test/+CSCOE+/saml/sp/login"))
+        let rlb = lb.navigation(to: u("https://idp3.example.test/auth/realms/x/protocol/saml"), humanRecent: false)
+        ok("узел балансировщика шлюза отправляет SAML-форму — провайдер в цепочке",
+           rlb == .gatewayChain && lb.allowsFill(u("https://idp3.example.test/auth/realms/x/login-actions/authenticate")), "\(rlb)")
         // Явный список.
         let e = FillScope(explicit: ["corp.test"], gatewayHosts: ["vpn.example.test"])
         ok("IdpHosts: хост и поддомены — да",
