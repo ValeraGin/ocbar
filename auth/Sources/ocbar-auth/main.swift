@@ -563,6 +563,7 @@ DispatchQueue.global().async {
             }
         }
         opts.gatewayHosts = [r.postURL.host, r.groupURL.host].compactMap { $0 }
+        if let cmd = env["OCBAR_TOTP_COMMAND"], !cmd.isEmpty { opts.totpCommand = cmd }
         opts.fillHosts = args.fillHosts
         opts.teach = args.teachOut != nil && !args.noWindow
         opts.teachOn = args.teachOn

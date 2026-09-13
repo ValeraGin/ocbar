@@ -21,6 +21,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         var creds = Credentials()
         var totpSecret: String? = nil     // код считаем в момент заполнения, не заранее
         var totpCode: String? = nil       // если код пришёл готовым (из внешней базы)
+        var totpCommand: String? = nil    // команда, печатающая свежий код (кнопка «Вставить код»)
         var totpParams = TOTPParams()     // алгоритм, цифры, период секрета — из профиля
         var autofill = true
         // Хосты шлюза (адрес группы и адрес, где идёт POST): cookie — только
@@ -134,8 +135,19 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         self.request = request
         self.opts = options
         self.done = completion
-        self.scope = FillScope(explicit: options.fillHosts, gatewayHosts: options.gatewayHosts)
+        self.scope = FillScope(explicit: options.fillHosts,
+                               gatewayHosts: Self.scopeGatewayHosts(options.gatewayHosts, loginURL: request.loginURL,
+                                                                    loginFinalURL: request.loginFinalURL))
         super.init()
+    }
+
+    /// Хосты, с которых начинается цепочка входа: адрес группы, адрес POST и
+    /// страницы sso-v2-login и login-final. Балансировщик шлюза отдаёт
+    /// страницу входа с другого узла (vpn.example → vpn-1.example), и без её
+    /// хоста автоотправка SAML-формы оттуда к провайдеру цепочку не
+    /// продлевала — форма провайдера не заполнялась совсем.
+    static func scopeGatewayHosts(_ hosts: [String], loginURL: String, loginFinalURL: String) -> [String] {
+        hosts + [loginURL, loginFinalURL].compactMap { FillScope.host(URL(string: $0)) }
     }
 
     // MARK: - запуск
@@ -168,6 +180,28 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         statusLabel.frame = NSRect(x: 8, y: 3, width: 504, height: 16)
         content.addSubview(webView)
         content.addSubview(statusLabel)
+        // «Вставить пароль» и «Вставить код»: если автозаполнение не сработало
+        // (форма не узналась, окно вне цепочки), человек подставляет данные
+        // профиля сам — в поле, где стоит курсор. Значения в журнал не идут.
+        let pwButton = NSButton(title: "Вставить пароль", target: self, action: #selector(insertPassword))
+        let codeButton = NSButton(title: "Вставить код", target: self, action: #selector(insertCode))
+        var x: CGFloat = 6
+        for b in [pwButton, codeButton] {
+            b.bezelStyle = .inline
+            b.controlSize = .small
+            b.font = .systemFont(ofSize: 11)
+            b.sizeToFit()
+            b.frame = NSRect(x: x, y: 2, width: b.frame.width + 8, height: 18)
+            x += b.frame.width + 6
+            content.addSubview(b)
+        }
+        pwButton.isEnabled = !(opts.creds.password ?? "").isEmpty
+        pwButton.toolTip = pwButton.isEnabled ? "Подставить пароль из источника профиля в поле, где стоит курсор"
+                                              : "Источник профиля пароля не дал"
+        codeButton.isEnabled = hasCodeSource
+        codeButton.toolTip = codeButton.isEnabled ? "Подставить свежий одноразовый код в поле, где стоит курсор"
+                                                  : "У профиля нет источника кода (Totp = off или sms)"
+        statusLabel.frame = NSRect(x: x + 4, y: 3, width: 520 - x - 12, height: 16)
         if let r = recorder {
             let box = NSButton(checkboxWithTitle: "Запомнить, как я вхожу", target: self, action: #selector(teachToggled))
             box.state = r.enabled ? .on : .off
@@ -177,7 +211,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             box.toolTip = "Входите как обычно — ocbar запомнит, как устроена форма, и после входа предложит сохранить правила, пароль и источник кода. Без вашего подтверждения ничего не сохраняется."
             content.addSubview(box)
             teachBox = box
-            statusLabel.frame.size.width = 520 - 16 - 200
+            statusLabel.frame.size.width = max(60, 520 - statusLabel.frame.minX - 208)
             if r.enabled { statusLabel.stringValue = "запоминаю: входите как обычно" }
         }
 
@@ -235,6 +269,85 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         shownToHuman = true
+    }
+
+    private var hasCodeSource: Bool {
+        !(opts.totpSecret ?? "").isEmpty || !(opts.totpCommand ?? "").isEmpty || !(opts.totpCode ?? "").isEmpty
+    }
+
+    /// Код в момент нажатия: секрет из связки, команда клиента (KeePassXC,
+    /// своя) или готовый код, если дали только его.
+    private func codeNow() -> String? {
+        if let s = opts.totpSecret, !s.isEmpty { return TOTP.code(secretBase32: s, params: opts.totpParams) }
+        if let cmd = opts.totpCommand, !cmd.isEmpty {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/sh")
+            p.arguments = ["-c", cmd]
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            p.standardError = FileHandle.nullDevice
+            do { try p.run() } catch { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            let first = String(decoding: data, as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
+            let digits = first.trimmingCharacters(in: .whitespaces)
+            return (6...8).contains(digits.count) && digits.allSatisfy(\.isNumber) ? digits : nil
+        }
+        if let c = opts.totpCode, !c.isEmpty { return c }
+        return nil
+    }
+
+    @objc private func insertPassword() {
+        guard let pw = opts.creds.password, !pw.isEmpty else {
+            statusLabel.stringValue = "пароля нет: источник профиля его не дал"; return
+        }
+        insert(pw, kind: "password")
+    }
+
+    @objc private func insertCode() {
+        guard let code = codeNow() else {
+            statusLabel.stringValue = "кода нет: источник профиля не ответил"; return
+        }
+        insert(code, kind: "totp")
+    }
+
+    /// Поле: где стоит курсор; если курсор не в поле — первое видимое поле
+    /// пароля или кода. Установщик значения — родной, с событиями input и
+    /// change, как у автозаполнения: формы на Vue и React видят ввод.
+    static let insertScript = """
+    function usable(e) {
+      return e && e.tagName === 'INPUT' && e.offsetParent !== null && !e.disabled && !e.readOnly
+        && !/^(hidden|submit|button|checkbox|radio|file|image|reset)$/i.test(e.type || '');
+    }
+    var e = document.activeElement;
+    if (!usable(e)) {
+      var q = kind === 'password' ? 'input[type=password]'
+        : 'input[autocomplete=one-time-code], input[inputmode=numeric], input[name*=otp i], input[id*=otp i], input[name*=code i], input[id*=code i], input[type=tel]';
+      e = Array.prototype.find.call(document.querySelectorAll(q), usable);
+    }
+    if (!e) return '';
+    e.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, v);
+    e.dispatchEvent(new Event('input', {bubbles: true}));
+    e.dispatchEvent(new Event('change', {bubbles: true}));
+    return e.id ? '#' + e.id : (e.name ? '[name=' + e.name + ']' : 'input[type=' + e.type + ']');
+    """
+
+    private func insert(_ value: String, kind: String) {
+        guard webView.url?.scheme?.lowercased() == "https" else {
+            statusLabel.stringValue = "страница не по https — не вставляю"; return
+        }
+        let what = kind == "password" ? "пароль" : "код"
+        webView.callAsyncJavaScript(Self.insertScript, arguments: ["v": value, "kind": kind],
+                                    in: nil, in: Self.world) { [weak self] res in
+            guard let self = self else { return }
+            if case .success(let r) = res, let field = r as? String, !field.isEmpty {
+                self.statusLabel.stringValue = "\(what) вставлен в \(field)"
+                Log.info("человек вставил \(what) кнопкой: \(field) на \(self.webView.url?.host ?? "?")")
+            } else {
+                self.statusLabel.stringValue = "некуда вставить \(what): щёлкните в поле и нажмите ещё раз"
+            }
+        }
     }
 
     @objc private func teachToggled() {
@@ -365,11 +478,11 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         let h = url.host ?? "?"
         switch reason {
         case .already: break
-        case .gatewayChain: Log.debug("цепочка входа: \(h)")
+        case .gatewayChain: Log.info("цепочка входа: \(h)")
         case .human: Log.info("человек перешёл на \(h) — там тоже заполняю")
         case .refused:
             if url.scheme == "https" || url.scheme == "http" {
-                Log.debug("\(h): не из цепочки входа — автозаполнения там не будет")
+                Log.info("\(h): не из цепочки входа — автозаполнения там не будет")
             }
         }
     }

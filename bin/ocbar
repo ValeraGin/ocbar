@@ -50,6 +50,7 @@ PROXY_ENV="$USER_STATE/proxy.env"        # STATE, PID, PORT, URL, SINCE, IP4…
 PROXY_PID="$USER_STATE/proxy.pid"        # пишет сам openconnect (--pid-file)
 LOG_DIR="${OCBAR_LOG_DIR:-$HOME/Library/Logs/ocbar}"   # OCBAR_LOG_DIR — для самопроверки
 SUP_LOG="$LOG_DIR/supervisor.log"
+AUTH_LOG="$LOG_DIR/auth.log"          # решения окна входа (ocbar-auth), без секретов
 PROXY_LOG="$LOG_DIR/openconnect-proxy.log"
 
 PREFIX="/usr/local"
@@ -1183,25 +1184,30 @@ authenticate() { # печатает "token hash post_url"
         [ "${OCBAR_TEACH:-}" = 1 ] && args+=(--teach-on --always-show)
     fi
     [ "${OCBAR_VERBOSE:-}" = 1 ] && args+=(--verbose)
-    local pw totp="" code="" pwerr; pwerr=$(mktemp "${TMPDIR:-/tmp}/ocbar-pw.XXXXXX")
+    local pw totp="" code="" totp_cmd="" pwerr; pwerr=$(mktemp "${TMPDIR:-/tmp}/ocbar-pw.XXXXXX")
     pw=$(resolve_password 2>"$pwerr") || true
     case "$P_TOTP" in
         off|sms) ;;
         keepassxc)
             # Из базы приходит готовый код, а не секрет: секрет остаётся в базе.
-            code=$(keepass_totp) || log "код из KeePassXC не получен — введёт человек" ;;
+            code=$(keepass_totp) || log "код из KeePassXC не получен — введёт человек"
+            totp_cmd="'$SELF_ENTRY' secret code '$P_NAME'" ;;
         command)
-            code=$(command_totp) || log "код от totp_command не получен — введёт человек" ;;
+            code=$(command_totp) || log "код от totp_command не получен — введёт человек"
+            # Кнопке «Вставить код» — свежий код в момент нажатия: готовый
+            # код из начала входа через полминуты уже не годится.
+            totp_cmd="'$SELF_ENTRY' secret code '$P_NAME'" ;;
         *)   totp=$(kc_get "$P_SVC" "totp/$P_USER") ;;
     esac
     [ -n "$pw" ] || log "пароль не получен (источник $(password_source): $(head -1 "$pwerr" 2>/dev/null)) — форму заполнит человек"
     rm -f "$pwerr"
+    mkdir -p "$LOG_DIR"; rotate_log "$AUTH_LOG" >/dev/null 2>&1 || true
     local json
     json=$(OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp" \
-           OCBAR_TOTP_CODE="$code" OCBAR_KEYCHAIN_SERVICE="$P_SVC" OCBAR_PROFILE_NAME="$P_TITLE" \
+           OCBAR_TOTP_CODE="$code" OCBAR_TOTP_COMMAND="$totp_cmd" OCBAR_KEYCHAIN_SERVICE="$P_SVC" OCBAR_PROFILE_NAME="$P_TITLE" \
            OCBAR_PASSWORD_SOURCE="$(password_source)" OCBAR_TOTP_SOURCE="$P_TOTP" \
            OCBAR_TOTP_ALGORITHM="$P_TOTP_ALG" OCBAR_TOTP_DIGITS="$P_TOTP_DIGITS" OCBAR_TOTP_PERIOD="$P_TOTP_PERIOD" \
-           "$auth" "${args[@]}") || {
+           "$auth" "${args[@]}" 2> >(auth_log_tee)) || {
         local rc=$?
         case $rc in
             2) die "SSO: тайм-аут" ;;
@@ -1212,6 +1218,18 @@ authenticate() { # печатает "token hash post_url"
         esac
     }
     printf '%s' "$json" | /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["session_token"], d["server_cert_hash"], d["post_url"])'
+}
+
+# Решения окна входа — в auth.log с временем (ocbar-auth секретов не пишет) и,
+# как раньше, в поток ошибок. Без журнала «форма не заполнилась» было не
+# разобрать: вывод уходил в терминал или в приложение и пропадал.
+auth_log_tee() {
+    local l
+    while IFS= read -r l; do
+        printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$l" >> "$AUTH_LOG"
+        printf '%s\n' "$l" >&2
+    done
+    return 0
 }
 
 build_spec() { # cookie → stdin для tunnel-start
@@ -1315,6 +1333,55 @@ do_connect() { # профиль уже загружен
 # Итог «Запомнить, как я вхожу» (JSON от ocbar-auth, без секретов):
 # правила — в секцию [Autofill], выбранные источники — в ключи профиля.
 # Ошибка здесь не должна рвать подключение: вход уже прошёл.
+# Слить правила: окно формы с тем же адресом («# шаг N — адрес») или с теми
+# же селекторами заменяется запомненным, новое добавляется в конец, окна,
+# которых в этот вход не было, остаются. stop — объединением.
+teach_merge_rules() { # старые новые
+    /usr/bin/python3 - "$1" "$2" <<'PY'
+import re, sys
+HEAD = re.compile(r'^#\s*шаг\s+\d+(?:\s+—\s+(.*))?\s*$')
+def parse(path):
+    pre, stops, steps, cur = [], [], [], None
+    for raw in open(path, encoding='utf-8'):
+        s = raw.strip()
+        m = HEAD.match(s)
+        if m:
+            cur = {'path': (m.group(1) or '').strip(), 'lines': []}; steps.append(cur); continue
+        if not s: continue
+        if s.startswith('#') or s.startswith(';'):
+            if cur is None: pre.append(s)
+            continue
+        if s.split()[0] == 'stop':
+            if s not in stops: stops.append(s)
+            continue
+        if cur is None:
+            cur = {'path': '', 'lines': []}; steps.append(cur)
+        cur['lines'].append(s)
+    return pre, stops, steps
+def sels(st):
+    out = set()
+    for l in st['lines']:
+        w = l.split()
+        out.add(' '.join(w[2:] if w[0] == 'fill' else w[1:]))
+    return out
+op, ostops, osteps = parse(sys.argv[1])
+np_, nstops, nsteps = parse(sys.argv[2])
+steps = [dict(x) for x in osteps]
+for n in nsteps:
+    i = next((k for k, o in enumerate(steps) if n['path'] and o['path'] == n['path']), None)
+    if i is None:
+        i = next((k for k, o in enumerate(steps) if sels(o) & sels(n)), None)
+    if i is None: steps.append(n)
+    else: steps[i] = {'path': n['path'] or steps[i]['path'], 'lines': n['lines']}
+for l in (np_ or op): print(l)
+for l in ostops + [x for x in nstops if x not in ostops]: print(l)
+for k, st in enumerate(steps, 1):
+    if len(steps) > 1 or st['path']:
+        print('# шаг %d%s' % (k, (' — ' + st['path']) if st['path'] else ''))
+    for l in st['lines']: print(l)
+PY
+}
+
 apply_teach() { # файл
     local f="$1"
     [ -s "$f" ] && [ -n "${P_FILE:-}" ] || return 0
@@ -1334,9 +1401,14 @@ apply_teach() { # файл
     tp=$(/usr/bin/python3 -c "$get" "$f" totp_period 2>/dev/null || true)
     if [ -n "$rules" ]; then
         local t; t=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach-rules.XXXXXX")
-        printf '%s\n' "$rules" > "$t"
+        pf_section_raw "$P_FILE" Autofill 1 > "$t.old" 2>/dev/null || true
+        printf '%s\n' "$rules" > "$t.new"
+        # Запомненное сливается с правилами профиля, а не заменяет их: вход
+        # мог пройти без окна кода (сессия провайдера помнила устройство), и
+        # раньше «Сохранить» стирало из профиля правило кода.
+        teach_merge_rules "$t.old" "$t.new" > "$t" 2>/dev/null || cp "$t.new" "$t"
         ( cmd_rules import "$t" "$P_NAME" ) || warn "правила формы" "не сохранились — повторите: ocbar connect --teach"
-        rm -f "$t"
+        rm -f "$t" "$t.old" "$t.new"
     fi
     # Профиль может быть не на запись (чужой каталог, файл root) — это
     # предупреждение с тем, что поставить руками, а не обрыв после входа.
@@ -3070,6 +3142,18 @@ PROFILE
     is "secret status --short: источники без обращения к секретам" "password=ask totp=sms" "$(run secret status h --short | tr '\n' ' ' | sed 's/ $//' || true)"
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
+
+    # Запомненный вход сливается с правилами профиля: окна, которых в этот
+    # раз не было (окно кода), остаются, окно с тем же адресом обновляется.
+    printf '[Connection]\nName = Слияние\nUrl = vpn.example.test/m\n\n[Autofill]\nstop  div.err\n# шаг 1 — idp.test/login\nfill  password input[id=old]\nclick button[id=go]\n# шаг 2 — idp.test/otp\nfill  totp input[id=otp]\nclick input[id=ok]\n' > "$tmp/profiles/mg.ocbar"
+    printf '%s' '{"rules": "# Правила, размечены вручную\nstop  div.err2\n# шаг 1 — idp.test/login\nfill  password input[id=new]\nclick button[id=go]\n"}' > "$tmp/merge.json"
+    OCBAR_SELFTEST_TEACH="$tmp/merge.json" run _apply-teach mg >/dev/null || true
+    out=$(run rules show mg || true)
+    has "запомненный вход: окно пароля обновлено" "password input[id=new]" "$out"
+    has "запомненный вход: окно кода из прошлой разметки на месте" "totp input[id=otp]" "$out"
+    has "запомненный вход: stop прошлый и новый" "div.err2" "$out"
+    is "запомненный вход: старое поле пароля ушло" 0 "$(printf '%s\n' "$out" | grep -c 'input\[id=old\]' || true)"
+    rm -f "$tmp/profiles/mg.ocbar" "$tmp/profiles/mg.ocbar.bak" "$tmp/merge.json"
 
     # Копия приложения для лаунчера: бандл из Homebrew копируется, одинаковый
     # не перекладывается, новая версия заменяет старую, сборка проекта — как есть.

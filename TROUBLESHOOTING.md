@@ -457,6 +457,7 @@ ocbar-app --selftest        # строки «редактор: …» откры�
 | Что | Где |
 |---|---|
 | решения супервизора, реконнекты, события сна | `~/Library/Logs/ocbar/supervisor.log` |
+| что окно входа заполнило и почему нет (хосты цепочки, окна формы, кнопки «Вставить») | `~/Library/Logs/ocbar/auth.log` |
 | вывод openconnect | `/var/db/ocbar/openconnect.log` |
 | что сказал шлюз при подключении | `/var/db/ocbar/tunnel.env` |
 | наши зоны, маршруты, системный SOCKS | `/var/db/ocbar/{zones,routes,socks}.state` |

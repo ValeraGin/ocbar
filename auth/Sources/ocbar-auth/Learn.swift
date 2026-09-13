@@ -554,7 +554,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     /// очереди — в каждом поля, потом кнопка. Если окон несколько, у каждого
     /// заголовок «# шаг N — страница»; пустые шаги пропускаются.
     static func rulesText(marks: [Mark], pages: [Int: String], portal: String,
-                          formHost: String?, date: Date = Date()) -> String {
+                          formHost: String?, date: Date = Date(), alwaysHeaders: Bool = false) -> String {
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
         let portal = commentSafe(portal)
         let formHost = formHost.map(commentSafe)
@@ -572,7 +572,9 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         for m in marks where m.kind == "stop" { out += "stop  \(m.selector)\n" }
         let steps = Array(Set(marks.filter { $0.kind != "stop" }.map(\.step))).sorted()
         for (i, s) in steps.enumerated() {
-            if steps.count > 1 { out += "# шаг \(i + 1)" + (pages[s].map { " — " + $0 } ?? "") + "\n" }
+            if steps.count > 1 || (alwaysHeaders && pages[s] != nil) {
+                out += "# шаг \(i + 1)" + (pages[s].map { " — " + $0 } ?? "") + "\n"
+            }
             for what in ["username", "password", "totp", "manual"] {
                 for m in marks where m.step == s && m.kind == what { out += "fill  \(what) \(m.selector)\n" }
             }

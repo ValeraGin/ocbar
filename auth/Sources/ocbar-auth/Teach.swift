@@ -117,7 +117,9 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
         var pages: [Int: String] = [:]
         for (i, s) in steps.enumerated() { pages[i + 1] = s.page }
         let host = steps.first.flatMap { $0.page.split(separator: "/").first.map(String.init) }
-        return LearnSession.rulesText(marks: marks(), pages: pages, portal: portal, formHost: host)
+        // Заголовок шага — всегда: по адресу окна CLI сливает запомненное с
+        // правилами профиля и не теряет окна, которых в этот вход не было.
+        return LearnSession.rulesText(marks: marks(), pages: pages, portal: portal, formHost: host, alwaysHeaders: true)
     }
 
     /// Скрипт записи. Работает в изолированном мире: DOM общий со страницей,
