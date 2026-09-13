@@ -38,6 +38,7 @@ RULES_FILE="$CONFIG_DIR/autofill.rules"
 
 USER_STATE="${OCBAR_USER_STATE:-$HOME/Library/Application Support/ocbar}"
 DESIRED="$USER_STATE/desired"            # имя профиля, который должен быть поднят
+CONNECTING="$USER_STATE/connecting"      # идёт ocbar connect: номер процесса (D66)
 SUP_PID="$USER_STATE/supervisor.pid"
 SUP_CODE="$USER_STATE/supervisor.code-mtime"   # с какой версией скрипта он работает
 NEEDS_LOGIN="$USER_STATE/needs-login"    # автоподключение упёрлось во вход, ждём человека
@@ -1232,6 +1233,21 @@ auth_log_tee() {
     return 0
 }
 
+# Идёт ли ocbar connect. Желание профиля ($DESIRED) пишется после
+# «подключено», а туннель поднимается раньше: без этой отметки супервизор на
+# очередном опросе видел туннель без профиля и гасил его («профиль снят, а
+# сессия жива»), а при отключённом профиле ещё и входил вторым. Отметка —
+# номер процесса подключения; умер процесс или отметке больше 20 минут
+# (вход с окном — до 15) — отметка устарела.
+connect_in_progress() {
+    local p age
+    p=$(head -1 "$CONNECTING" 2>/dev/null || true)
+    case "$p" in ''|*[!0-9]*) return 1 ;; esac
+    age=$(( $(date +%s) - $(stat -f %m "$CONNECTING" 2>/dev/null || echo 0) ))
+    if ! kill -0 "$p" 2>/dev/null || [ "$age" -gt 1200 ]; then rm -f "$CONNECTING"; return 1; fi
+    return 0
+}
+
 build_spec() { # cookie → stdin для tunnel-start
     printf 'cookie=%s\n' "$1"
     active_networks | sed 's/^/net /'
@@ -1273,6 +1289,9 @@ do_connect() { # профиль уже загружен
         return 0
     fi
     info "Вход через SSO: $P_TITLE ($P_URL)…"
+    # Номер этой (под)оболочки, а не $$: супервизор подключает в подоболочке,
+    # и $$ там — сам супервизор, живой всегда.
+    mkdir -p "$USER_STATE"; printf '%s\n' "$(exec sh -c 'echo $PPID')" > "$CONNECTING"
     local token hash post_url out rc=0
     TEACH_OUT=""
     [ -n "${P_FILE:-}" ] && TEACH_OUT=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach.XXXXXX")
@@ -1284,8 +1303,8 @@ do_connect() { # профиль уже загружен
     # не обрывает apply_teach на непредвиденной ошибке после удачного входа.
     if [ -n "$TEACH_OUT" ]; then apply_teach "$TEACH_OUT" || true; rm -f "$TEACH_OUT"; fi
     # 5 — «нужен человек»: не ошибка, а решение, которое принимает не скрипт.
-    [ "$rc" = 5 ] && return 5
-    [ "$rc" = 0 ] || return "$rc"
+    [ "$rc" = 5 ] && { rm -f "$CONNECTING"; return 5; }
+    [ "$rc" = 0 ] || { rm -f "$CONNECTING"; return "$rc"; }
     read -r token hash post_url <<< "$out"
     [ -n "$token" ] || die "аутентификация не вернула токен"
     # КРИТИЧНО: подключаться надо к тому узлу, что выдал cookie. Балансировщик
@@ -1308,7 +1327,7 @@ do_connect() { # профиль уже загружен
     if [ "${P_KIND:-tunnel}" = proxy ]; then
         proxy_start "$connect_url" "$hash" "$token"
         mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
-        rm -f "$NEEDS_LOGIN" "$LINK_LOST" 2>/dev/null || true
+        rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
         log "подключён (прокси): $P_NAME → SOCKS 127.0.0.1:$(proxy_port), адрес $(penv_get IP4)"
         notify "ocbar: подключено (прокси)" "$P_TITLE · SOCKS 127.0.0.1:$(proxy_port)"
         report_health || true
@@ -1325,7 +1344,7 @@ do_connect() { # профиль уже загружен
     [ "$(tun_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
     mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
-    rm -f "$NEEDS_LOGIN" "$LINK_LOST" 2>/dev/null || true
+    rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
     notify "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
     report_health || true
 }
@@ -2332,7 +2351,7 @@ tunnel_probe() {
 }
 
 cmd_supervise() {
-    local iterations=0 a
+    local iterations=0 a connecting_logged=0
     for a in "$@"; do case "$a" in --iterations=*) iterations="${a#*=}" ;; esac; done
     mkdir -p "$USER_STATE" "$LOG_DIR"
     if sup_alive && [ "$(cat "$SUP_PID")" != $$ ]; then die "супервизор уже работает (pid $(cat "$SUP_PID"))"; fi
@@ -2392,6 +2411,14 @@ cmd_supervise() {
         fi
         desired=$(cat "$DESIRED" 2>/dev/null || true)
         st=$(tunnel_state)
+        # Идёт ocbar connect: туннель поднимается, а желание профиля ещё не
+        # записано. Не гасить «лишний» туннель и не входить вторым (D66).
+        if connect_in_progress; then
+            [ "$connecting_logged" = 1 ] || { log "идёт подключение (pid $(head -1 "$CONNECTING")) — жду, не вмешиваюсь"; connecting_logged=1; }
+            [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
+            sleep 5; continue
+        fi
+        connecting_logged=0
         wake=$(wake_ts); iface=$(primary_iface)
         if [ "$wake" != "$last_wake" ]; then
             log "событие: пробуждение ($(date -r "$wake" '+%H:%M:%S' 2>/dev/null))"; last_wake="$wake"; next_try=0; backoff=5
@@ -3143,6 +3170,20 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Подключение в процессе: живой процесс — да, мёртвый — нет и отметка
+    # убрана, мусор — нет. И супервизор при отметке не вмешивается.
+    sleep 30 & sp=$!
+    printf '%s\n' "$sp" > "$tmp/state/connecting"
+    is "подключение идёт: живой процесс — супервизор ждёт" yes "$(run _selftest-fn connect_in_progress || true)"
+    sup=$(run supervise --iterations=1 --dry-run 2>&1 || true)
+    has "подключение идёт: супервизор пишет, что ждёт" "идёт подключение" "$(cat "$tmp/logs/supervisor.log" 2>/dev/null) $sup"
+    kill "$sp" 2>/dev/null || true; wait "$sp" 2>/dev/null || true
+    is "подключение идёт: процесс умер — отметка устарела" no "$(run _selftest-fn connect_in_progress || true)"
+    is "подключение идёт: устаревшая отметка убрана" no "$([ -f "$tmp/state/connecting" ] && echo yes || echo no)"
+    printf 'abc\n' > "$tmp/state/connecting"
+    is "подключение идёт: мусор в отметке — нет" no "$(run _selftest-fn connect_in_progress || true)"
+    rm -f "$tmp/state/connecting"
+
     # Запомненный вход сливается с правилами профиля: окна, которых в этот
     # раз не было (окно кода), остаются, окно с тем же адресом обновляется.
     printf '[Connection]\nName = Слияние\nUrl = vpn.example.test/m\n\n[Autofill]\nstop  div.err\n# шаг 1 — idp.test/login\nfill  password input[id=old]\nclick button[id=go]\n# шаг 2 — idp.test/otp\nfill  totp input[id=otp]\nclick input[id=ok]\n' > "$tmp/profiles/mg.ocbar"
@@ -3577,6 +3618,7 @@ case "${1:-}" in
         case "${1:-}" in
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
             app_sync_copy) app_sync_copy "${2:-}" ;;
+            connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;
     install)    shift; cmd_install "$@" ;;
