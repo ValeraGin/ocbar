@@ -70,6 +70,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
       <form id="pf5" style="display:none"><input id="h5" autocomplete="username"><button id="k5">Войти</button></form>
       <form id="pf6"><input id="w6" autocomplete="username webauthn"><button type="submit" id="b6">Далее</button></form>
       <form id="cf" onsubmit="event.preventDefault()"><input type="text" id="cu"><input type="password" id="cp"><input type="text" id="ccap"><button type="submit" id="cgo">Войти</button></form>
+      <form id="vf" onsubmit="event.preventDefault(); window.__vSent = (window.__vSent || 0) + 1"><input type="password" id="vp"><button type="submit" id="vgo" disabled>Sign In</button></form>
       <form id="hf" onsubmit="event.preventDefault()"><input type="text" id="hu"><input type="password" id="hp"></form>
       <form id="of" onsubmit="event.preventDefault(); this.style.display = 'none'; document.getElementById('og').style.display = 'block';">
         <input type="text" id="ou"><input type="password" id="opw"><button type="submit" id="ogo">Войти</button>
@@ -104,6 +105,9 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
           window.__twoDone = false;
         };
         // Портал с капчей, который перерисовывает форму: поля пустеют.
+        document.getElementById('vp').addEventListener('input', function () {
+          setTimeout(function () { document.getElementById('vgo').disabled = !document.getElementById('vp').value; }, 60);
+        });
         window.__capRedraw = function () {
           ['cu', 'cp', 'ccap'].forEach(function (i) { document.getElementById(i).value = ''; });
         };
@@ -828,7 +832,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
                 ok("капча, форма перерисовывается: пароль уходит в поле не больше двух раз",
                    passwordSeen == 2 && gate.passwordFills == 2, "пароль в поле \(passwordSeen) раз, учтено \(gate.passwordFills)")
                 ok("капча: дальше — ждать человека на пустом пароле", last == .waitingHuman("input[id=cp]"), "\(last)")
-                eval("window.__capRedraw(); 'ok'") { _ in then() }
+                eval("window.__capRedraw(); 'ok'") { _ in self.checkLateButton(then) }
                 return
             }
             gate.newPage()
@@ -844,6 +848,31 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
             }
         }
         attempt(0)
+    }
+
+    // MARK: - кнопка включается не сразу после ввода (D67)
+
+    /// Форма включает «Sign In» через мгновение после ввода, как на Vue.
+    /// Раньше нажатие уходило в неактивную кнопку и больше не повторялось:
+    /// поля уже заполнены, а жать без заполнения в этой попытке было нельзя.
+    private func checkLateButton(_ then: @escaping () -> Void) {
+        let rules = Autofill.parse(text: "fill  password input[id=vp]\nclick button[id=vgo]")
+        let js = Autofill.script(rules: rules, creds: Credentials(username: "alice", password: "pw", totpSecret: nil), totpCode: nil)
+        engine(js) { r1 in
+            let first = AutofillGate.Outcome(r1 as? [String: Any] ?? [:])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.engine(js) { r2 in
+                    let second = AutofillGate.Outcome(r2 as? [String: Any] ?? [:])
+                    self.eval("window.__vSent || 0") { sent in
+                        self.ok("кнопка включается после ввода: сначала ждём, потом жмём — форма отправлена один раз",
+                           first.pending == "button[id=vgo]" && first.clicked == nil
+                           && second.clicked == "button[id=vgo]" && (sent as? Int) == 1,
+                           "первая попытка: ждать \(first.pending ?? "-"), нажато \(first.clicked ?? "-"); вторая: нажато \(second.clicked ?? "-"); отправок \(String(describing: sent))")
+                        then()
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - хост проверяется внутри скрипта (п.3)

@@ -47,6 +47,9 @@ enum Notifier {
         let center = UNUserNotificationCenter.current()
         center.delegate = delegate
         refreshAllowed()
+        // Раз в минуту: разрешение могли дать или снять в настройках, файл
+        // токена — удалить; без этого уведомления молча переставали приходить.
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in refreshAllowed() }
         center.requestAuthorization(options: [.alert, .sound]) { granted, error in
             AppLog.write("уведомления: " + (granted ? "разрешены" : "не разрешены")
                          + (error.map { " (\($0.localizedDescription))" } ?? ""))
@@ -73,7 +76,15 @@ enum Notifier {
         write(allowed ? "1\n" : "0\n", to: dir + "/notify.allowed")
     }
 
+    /// Файл токена пропал или переписан — вернуть свой, не меняя токен.
+    static func ensureToken(in dir: String = stateDir) {
+        guard let t = expectedToken else { return }
+        let path = dir + "/notify.token"
+        if (try? String(contentsOfFile: path, encoding: .utf8)) != t + "\n" { _ = write(t + "\n", to: path) }
+    }
+
     static func refreshAllowed() {
+        ensureToken()
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let allowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
             writeAllowed(allowed, in: stateDir)

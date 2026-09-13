@@ -53,6 +53,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     private var scope: FillScope
     private var lastGesture: Date?
     private var offHostLogged: String?
+    private var pendingLogged: String?
 
     /// Изолированный мир окна входа: скрипт автозаполнения, его проверка
     /// хоста и слушатель жестов человека. Страница не видит ни их, ни
@@ -524,6 +525,9 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     private func autofillTick() {
         guard !finished, opts.autofill, !opts.rules.isEmpty, gate.stopped == nil else { return }
         guard gate.attempts < gate.maxAttemptsPerPage else { return }
+        // Пока грузится следующая страница, старую не трогаем: иначе повторное
+        // нажатие ушло бы в форму, которую уже отправили.
+        guard !webView.isLoading else { return }
         // Правила — это просто селекторы, они совпадут на любой странице с
         // похожими полями. Без привязки к адресу логин с паролем ушли бы
         // туда, куда увёл бы шлюз.
@@ -586,6 +590,11 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             offHost(h)
         case .clicked(let c):
             Log.info("нажато: \(c) (\(gate.clicks)/\(gate.maxClicks))")
+        case .pendingClick(let b):
+            if pendingLogged != b {
+                pendingLogged = b
+                Log.info("кнопка \(b) ещё неактивна — нажму, когда форма её включит")
+            }
         case .clickLimit:
             Log.info("нажато (\(gate.clicks)/\(gate.maxClicks)) — лимит нажатий, дальше только человек")
             show()

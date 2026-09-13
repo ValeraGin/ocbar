@@ -168,10 +168,17 @@ notify() { # заголовок, текст
         a=$(app_path || true)
         if [ -z "$a" ]; then log "уведомление не показано (нет ocbar.app): $1 — $2"; return 0; fi
         a=$(app_sync_copy "$a" 2>/dev/null)
-        # Старый токен недействителен: запущенное приложение кладёт новый.
-        rm -f "$USER_STATE/notify.token" "$USER_STATE/notify.allowed"
+        # Ждём токен, записанный после запуска. Старый файл не удаляем: если
+        # приложение уже стартовало (перезапуск при выпуске), оно успело
+        # записать свежий токен, и удаление оставляло уведомления без токена
+        # до следующего перезапуска (D67).
+        local t0 m; t0=$(date +%s)
         open -g -j "$a" >/dev/null 2>&1 || true
-        while [ $n -lt 32 ] && ! { [ -s "$USER_STATE/notify.token" ] && [ -s "$USER_STATE/notify.allowed" ]; }; do
+        while [ $n -lt 32 ]; do
+            m=$(stat -f %m "$USER_STATE/notify.token" 2>/dev/null || echo 0)
+            if [ "$m" -ge "$t0" ] && [ -s "$USER_STATE/notify.allowed" ]; then break; fi
+            # Приложение уже работало (pgrep его не увидел) — токен прежний и годен.
+            if [ "$n" -ge 8 ] && [ -n "$(app_pid)" ] && [ -s "$USER_STATE/notify.token" ]; then break; fi
             sleep 0.25; n=$((n+1))
         done
         r=$(OCBAR_SELFTEST_APP=1 notify_route "$1" "$2")
