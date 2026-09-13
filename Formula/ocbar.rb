@@ -43,9 +43,10 @@ class Ocbar < Formula
       в самом профиле, пишет их ocbar learn.
 
       Меню-бар — приложение (плагин SwiftBar остаётся как запасной вариант):
-        ocbar app start                 запустить сейчас
+        ocbar app start                 запустить; кладёт копию в ~/Applications,
+                                        чтобы ocbar был в лаунчере и Spotlight
         ocbar app autostart on          запускать при входе в систему
-        open #{prefix}/ocbar.app        то же самое руками
+      После brew upgrade: ocbar app stop && ocbar app start — обновит и копию.
 
       Прокси-режим (Mode = proxy в профиле) нуждается в ocproxy — он не
       зависимость формулы, потому что нужен только этому режиму:
