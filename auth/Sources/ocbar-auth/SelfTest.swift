@@ -223,6 +223,21 @@ enum AuthSelfTest {
         ok("после нажатия страница изменилась — можно", r.mayRun(signature: "B"))
         r.newPage()
         ok("новая страница с той же сигнатурой — можно", r.mayRun(signature: "A"))
+        // Нажатие ушло в неготовую форму: страница та же — одно повторное через 4 с.
+        var rc = AutofillGate()
+        let t0 = Date(timeIntervalSince1970: 1000)
+        _ = rc.begin(); _ = rc.record(O(filled: ["password"], clicked: "b"), signature: "S", now: t0)
+        let early = rc.mayRun(signature: "S", now: t0.addingTimeInterval(2))
+        let late = rc.mayRun(signature: "S", now: t0.addingTimeInterval(4.5))
+        _ = rc.begin(); _ = rc.record(O(clicked: "b"), signature: "S", now: t0.addingTimeInterval(5))
+        let again = rc.mayRun(signature: "S", now: t0.addingTimeInterval(30))
+        ok("нажатие без перехода: через 4 с — одно повторное, не больше", !early && late && !again && rc.clicks == 2,
+           "рано \(early), через 4 с \(late), ещё раз \(again)")
+        var pc = AutofillGate()
+        _ = pc.begin()
+        let dp = pc.record(O(filled: ["password"], pending: "b"), signature: "P")
+        ok("кнопка неактивна: ждать следующей попытки, нажатием не считать",
+           dp.next == .pendingClick("b") && pc.clicks == 0 && pc.mayRun(signature: "P"), "\(dp.next)")
 
         // Лимит нажатий — пять за вход.
         var k = AutofillGate()

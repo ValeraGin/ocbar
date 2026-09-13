@@ -131,12 +131,20 @@ enum Autofill {
                       e.dispatchEvent(new Event('input', {bubbles: true}));
                       e.dispatchEvent(new Event('change', {bubbles: true}));
                       filled.push(\(jsString(what)));
+                      window.__ocbarFilledHere = true;
                     } }
 
                 """
             case .click(let unconditional):
-                let cond = unconditional ? "visible(e) && !emptyKnown()" : "visible(e) && filled.length > 0 && !emptyKnown()"
-                body += "  { var e = document.querySelector(\(sel)); if (\(cond)) { e.click(); return {clicked: \(sel), filled: filled}; } }\n"
+                // Жмём, если подставили в этой попытке или раньше на этой же
+                // странице (__ocbarFilledHere живёт в изолированном мире до
+                // смены документа): формы на Vue и React включают кнопку не
+                // сразу после ввода. Неактивную не жмём — ждём следующей
+                // попытки: нажатие в неактивную кнопку пропадало, а повторять
+                // его на той же странице было нельзя (D67).
+                let cond = unconditional ? "visible(e) && !emptyKnown()"
+                    : "visible(e) && (filled.length > 0 || window.__ocbarFilledHere) && !emptyKnown()"
+                body += "  { var e = document.querySelector(\(sel)); if (\(cond)) { if (e.disabled || e.getAttribute('aria-disabled') === 'true') return {pending: \(sel), filled: filled}; e.click(); return {clicked: \(sel), filled: filled}; } }\n"
             }
         }
         // Что видит человек, если мы ничего не сделали: список видимых полей —
@@ -310,11 +318,14 @@ struct AutofillGate {
     let maxClicks = 5
     let maxPasswordFills = 2
     let maxAttemptsPerPage = 12
+    let reclickAfter: TimeInterval = 4
     private(set) var clicks = 0
     private(set) var passwordFills = 0
     private(set) var totpFills = 0
     private(set) var attempts = 0
     private(set) var lastClickSignature: String?
+    private(set) var lastClickAt: Date?
+    private(set) var reclicked = false
     private(set) var stopped: String?
 
     /// Что можно дать скрипту в этой попытке.
@@ -328,11 +339,12 @@ struct AutofillGate {
         var stopped: String? = nil
         var inputs: [String] = []
         var offHost: String? = nil
+        var pending: String? = nil             // кнопка есть, но неактивна
 
         init(filled: [String] = [], clicked: String? = nil, waiting: String? = nil,
-             stopped: String? = nil, inputs: [String] = [], offHost: String? = nil) {
+             stopped: String? = nil, inputs: [String] = [], offHost: String? = nil, pending: String? = nil) {
             self.filled = filled; self.clicked = clicked; self.waiting = waiting
-            self.stopped = stopped; self.inputs = inputs; self.offHost = offHost
+            self.stopped = stopped; self.inputs = inputs; self.offHost = offHost; self.pending = pending
         }
 
         init(_ dict: [String: Any]) {
@@ -342,12 +354,14 @@ struct AutofillGate {
             stopped = dict["stopped"] as? String
             inputs = (dict["inputs"] as? [String]) ?? []
             offHost = dict["offHost"] as? String
+            pending = dict["pending"] as? String
         }
     }
 
     enum Next: Equatable {
         case keepGoing                 // ничего не случилось — следующая попытка по таймеру
         case clicked(String)           // нажали — ждём новую страницу
+        case pendingClick(String)      // кнопка неактивна — жмём в следующей попытке
         case waitingHuman(String)      // видно пустое поле, заполнить нечем
         case unknownForm([String])     // поля есть, ни одно не узнано
         case offHost(String)           // страница не из разрешённых — заполняет человек
@@ -363,11 +377,17 @@ struct AutofillGate {
     }
 
     /// Новая страница: попытки и запрет повтора — заново, лимиты входа — нет.
-    mutating func newPage() { attempts = 0; lastClickSignature = nil }
+    mutating func newPage() { attempts = 0; lastClickSignature = nil; lastClickAt = nil; reclicked = false }
 
-    /// Можно ли запускать скрипт на странице с такой сигнатурой.
-    func mayRun(signature: String) -> Bool {
-        stopped == nil && attempts < maxAttemptsPerPage && signature != lastClickSignature
+    /// Можно ли запускать скрипт на странице с такой сигнатурой. После
+    /// нажатия на той же странице — одно повторное, через reclickAfter
+    /// секунд тишины (окно входа не зовёт скрипт, пока страница грузится):
+    /// нажатие могло уйти в форму, которая ещё не была готова.
+    func mayRun(signature: String, now: Date = Date()) -> Bool {
+        guard stopped == nil, attempts < maxAttemptsPerPage else { return false }
+        guard signature == lastClickSignature else { return true }
+        guard !reclicked, let t = lastClickAt else { return false }
+        return now.timeIntervalSince(t) >= reclickAfter
     }
 
     /// Попытка началась: что ей можно дать.
@@ -378,7 +398,7 @@ struct AutofillGate {
 
     /// Результат попытки. Первым делом — счётчики: что подставлено, то
     /// подставлено, как бы ни закончилась попытка.
-    mutating func record(_ o: Outcome, signature: String) -> Decision {
+    mutating func record(_ o: Outcome, signature: String, now: Date = Date()) -> Decision {
         var d = Decision(next: .keepGoing)
         if o.filled.contains("password") {
             passwordFills += 1
@@ -400,13 +420,19 @@ struct AutofillGate {
         }
         if let c = o.clicked {
             clicks += 1
+            if signature == lastClickSignature { reclicked = true }
             lastClickSignature = signature
+            lastClickAt = now
             if clicks >= maxClicks {
                 stopped = "лимит автозаполнения"
                 d.next = .clickLimit
             } else {
                 d.next = .clicked(c)
             }
+            return d
+        }
+        if let p = o.pending {
+            d.next = .pendingClick(p)
             return d
         }
         if let w = o.waiting {

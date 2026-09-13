@@ -163,6 +163,11 @@ extension SelfTest {
                 token != nil && text == (token ?? "") + "\n" && (token ?? "").count == 32
                 && (token ?? "").allSatisfy { $0.isHexDigit }, text)
         t.check("уведомление: файл токена — 0600", perms == 0o600, String(perms, radix: 8))
+        try? FileManager.default.removeItem(atPath: file)
+        Notifier.ensureToken(in: dir)
+        let back = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
+        t.check("уведомление: пропавший файл токена возвращается тем же токеном",
+                token != nil && back == (token ?? "") + "\n", back)
         t.check("уведомление: записанный токен принимается",
                 Notifier.parse(URL(string: "ocbar://notify?title=t&token=\(token ?? "-")")!) != nil)
         Notifier.writeAllowed(false, in: dir)
