@@ -35,6 +35,7 @@ struct Args {
     var learn = false
     var learnSelfTest = false
     var learnProbe = false
+    var forgetSessions = false
     var teachOut: String?
     var printParams = false
     var teachDialogShot: String?
@@ -80,6 +81,8 @@ func usage() -> String {
         --out FILE          куда записать правила (иначе — в stdout)
       --learn-probe         открыть форму входа без окна и напечатать, что
                             предзаполнение разметки узнало бы; ничего не жмёт
+      --forget-sessions     стереть сессии провайдеров входа (cookie и данные
+                            сайтов окна входа): следующий вход — с формой
       --teach-dialog-shot FILE   снимок окна «Запомнить для следующего входа?»
                             в PNG, без показа и без записи в связку ключей
       --camera-window-shot FILE  снимок окна камеры в PNG; камера не включается
@@ -155,6 +158,7 @@ func parseArgs() -> Args {
         case "--learn": a.learn = true
         case "--learn-selftest": a.learnSelfTest = true
         case "--learn-probe": a.learnProbe = true
+        case "--forget-sessions": a.forgetSessions = true
         case "--teach-out": a.teachOut = next(arg)
         case "--teach-on": a.teachOn = true
         case "--teach-dialog-shot": a.teachDialogShot = next(arg)
@@ -470,6 +474,18 @@ if let shotPath = args.cameraWindowShot {
 }
 
 // Пробник предзаполнения: та же страница, что у разметки, но без окна.
+if args.forgetSessions {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.prohibited)
+    DispatchQueue.main.async {
+        WebAuth.forgetSessions { n in
+            out("сессии окна входа стёрты (записей сайтов: \(n))")
+            exit(0)
+        }
+    }
+    app.run()
+}
+
 if args.learnProbe {
     guard let raw = args.url, let groupURL = normalize(raw) else {
         FileHandle.standardError.write(Data("ocbar-auth: --learn-probe требует --url\n".utf8)); exit(4)

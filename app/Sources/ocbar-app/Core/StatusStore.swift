@@ -344,6 +344,8 @@ final class StatusStore: ObservableObject {
     func routeIsOn(_ r: RouteEntry) -> Bool { pendingRoutes[r.net] ?? r.enabled }
     func zoneIsOn(_ z: ZoneEntry) -> Bool { pendingZones[z.zone] ?? z.enabled }
     func cleanup() { perform("Убираю следы…") { _ in OcbarClient.shared.cleanup() } }
+    /// Выйти совсем (режим разработчика): отключиться и забыть сессии входа.
+    func logout() { perform("Выхожу совсем…") { _ in OcbarClient.shared.logout() } }
 
     /// Пауза и возобновление одной клавишей: смысл действия зависит от того,
     /// что сейчас. Отключение сюда не входит намеренно — случайное нажатие

@@ -1746,6 +1746,19 @@ cmd_connect() {
     [ "$DRY_RUN" = 1 ] || cmd_status
 }
 
+# Выйти совсем: отключиться и стереть сессии провайдеров входа в хранилище
+# окна входа — следующий connect покажет форму целиком. Для проверок входа с
+# нуля (D68). Пароль и секрет кода в связке ключей не трогаются.
+cmd_logout() {
+    local auth; auth=$(auth_path) || die "не найден ocbar-auth"
+    if [ "$DRY_RUN" = 1 ]; then info "[dry-run] ocbar disconnect, затем $auth --forget-sessions"; return 0; fi
+    ( cmd_disconnect ) || true
+    "$auth" --forget-sessions || die "сессии окна входа не стёрлись"
+    rm -f "$NEEDS_LOGIN" 2>/dev/null || true
+    ok "вышли совсем" "следующий ocbar connect покажет форму входа"
+    return 0
+}
+
 cmd_disconnect() {
     # «Не подключаться» в ответ на «нужен вход» — тоже решение человека:
     # флаг ожидания снимаем, иначе значок остаётся красным при опущенном
@@ -3177,6 +3190,10 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Выйти совсем: сначала отключение, потом сброс сессий окна входа.
+    has "logout: отключение и сброс сессий окна входа" "--forget-sessions" "$(run logout --dry-run 2>&1 || true)"
+    has "logout: есть в справке" "ocbar logout" "$(run --help 2>&1 || true)"
+
     # Подключение в процессе: живой процесс — да, мёртвый — нет и отметка
     # убрана, мусор — нет. И супервизор при отметке не вмешивается.
     sleep 30 & sp=$!
@@ -3490,7 +3507,15 @@ cmd_app() {
                     rm -f "$APP_PLIST"; ok "автозапуск выключен" ;;
                 *) die "app autostart on|off" ;;
             esac ;;
-        *) die "app: start | stop | status | autostart on|off" ;;
+        devmode)
+            # Режим разработчика: в меню — «Выйти совсем (сброс входа)».
+            # Обычному пользователю строка не нужна.
+            case "${2:-}" in
+                on)  defaults write ru.ocbar.app DeveloperMode -bool true && ok "режим разработчика включён" "в меню — «Выйти совсем (сброс входа)»" ;;
+                off) defaults delete ru.ocbar.app DeveloperMode 2>/dev/null || true; ok "режим разработчика выключен" ;;
+                *)   if [ "$(defaults read ru.ocbar.app DeveloperMode 2>/dev/null || true)" = 1 ]; then info "режим разработчика: включён"; else info "режим разработчика: выключен"; fi ;;
+            esac ;;
+        *) die "app: start | stop | status | autostart on|off | devmode on|off" ;;
     esac
 }
 
@@ -3535,6 +3560,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
                                       переключение; Mode = proxy в профиле — SOCKS
                                       через ocproxy, без root
   ocbar disconnect                    отключиться
+  ocbar logout                        выйти совсем: отключиться и забыть сессии входа
+                                      (следующий вход — с формой; для проверок)
   ocbar pause                         «как будто выключен»: снять маршруты и зоны,
                                       туннель и вход оставить живыми
   ocbar resume                        вернуть маршруты и зоны (мгновенно, без входа)
@@ -3561,7 +3588,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar rules show [профиль]          правила автозаполнения профиля
   ocbar rules import <файл> [профиль] положить правила из файла в [Autofill]
   ocbar rules clear [профиль]         убрать [Autofill] из профиля
-  ocbar app [start|stop|status]       приложение меню-бара; autostart on|off;
+  ocbar app [start|stop|status]       приложение меню-бара; autostart on|off; devmode on|off;
                                       start держит копию в ~/Applications — для лаунчера
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
@@ -3591,6 +3618,7 @@ set -- "${args[@]+"${args[@]}"}"
 case "${1:-}" in
     connect)    shift; cmd_connect "$@" ;;
     disconnect) cmd_disconnect ;;
+    logout)     cmd_logout ;;
     status)     cmd_status "${2:-}" ;;
     profiles)   shift; cmd_profiles "$@" ;;
     routes)     shift; cmd_routes "$@" ;;

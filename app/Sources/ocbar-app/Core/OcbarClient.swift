@@ -135,6 +135,7 @@ final class OcbarClient: @unchecked Sendable {
     func toggleRoute(_ cidr: String) -> ActionResult { action(["routes", "toggle", cidr], timeout: 30) }
     func toggleZone(_ zone: String) -> ActionResult { action(["dns", "toggle", zone], timeout: 30) }
     func cleanup() -> ActionResult { action(["cleanup"], timeout: 60) }
+    func logout() -> ActionResult { action(["logout"], timeout: 90) }
 
     // Диагностика: doctor ничего не меняет, поэтому вывод целиком, как есть.
     /// `ocbar secret status <профиль> --short`: откуда пароль и код и есть ли
