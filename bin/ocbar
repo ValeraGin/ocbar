@@ -38,6 +38,7 @@ RULES_FILE="$CONFIG_DIR/autofill.rules"
 
 USER_STATE="${OCBAR_USER_STATE:-$HOME/Library/Application Support/ocbar}"
 DESIRED="$USER_STATE/desired"            # имя профиля, который должен быть поднят
+SKIP_NETS="$USER_STATE/skip-networks"    # сети, где автоподключение не нужно: "<mac> <метка>"
 ACCESS="$USER_STATE/access"              # итог проверки доступа: "<ok|fail|unknown> <время>"
 AUTOCONNECT="$USER_STATE/autoconnect"    # политика автоподключения: manual | resume | always <профиль>
 CONNECTING="$USER_STATE/connecting"      # идёт ocbar connect: номер процесса
@@ -1334,6 +1335,23 @@ captive_portal() {
     return 0
 }
 
+# Опознание сети — по MAC-адресу маршрутизатора: имя Wi-Fi на свежих macOS
+# требует разрешения на геопозицию, а шлюз виден всегда и не меняется, пока
+# человек не сменил сеть. Для проводной сети работает так же.
+network_id() {
+    [ -n "${OCBAR_SELFTEST_HELPER:-}" ] && [ -n "${OCBAR_NETWORK_ID:-}" ] && { printf '%s' "$OCBAR_NETWORK_ID"; return 0; }
+    local gw; gw=$(route -n get default 2>/dev/null | awk '/gateway:/{print $2; exit}')
+    [ -n "$gw" ] || return 0
+    arp -n "$gw" 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i ~ /^([0-9a-f]{1,2}:){5}[0-9a-f]{1,2}$/) {print tolower($i); exit}}'
+    return 0
+}
+network_skipped() {
+    local id; id=$(network_id)
+    [ -n "$id" ] || return 1
+    [ -f "$SKIP_NETS" ] || return 1
+    awk -v id="$id" '$1 == id {found = 1} END {exit found ? 0 : 1}' "$SKIP_NETS"
+}
+
 # Политика автоподключения (D70). resume — держать то, что было подключено
 # (умолчание, прежнее поведение); manual — супервизор сам не входит вовсе;
 # always <профиль> — при входе в систему поднять этот профиль.
@@ -1346,11 +1364,35 @@ autoconnect_policy() {
     esac
     return 0
 }
-cmd_autoconnect() { # [manual|resume|always <профиль>]
+cmd_autoconnect() { # [manual|resume|always <профиль>|skip-here|unskip-here]
     local mode="${1:-}" prof="${2:-}"
-    if [ -z "$mode" ]; then printf '%s\n' "$(autoconnect_policy)"; return 0; fi
+    if [ -z "$mode" ]; then
+        printf '%s\n' "$(autoconnect_policy)"
+        if [ -s "$SKIP_NETS" ]; then
+            info "сети без автоподключения:"
+            while read -r m label; do [ -n "$m" ] && info "  $m ${label:-}"; done < "$SKIP_NETS"
+            network_skipped && info "  (сейчас вы в одной из них)"
+        fi
+        return 0
+    fi
     mkdir -p "$USER_STATE"
     case "$mode" in
+        here)
+            # Машинный ответ для приложения: подключаемся ли в этой сети.
+            network_skipped && printf 'skip\n' || printf 'connect\n' ;;
+        skip-here)
+            local id; id=$(network_id)
+            [ -n "$id" ] || die "сеть не опознаётся: нет маршрута по умолчанию или ARP пуст"
+            if network_skipped; then info "эта сеть уже в списке"; return 0; fi
+            printf '%s %s\n' "$id" "${2:-без метки}" >> "$SKIP_NETS"
+            ok "автоподключение" "в этой сети ($id) не подключаюсь: ${2:-без метки}" ;;
+        unskip-here)
+            local id2; id2=$(network_id)
+            [ -n "$id2" ] || die "сеть не опознаётся"
+            if [ -f "$SKIP_NETS" ]; then
+                awk -v id="$id2" '$1 != id' "$SKIP_NETS" > "$SKIP_NETS.tmp" && mv "$SKIP_NETS.tmp" "$SKIP_NETS"
+            fi
+            ok "автоподключение" "в этой сети ($id2) снова подключаюсь" ;;
         manual|resume) printf '%s\n' "$mode" > "$AUTOCONNECT"; ok "автоподключение" "$mode" ;;
         always)
             [ -n "$prof" ] || die "autoconnect always <профиль>"
@@ -2647,7 +2689,7 @@ tunnel_probe() {
 }
 
 cmd_supervise() {
-    local iterations=0 a connecting_logged=0 captive_logged=0 last_access=0
+    local iterations=0 a connecting_logged=0 captive_logged=0 skip_logged=0 last_access=0
     for a in "$@"; do case "$a" in --iterations=*) iterations="${a#*=}" ;; esac; done
     mkdir -p "$USER_STATE" "$LOG_DIR"
     if sup_alive && [ "$(cat "$SUP_PID")" != $$ ]; then die "супервизор уже работает (pid $(cat "$SUP_PID"))"; fi
@@ -2871,6 +2913,15 @@ cmd_supervise() {
                     [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
                     sleep 5; continue
                 fi
+                if network_skipped; then
+                    if [ "$skip_logged" = 0 ]; then
+                        log "в этой сети автоподключение выключено ($(network_id)) — жду решения"
+                        skip_logged=1
+                    fi
+                    [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
+                    sleep 5; continue
+                fi
+                skip_logged=0
                 if captive_portal; then
                     if [ "$captive_logged" = 0 ]; then
                         log "сеть за порталом перехвата (Wi-Fi просит согласия) — вход не пробую"
@@ -3508,6 +3559,16 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # «В этой сети не подключаться»: сеть опознаётся по MAC маршрутизатора.
+    rm -f "$tmp/state/skip-networks"
+    is "сеть: пока список пуст — подключаемся" no "$(OCBAR_NETWORK_ID=aa:bb:cc:dd:ee:01 run _selftest-fn network_skipped || true)"
+    OCBAR_NETWORK_ID=aa:bb:cc:dd:ee:01 run autoconnect skip-here дом >/dev/null || true
+    is "сеть: эта сеть в списке" skip "$(OCBAR_NETWORK_ID=aa:bb:cc:dd:ee:01 run _selftest-fn network_skipped || true)"
+    is "сеть: другая сеть не задета" no "$(OCBAR_NETWORK_ID=aa:bb:cc:dd:ee:02 run _selftest-fn network_skipped || true)"
+    OCBAR_NETWORK_ID=aa:bb:cc:dd:ee:01 run autoconnect unskip-here >/dev/null || true
+    is "сеть: вернули автоподключение" no "$(OCBAR_NETWORK_ID=aa:bb:cc:dd:ee:01 run _selftest-fn network_skipped || true)"
+    rm -f "$tmp/state/skip-networks"
+
     # Импорт профиля Cisco: переносим только адреса серверов.
     printf '%s' '<?xml version="1.0" encoding="UTF-8"?>
 <AnyConnectProfile xmlns="http://schemas.xmlsoap.org/encoding/">
@@ -4005,7 +4066,7 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
   ocbar doctor                        диагностика, ничего не меняет
-  ocbar autoconnect [manual|resume|always <профиль>]
+  ocbar autoconnect [manual|resume|always <профиль>|skip-here [метка]|unskip-here|here]
                                       кто поднимает туннель: никто, «как в прошлый раз»
                                       (по умолчанию) или выбранный профиль при входе в систему
   ocbar report [файл] [--raw]         отчёт для разбора: версии, диагностика, хвосты
@@ -4079,6 +4140,7 @@ case "${1:-}" in
             captive_portal) captive_portal && echo portal || echo no ;;
             access_check) load_profile "${2:-}"; access_check && echo ok || echo fail ;;
             cisco_servers) cisco_servers "${2:-}" ;;
+            network_skipped) network_skipped && echo skip || echo no ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;

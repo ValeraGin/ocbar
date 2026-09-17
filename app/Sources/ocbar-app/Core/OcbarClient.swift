@@ -143,6 +143,11 @@ final class OcbarClient: @unchecked Sendable {
         return v.isEmpty ? "resume" : v
     }
     func setAutoconnect(_ value: [String]) -> ActionResult { action(["autoconnect"] + value, timeout: 30) }
+    /// Подключаемся ли автоматически в сети, где мы сейчас.
+    func skipHere() -> Bool {
+        guard let binary else { return false }
+        return Shell.run(binary, ["autoconnect", "here"], timeout: 10).out.trimmed == "skip"
+    }
 
     /// Автозапуск приложения при входе в систему (LaunchAgent ставит CLI).
     func autostart() -> Bool {

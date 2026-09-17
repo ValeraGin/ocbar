@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.7 — 2026-09-17
+
+- "Do not connect on this network": the supervisor skips auto-connect in
+  networks you mark (home, office). The network is recognised by the router
+  MAC, so no location permission is needed. In Settings → General or
+  `ocbar autoconnect skip-here`.
+
 ## 0.4.6 — 2026-09-17
 
 - `ocbar import profile.xml` reads the server list from a Cisco AnyConnect
