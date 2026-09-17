@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Shell syntax
+        run: |
+          for f in bin/ocbar libexec/ocbar-helper tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh; do
+            bash -n "$f"
+          done
+
+      - name: ShellCheck
+        run: |
+          brew install shellcheck
+          shellcheck -S error bin/ocbar libexec/ocbar-helper tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh
+
+      - name: Formula syntax
+        run: ruby -c Formula/ocbar.rb
+
+      - name: Build ocbar-auth
+        run: swift build -c release --package-path auth
+
+      - name: ocbar-auth self-test
+        run: auth/.build/release/ocbar-auth --selftest
+
+      - name: ocbar-auth learn self-test (WebKit, offscreen)
+        run: auth/.build/release/ocbar-auth --learn-selftest
+
+      - name: Helper self-test (dry-run, stubs)
+        run: tools/helper-selftest.sh
+
+      - name: CLI self-test
+        env:
+          OCBAR_AUTH: ${{ github.workspace }}/auth/.build/release/ocbar-auth
+        run: bin/ocbar selftest
+
+      - name: Build app bundle
+        run: app/make-app.sh
+
+      - name: App self-test
+        run: app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
