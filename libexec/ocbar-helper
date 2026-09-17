@@ -511,7 +511,7 @@ cmd_tunnel_start() {
     # stdin: cookie и списки. Cookie не должна попасть ни в argv, ни в лог.
     # Сети и зоны проверяются ДО записи: в файл состояния попадает только то,
     # что прошло валидацию.
-    local cookie="" line rest nets="" zones="" zl z d p extra
+    local cookie="" line rest nets="" zones="" zl z d p extra mtu="" nodtls=0
     while IFS= read -r line; do
         case "$line" in
             cookie=*) cookie="${line#cookie=}" ;;
@@ -522,6 +522,11 @@ cmd_tunnel_start() {
                       if plain "$rest" && zl=$(zone_line "${z:-}" "${d:-vpn}" "${p:-53}" "${extra:-}"); then
                           zones="$zones$zl"$'\n'
                       else say "пропускаю зону: $(clean "$rest")"; fi ;;
+            "mtu "*)  rest="${line#mtu }"
+                      # Вложенный VPN и мобильная сеть: большие пакеты не
+                      # проходят, а маленькие идут — лечится MTU в профиле.
+                      if valid_mtu "$rest"; then mtu="$rest"; else say "пропускаю mtu: $(clean "$rest")"; fi ;;
+            nodtls)   nodtls=1 ;;
             ''|\#*) ;;
             *) say "неизвестная строка в spec: $(clean "${line%% *}")" ;;
         esac
@@ -554,6 +559,10 @@ cmd_tunnel_start() {
     local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$user"
                   --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel
                   --reconnect-timeout="$rto")
+    [ -z "$mtu" ] || cmd+=(--base-mtu "$mtu")
+    # DTLS (UDP) быстрее, но через некоторые сети и вложенные VPN не ходит
+    # вовсе: с ним туннель «есть», а данные не идут.
+    [ "$nodtls" = 1 ] && cmd+=(--no-dtls)
     [ -z "$ua" ]  || cmd+=(--useragent "$ua")
     [ -z "$csd" ] || cmd+=(--csd-user "$csd_user" --csd-wrapper "$LIBDIR/csd/$csd")
     case "$url" in https://*) cmd+=("$url") ;; *) cmd+=("https://$url") ;; esac

@@ -261,6 +261,14 @@ H_ cleanup
 check 5 "маршрут до шлюза наш и не изменился — снимаем" \
     all 'has "route -n delete -host 198.51.100.9 192.0.2.1"'
 
+# Транспорт: MTU и отключение DTLS из spec доходят до openconnect.
+fresh
+Hin $'cookie=x\nmtu 1300\nnodtls\nnet 10.1.0.0/16\n' tunnel-start vpn.example.com "$HASH" split user
+check 10 "tunnel-start: MTU и --no-dtls из spec" all 'has "--base-mtu 1300"' 'has "--no-dtls"'
+fresh
+Hin $'cookie=x\nmtu 99\n' tunnel-start vpn.example.com "$HASH" split user
+check 10 "tunnel-start: негодный MTU пропускается" all 'has "пропускаю mtu"' 'hasnt "--base-mtu"'
+
 # Статус «подключено» — только после маршрутов и зон.
 fresh; printf '10.1.0.0/16\n' > "$ST/routes.wanted"; printf 'ok.test vpn 53\n' > "$ST/zones.wanted"
 Henv reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 INTERNAL_IP4_DNS=10.0.0.53 "$H" --dry-run vpnc
