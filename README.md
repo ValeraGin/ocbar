@@ -74,6 +74,16 @@ directories, and it only touches what it created itself. See
 - **Menu bar app**: state, traffic, profile switching, network and zone
   toggles, profile editor, diagnostics, logs, notification settings.
 
+## Try it without a VPN
+
+The interface runs on synthetic data, so you can look before installing
+anything that touches your network:
+
+```bash
+ocbar ui-lab                                              # menu states in a browser page
+app/.build/ocbar.app/Contents/MacOS/ocbar-app --stage     # the real menu, every state at once
+```
+
 ## Install
 
 Requires macOS 13+ and Command Line Tools (full Xcode is not needed).
@@ -199,6 +209,18 @@ ocbar-app --selftest            # profile read/write parity with the CLI, UI sta
 ```
 
 They run in CI on every push.
+
+## Supported systems
+
+| | Status |
+|---|---|
+| macOS 26, Apple Silicon | used daily by the author; CI builds and runs every self-test |
+| macOS 13–25, Apple Silicon | expected to work (deployment target is macOS 13), not verified |
+| Intel Macs | expected to work; Homebrew prefix is `/usr/local`, which the helper checks for ownership. Not verified |
+
+No telemetry: ocbar never sends anything anywhere. It talks to your gateway
+and identity provider, writes logs under `~/Library/Logs/ocbar`, and that is
+all. There is no update check, no crash reporting, no analytics.
 
 ## Limitations
 
