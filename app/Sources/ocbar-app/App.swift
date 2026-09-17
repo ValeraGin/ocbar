@@ -22,6 +22,7 @@ struct OcbarApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Настройка ocbar", id: WindowID.settings) { SettingsWindow() }
+        Window("Первый запуск ocbar", id: WindowID.setup) { SetupView() }
             .defaultSize(width: 880, height: 620)
 
         Window("Журналы ocbar", id: WindowID.logs) { LogsView() }
@@ -95,7 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let args = CommandLine.arguments
         let screenshot = args.firstIndex(of: "--screenshot").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         let size: NSSize = screenshot == "menu" ? NSSize(width: 720, height: 700)
-            : screenshot == "settings" ? NSSize(width: 948, height: 668) : NSSize(width: 1450, height: 1600)
+            : screenshot == "settings" ? NSSize(width: 948, height: 668)
+            : screenshot == "setup" ? NSSize(width: 700, height: 660) : NSSize(width: 1450, height: 1600)
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 60, y: 60), size: size),
                               styleMask: [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
@@ -107,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.contentView = NSHostingView(rootView: ScreenshotMenuView())
         } else if screenshot == "settings" {
             window.contentView = NSHostingView(rootView: ScreenshotSettingsView())
+        } else if screenshot == "setup" {
+            window.contentView = NSHostingView(rootView: SetupView()
+                .frame(width: 660, height: 620)
+                .padding(20)
+                .background(Color(nsColor: .underPageBackgroundColor)))
         } else if CommandLine.arguments.contains("--windows") {
             window.contentView = NSHostingView(rootView: StageWindowsView())
         } else if CommandLine.arguments.contains("--live") {
@@ -139,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // получается пустым.
         // Живому состоянию нужно время: опрос ocbar и вторая точка счётчиков.
         let settle: TimeInterval = CommandLine.arguments.contains("--live") ? 8
-            : (CommandLine.arguments.contains("--windows") || CommandLine.arguments.contains("settings") ? 4 : 1.2)
+            : (CommandLine.arguments.contains("--windows") || CommandLine.arguments.contains("settings") || CommandLine.arguments.contains("setup") ? 4 : 1.2)
         RunLoop.current.run(until: Date().addingTimeInterval(settle))
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
         view.cacheDisplay(in: view.bounds, to: rep)

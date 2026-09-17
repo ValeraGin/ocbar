@@ -279,8 +279,8 @@ struct MenuView: View {
     private var profiles: some View {
         if s.profiles.isEmpty {
             if s.available {
-                MenuRow(action: { open(WindowID.settings) }) {
-                    Text("Профилей нет — создать…")
+                MenuRow(action: { open(WindowID.setup) }) {
+                    Text("Настроить ocbar…")
                     Spacer()
                     Image(systemName: "plus").font(.system(size: 9)).foregroundStyle(Palette.tertiary)
                 }
@@ -513,6 +513,9 @@ struct MenuView: View {
                 Text("Супервизор не запущен — автоподключения не будет.")
                     .font(.ocNote).foregroundStyle(Palette.warn)
                     .padding(.horizontal, 13).padding(.bottom, 3)
+            }
+            if s.available, s.profiles.isEmpty {
+                MenuRow(action: { open(WindowID.setup) }) { Text("Первый запуск…") }
             }
             MenuRow(action: { open(WindowID.settings) }) {
                 Text("Настройки…")
