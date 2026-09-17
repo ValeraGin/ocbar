@@ -130,4 +130,5 @@ enum WindowID {
     static let settings = "settings"
     static let logs = "logs"
     static let diagnostics = "diagnostics"
+    static let setup = "setup"
 }

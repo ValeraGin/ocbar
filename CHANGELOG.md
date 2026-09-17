@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.3 — 2026-09-17
+
+- First-run wizard in the app: system component, profile, first login, each
+  step with the equivalent command. Opens from the menu when there are no
+  profiles yet ("Set up ocbar…").
+- Menu rows are real buttons: keyboard and VoiceOver reach them.
+
 ## 0.4.2 — 2026-09-17
 
 - `ocbar report` (and "Save report…" in Diagnostics): one file with versions,

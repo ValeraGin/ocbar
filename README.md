@@ -72,7 +72,8 @@ directories, and it only touches what it created itself. See
 - **Proxy mode**: `openconnect --script-tun` + `ocproxy` gives a local SOCKS
   proxy with no routes, no DNS changes and no root at all.
 - **Menu bar app**: state, traffic, profile switching, network and zone
-  toggles, profile editor, diagnostics, logs, notification settings.
+  toggles, profile editor, diagnostics, logs, notification settings, and a
+  first-run wizard (system component → profile → first login).
 
 ## Try it without a VPN
 
