@@ -120,7 +120,7 @@ $EDITOR ~/.config/ocbar/profiles/main.ocbar
 Для установки через Homebrew образцы лежат в
 `$(brew --prefix ocbar)/share/ocbar/examples`. Готовый файл от коллеги —
 `ocbar import <файл>.ocbar`. Ключи профиля-файла описаны в самом образце и в
-[README](README.md#профиль-одним-файлом).
+[README](README.ru.md#профиль-одним-файлом).
 
 Ниже — старый формат: общий `profiles.conf` плюс `networks.conf` и
 `zones.conf`. Он продолжает работать, а `ocbar export <профиль> <файл>`
@@ -207,7 +207,7 @@ corp.example.com     vpn
 ocbar learn
 ```
 
-Подробнее — в [README](README.md#своя-форма-входа); то же есть в приложении:
+Подробнее — в [README](README.ru.md#своя-форма-входа); то же есть в приложении:
 «Настройка → Профили → Разметить портал…».
 
 ### Пароль и второй фактор
