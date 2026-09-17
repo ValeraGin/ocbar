@@ -266,6 +266,12 @@ auth_path() {
 
 openconnect_bin() {
     local c
+    # Подмена — только в самопроверке (есть заглушка хелпера): установка под
+    # root не должна брать openconnect из переменной окружения.
+    if [ -n "${OCBAR_SELFTEST_HELPER:-}" ] && [ -n "${OCBAR_OPENCONNECT:-}" ]; then
+        [ -x "$OCBAR_OPENCONNECT" ] && { printf '%s' "$OCBAR_OPENCONNECT"; return 0; }
+        return 1
+    fi
     for c in /opt/homebrew/bin/openconnect /usr/local/bin/openconnect; do [ -x "$c" ] && { printf '%s' "$c"; return 0; }; done
     return 1
 }
@@ -2847,7 +2853,7 @@ STUB
 
     run() { OCBAR_CONFIG_DIR="$tmp" OCBAR_USER_STATE="$tmp/state" OCBAR_STATE_DIR="$tmp/var" OCBAR_LOG_DIR="$tmp/logs" \
             OCBAR_CONFIG="$tmp/zones.conf" OCBAR_NETWORKS="$tmp/networks.conf" \
-            OCBAR_SELFTEST_HELPER="$tmp/helper" OCBAR_NOTIFY=0 "$SELF" "$@" 2>&1; }
+            OCBAR_SELFTEST_HELPER="$tmp/helper" OCBAR_OPENCONNECT="${OCBAR_OPENCONNECT:-/usr/bin/true}" OCBAR_NOTIFY=0 "$SELF" "$@" 2>&1; }
     has()  { # имя, что искать, где
         total=$((total+1))
         if printf '%s' "$3" | grep -Fq -- "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «${2}»"; fi
