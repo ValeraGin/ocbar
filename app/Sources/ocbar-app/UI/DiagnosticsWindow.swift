@@ -10,6 +10,7 @@ struct DiagnosticsView: View {
     @State private var running = false
     @State private var stamp: Date?
     @State private var cleanupPending = false
+    @State private var reporting = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +51,8 @@ struct DiagnosticsView: View {
             if let stamp {
                 Text(Self.clock.string(from: stamp)).font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
             }
+            Button("Сохранить отчёт…") { saveReport() }
+                .disabled(reporting || store.busy != nil)
             Button("Журналы…") {
                 openWindow(id: WindowID.logs)
                 NSApp.activate(ignoringOtherApps: true)
@@ -63,6 +66,31 @@ struct DiagnosticsView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
     }
+
+    // Отчёт для разбора: один файл с версиями, диагностикой и хвостами
+    // журналов; корпоративные подробности в нём скрыты (ocbar report).
+    private func saveReport() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "ocbar-report-\(Self.stamp.string(from: Date())).txt"
+        panel.message = "Адреса, домены и логины в отчёте заменены метками. Перед отправкой посмотрите файл."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        reporting = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = OcbarClient.shared.report(to: url.path)
+            DispatchQueue.main.async {
+                reporting = false
+                if case .failed(_, let why) = r {
+                    text = "отчёт не сохранился: " + why + "\n\n" + text
+                } else {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            }
+        }
+    }
+
+    private static let stamp: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd-HHmm"; return f
+    }()
 
     private var cleanupBar: some View {
         HStack(alignment: .top, spacing: 12) {
