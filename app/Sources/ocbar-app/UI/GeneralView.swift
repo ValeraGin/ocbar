@@ -6,6 +6,7 @@ import SwiftUI
 struct GeneralView: View {
     @ObservedObject private var store = StatusStore.shared
     @State private var autostart = false
+    @State private var policy = "resume"
     @State private var busy = false
     @State private var note: String?
     @AppStorage("DeveloperMode") private var developer = false
@@ -22,6 +23,20 @@ struct GeneralView: View {
                 Spacer(minLength: 0)
                 Toggle("Запускать при входе в систему", isOn: Binding(get: { autostart }, set: { set($0) }))
                     .toggleStyle(.switch).labelsHidden().tint(Palette.ok).disabled(busy)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Автоподключение").font(.system(size: 13))
+                Text("Кто поднимает туннель, когда его нет. Вход человеком супервизор не заменяет: если сессия провайдера истекла, он остановится и скажет «нужен вход».")
+                    .font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Picker("", selection: Binding(get: { policy }, set: { setPolicy($0) })) {
+                    Text("Вручную").tag("manual")
+                    Text("Как в прошлый раз").tag("resume")
+                    ForEach(store.status.profiles.filter { !$0.isPassword }) { p in
+                        Text("При входе в систему: \(p.display)").tag("always " + p.name)
+                    }
+                }
+                .labelsHidden().frame(width: 320, alignment: .leading).disabled(busy)
             }
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -52,7 +67,22 @@ struct GeneralView: View {
     private func refresh() {
         DispatchQueue.global(qos: .userInitiated).async {
             let on = OcbarClient.shared.autostart()
-            DispatchQueue.main.async { autostart = on }
+            let p = OcbarClient.shared.autoconnect()
+            DispatchQueue.main.async { autostart = on; policy = p }
+        }
+    }
+
+    private func setPolicy(_ value: String) {
+        busy = true; note = nil
+        policy = value
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = OcbarClient.shared.setAutoconnect(value.split(separator: " ").map(String.init))
+            let fresh = OcbarClient.shared.autoconnect()
+            DispatchQueue.main.async {
+                busy = false
+                policy = fresh
+                if case .failed(_, let why) = r { note = "не вышло: " + why }
+            }
         }
     }
 

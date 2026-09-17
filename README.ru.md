@@ -302,6 +302,8 @@ ocbar profiles | import <файл> | export <профиль> [файл]
 ocbar profiles order [имя…]           порядок профилей в меню; без имён — текущий
 ocbar routes on|off|toggle <CIDR>     сети на живом туннеле; apply | clear | status
 ocbar dns on|off|toggle <зона>        зоны /etc/resolver; apply | clear | status
+ocbar autoconnect [manual|resume|always <профиль>]   кто поднимает туннель
+ocbar report [файл] [--raw]           отчёт для разбора: адреса и логины скрыты
 ocbar pause | resume | toggle         «как будто выключен»: маршруты и зоны сняты,
                                       туннель и вход живы, возврат мгновенный
 ocbar secret set-password|set-totp|status|code [профиль]
