@@ -58,6 +58,12 @@ struct MenuView: View {
                 .background(RoundedRectangle(cornerRadius: 6).fill(Palette.warn.opacity(0.12)))
                 .padding(.horizontal, 13).padding(.top, 6)
             }
+            if s.access == "fail", s.presentation == .connected {
+                Text("Туннель поднят, но проверка доступа не проходит: шлюз может не пускать к этому ресурсу или не хватает сети в профиле.")
+                    .font(.ocNote).foregroundStyle(Palette.warn)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 13).padding(.top, 5)
+            }
             if let warning = store.helperWarning {
                 Text(warning)
                     .font(.ocNote).foregroundStyle(Palette.warn)
@@ -73,7 +79,17 @@ struct MenuView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(3)
                     Spacer(minLength: 4)
-                    if store.actionFailed || store.actionNote == nil {
+                    // Ошибке нужна не только причина, но и следующий шаг:
+                    // команду с sudo приложение выполнить не может, но может
+                    // положить её в буфер обмена.
+                    if let fix = Self.fix(for: message) {
+                        Button(fix.title) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(fix.command, forType: .string)
+                        }
+                        .buttonStyle(.link).font(.ocNote)
+                        .help("Скопировать: " + fix.command)
+                    } else if store.actionFailed || store.actionNote == nil {
                         Button("Журнал") { open(WindowID.logs) }
                             .buttonStyle(.link).font(.ocNote)
                     }
@@ -402,6 +418,10 @@ struct MenuView: View {
             KVRow(label: "Принято / отдано",
                   value: "\(Size.bytes(store.totalRx)) / \(Size.bytes(store.totalTx))")
             KVRow(label: "Задержка", value: store.latency ?? "—")
+            KVRow(label: "Доступ",
+                  value: s.access == "ok" ? "проверен\(s.accessAt.map { " в " + Self.clock.string(from: $0) } ?? "")"
+                       : s.access == "fail" ? "не отвечает" : "не проверялся",
+                  color: s.access == "fail" ? Palette.bad : Palette.text)
             Sep()
             SectionHead(title: "Сети в туннеле",
                         trailing: "\(s.routesOn.count) из \(s.routes.count)")
@@ -562,6 +582,19 @@ extension MenuView {
             store.disconnect()
         }
     }
+    /// Что делать с этой ошибкой: команда, которую приложение выполнить не
+    /// может (нужен пароль или Homebrew), но может отдать в буфер обмена.
+    static func fix(for message: String) -> (title: String, command: String)? {
+        let m = message.lowercased()
+        if m.contains("sudo ocbar install") || m.contains("нужен root") {
+            return ("Скопировать команду", "sudo ocbar install")
+        }
+        if m.contains("нет openconnect") { return ("Скопировать команду", "brew install openconnect") }
+        if m.contains("нет ocproxy") || m.contains("ocproxy —") { return ("Скопировать команду", "brew install ocproxy") }
+        if m.contains("--trust") { return ("Скопировать команду", "sudo ocbar install --trust") }
+        return nil
+    }
+
     /// Ошибка словами человека: без «ocbar:» и кода возврата хелпера —
     /// подробности в журнале, кнопка рядом.
     static func human(_ message: String) -> String {

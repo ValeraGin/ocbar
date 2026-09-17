@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.5 — 2026-09-17
+
+- The supervisor re-checks access every five minutes, not only right after
+  connecting: the menu shows whether the resource from `[Health] Check` still
+  answers, and says so when a live tunnel stops giving access.
+- Errors that need a command you have to run yourself (`sudo ocbar install`,
+  `brew install openconnect`) offer to copy it.
+
 ## 0.4.4 — 2026-09-17
 
 - Captive portals (hotel Wi-Fi) are detected: the supervisor does not spend
