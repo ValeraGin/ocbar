@@ -10,20 +10,33 @@ struct MenuRow<Content: View>: View {
     @State private var hover = false
 
     var body: some View {
-        HStack(spacing: 8) { content() }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(hover && enabled ? Color.accentColor.opacity(0.85) : .clear)
-            )
-            .foregroundStyle(hover && enabled ? AnyShapeStyle(.white) : AnyShapeStyle(Palette.text))
-            .contentShape(Rectangle())
-            .onHover { hover = $0 }
-            .onTapGesture { if enabled { action() } }
-            .opacity(enabled ? 1 : 0.45)
-            .padding(.horizontal, 5)
+        // Настоящая кнопка, а не HStack с onTapGesture: строку должно быть
+        // видно VoiceOver и можно нажать с клавиатуры (⌃F7 — полный доступ
+        // с клавиатуры). Вид тот же: своя подсветка под курсором и фокусом.
+        Button(action: { if enabled { action() } }) {
+            HStack(spacing: 8) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuRowStyle(hover: hover && enabled))
+        .disabled(!enabled)
+        .onHover { hover = $0 }
+        .padding(.horizontal, 5)
+    }
+}
+
+/// Подсветка строки меню: под курсором, при нажатии и при фокусе клавиатуры.
+private struct MenuRowStyle: ButtonStyle {
+    let hover: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let lit = hover || configuration.isPressed
+        return configuration.label
+            .background(RoundedRectangle(cornerRadius: 5).fill(lit ? Color.accentColor.opacity(0.85) : .clear))
+            .foregroundStyle(lit ? AnyShapeStyle(.white) : AnyShapeStyle(Palette.text))
+            .opacity(configuration.isPressed ? 0.9 : 1)
     }
 }
 
