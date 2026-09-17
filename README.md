@@ -196,6 +196,21 @@ sudo ocbar install [--trust] | uninstall
 --dry-run                             print privileged commands instead of running them
 ```
 
+## Automation
+
+There is no Shortcuts action yet, but the CLI is the automation interface —
+use "Run Shell Script" in Shortcuts, or call it from anything else:
+
+```bash
+ocbar connect work && ocbar status --short   # key=value lines, easy to parse
+ocbar pause; ocbar resume
+ocbar autoconnect manual                     # stop the supervisor from logging in
+```
+
+Coming from Cisco Secure Client? `ocbar import profile.xml` reads the server
+list from an AnyConnect XML profile and creates one `.ocbar` per server
+(addresses only — routes, DNS and credentials stay yours to set).
+
 ## Self-tests
 
 None of them needs a network or privileges: configs are synthetic, state and
