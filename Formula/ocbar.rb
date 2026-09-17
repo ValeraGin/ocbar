@@ -3,7 +3,7 @@ class Ocbar < Formula
   homepage "https://github.com/ValeraGin/ocbar"
   # Репозиторий приватный: tarball с GitHub без авторизации не скачать, а git
   # по тегу работает с теми же учётными данными, что и --HEAD. Поэтому
-  # стабильная версия — тег и коммит, а не url + sha256 (D47).
+  # стабильная версия — тег и коммит, а не url + sha256.
   url "https://github.com/ValeraGin/ocbar.git", tag: "v0.4.0", revision: "a63e544a689aced878269b6765e2678fa64648b9"
   version "0.4.0"
   head "https://github.com/ValeraGin/ocbar.git", branch: "main"
@@ -27,7 +27,7 @@ class Ocbar < Formula
     # example.ocbar — образец основного формата (профиль одним файлом); маска
     # *.example его не берёт, поэтому он назван отдельно.
     (pkgshare/"examples").install Dir["etc/*.example"], "etc/example.ocbar"
-    doc.install Dir["docs/0*.md"], "README.md", "INSTALL.md", "TROUBLESHOOTING.md", "ROADMAP.md", "DECISIONS.md"
+    doc.install "README.md", "README.ru.md", "INSTALL.md", "TROUBLESHOOTING.md", "SECURITY.md", "CHANGELOG.md"
   end
 
   def caveats
@@ -82,8 +82,8 @@ class Ocbar < Formula
     assert_predicate prefix/"ocbar.app/Contents/MacOS/ocbar-app", :executable?
     plist = prefix/"ocbar.app/Contents/Info.plist"
     system "plutil", "-lint", plist
-    # Без строки о камере macOS завершает процесс при чтении QR камерой (D55),
-    # без схемы ocbar:// не доходят уведомления от приложения (D50).
+    # Без строки о камере macOS завершает процесс при чтении QR камерой,
+    # без схемы ocbar:// не доходят уведомления от приложения.
     refute_empty shell_output("plutil -extract NSCameraUsageDescription raw #{plist}").strip
     assert_equal "ocbar",
                  shell_output("plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw #{plist}").strip

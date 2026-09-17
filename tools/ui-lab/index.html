@@ -108,7 +108,7 @@ const DEMO = {
 };
 let D = DEMO;
 
-// Как в приложении (D62): в шапке всегда профиль, под ним состояние и время,
+// Как в приложении: в шапке всегда профиль, под ним состояние и время,
 // справа выключатель; график — только там, где есть трафик.
 const STATES = {
   connected: { label: "подключено", dot: "var(--ok)", sub: "Подключено", time: true, spark: true, sw: true,
@@ -202,7 +202,7 @@ function menuDetails(seed) {
 }
 
 // Список профилей раскрыт: порядок тот, что расставлен перетаскиванием в
-// окне профиля (profiles.order, D63).
+// окне профиля (profiles.order).
 function menuProfiles(seed) {
   const d = D, list = d.profiles || DEMO.profiles;
   return `<div class="menu">${head(STATES.connected, d, seed, true)}<div class="sep"></div>

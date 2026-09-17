@@ -6,7 +6,7 @@
 # Автор: ValeraGin — Ignatkovich Valery. Лицензия MIT.
 #
 # Этот файл работает от пользователя и НИЧЕГО привилегированного не делает сам:
-# всё, что требует root, уходит в libexec/ocbar-helper (см. DECISIONS.md, D2).
+# всё, что требует root, уходит в libexec/ocbar-helper.
 # --dry-run печатает команды хелпера вместо выполнения.
 
 set -euo pipefail
@@ -29,7 +29,7 @@ SELF_DIR="$(dirname "$SELF")"
 
 CONFIG_DIR="${OCBAR_CONFIG_DIR:-$HOME/.config/ocbar}"
 PROFILE_DIR="$CONFIG_DIR/profiles"      # по файлу на подключение, формат .ocbar
-# Порядок профилей в меню и в `ocbar profiles` — по имени в строке (D63).
+# Порядок профилей в меню и в `ocbar profiles` — по имени в строке.
 PROFILE_ORDER="${PROFILE_DIR%/*}/profiles.order"
 PROFILES="$CONFIG_DIR/profiles.conf"
 ZONES_CONF="${OCBAR_CONFIG:-$CONFIG_DIR/zones.conf}"
@@ -38,14 +38,14 @@ RULES_FILE="$CONFIG_DIR/autofill.rules"
 
 USER_STATE="${OCBAR_USER_STATE:-$HOME/Library/Application Support/ocbar}"
 DESIRED="$USER_STATE/desired"            # имя профиля, который должен быть поднят
-CONNECTING="$USER_STATE/connecting"      # идёт ocbar connect: номер процесса (D66)
+CONNECTING="$USER_STATE/connecting"      # идёт ocbar connect: номер процесса
 SUP_PID="$USER_STATE/supervisor.pid"
 SUP_CODE="$USER_STATE/supervisor.code-mtime"   # с какой версией скрипта он работает
 NEEDS_LOGIN="$USER_STATE/needs-login"    # автоподключение упёрлось во вход, ждём человека
 LINK_LOST="$USER_STATE/link-lost"        # отметка времени: с какого момента проба не проходит
 ROUTES_OFF="$USER_STATE/routes.disabled" # сети из networks.conf, выключенные из меню
 ZONES_OFF="$USER_STATE/zones.disabled"
-# Прокси-режим (docs/09-proxy-mode.md): openconnect работает от пользователя,
+# Прокси-режим: openconnect работает от пользователя,
 # хелпер не участвует, поэтому и состояние живёт в пользовательском каталоге.
 PROXY_ENV="$USER_STATE/proxy.env"        # STATE, PID, PORT, URL, SINCE, IP4…
 PROXY_PID="$USER_STATE/proxy.pid"        # пишет сам openconnect (--pid-file)
@@ -80,7 +80,7 @@ RESOLVER_DIR="/etc/resolver"
 AGENT_LABEL="ru.ocbar.supervisor"
 AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 APP_LABEL="ru.ocbar.app"                 # приложение меню-бара, запуск при входе
-APP_USER_COPY="${OCBAR_APP_COPY:-$HOME/Applications/ocbar.app}"   # копия для лаунчера (D64)
+APP_USER_COPY="${OCBAR_APP_COPY:-$HOME/Applications/ocbar.app}"   # копия для лаунчера
 APP_PLIST="$HOME/Library/LaunchAgents/$APP_LABEL.plist"
 
 DRY_RUN=0
@@ -122,7 +122,7 @@ rotate_log() { # файл [предел байт] [сколько хранить
 }
 
 # Уведомление системы — только от приложения меню-бара (URL-схема
-# ocbar://notify, D50). Своего запасного показа у клиента нет (D61):
+# ocbar://notify). Своего запасного показа у клиента нет:
 # уведомление, показанное не приложением, система подписывает «Script
 # Editor», и оно выглядит как чужой скрипт. Приложение не запущено —
 # клиент запускает его в фоне и ждёт свежий токен; уведомления ocbar
@@ -159,7 +159,7 @@ notify_route() { # заголовок, текст
     if [ -z "$url" ]; then printf 'off не удалось собрать адрес\n'; return 0; fi
     printf 'app %s\n' "$url"
 }
-# Группы уведомлений (D69), переключаются в настройках приложения (ключи
+# Группы уведомлений, переключаются в настройках приложения (ключи
 # NotifyLogin, NotifyProblems, NotifyEvents в ru.ocbar.app):
 #   login    — нужен вход, лимит входов           — по умолчанию да;
 #   problems — связь потеряна, доступа нет, …     — да;
@@ -213,7 +213,7 @@ notify() { # заголовок, текст, группа
         # Ждём токен, записанный после запуска. Старый файл не удаляем: если
         # приложение уже стартовало (перезапуск при выпуске), оно успело
         # записать свежий токен, и удаление оставляло уведомления без токена
-        # до следующего перезапуска (D67).
+        # до следующего перезапуска.
         local t0 m; t0=$(date +%s)
         open -g -j "$a" >/dev/null 2>&1 || true
         while [ $n -lt 32 ]; do
@@ -270,7 +270,7 @@ openconnect_bin() {
     return 1
 }
 # ocproxy нужен только прокси-режиму, поэтому это проверка при запуске и
-# строка в doctor, а не зависимость формулы (D40).
+# строка в doctor, а не зависимость формулы.
 ocproxy_bin() {
     local c
     for c in "${OCBAR_OCPROXY:-}" /opt/homebrew/bin/ocproxy /usr/local/bin/ocproxy; do
@@ -654,8 +654,7 @@ load_profile_file() { # файл имя
     P_MODE=split
     P_AUTH=$(pf_get "$f" Connection Auth); P_AUTH="${P_AUTH:-sso}"
     # Как пускать трафик: tunnel — интерфейс и маршруты (сегодняшний путь),
-    # proxy — локальный SOCKS через ocproxy (docs/09-proxy-mode.md, пока не
-    # реализовано). Это не то же самое, что mode = split|full в старом
+    # proxy — локальный SOCKS через ocproxy. Это не то же самое, что mode = split|full в старом
     # profiles.conf: там речь о том, что заворачивать, а не чем.
     P_KIND=$(pf_get "$f" Connection Mode); P_KIND="${P_KIND:-tunnel}"
     case "$P_KIND" in
@@ -942,7 +941,7 @@ command_totp() {
     esac
 }
 
-# Пароль из KeePassXC. То же, что с кодом (D34): берём готовое значение из
+# Пароль из KeePassXC. То же, что с кодом: берём готовое значение из
 # базы, копию в Keychain не заводим. Значение уходит в stdout и нигде не
 # печатается — вызывающий кладёт его сразу в окружение.
 keepass_password() {
@@ -1512,7 +1511,7 @@ session_stop() {
 
 # ---------------------------------------------------------- прокси-режим ----
 # openconnect --script-tun отдаёт пакеты не ядру, а программе: ocproxy
-# поднимает на них локальный SOCKS (docs/09-proxy-mode.md). Ни интерфейса,
+# поднимает на них локальный SOCKS. Ни интерфейса,
 # ни маршрутов, ни /etc/resolver — поэтому хелпер не участвует, всё идёт от
 # пользователя, а openconnect берётся из Homebrew.
 proxy_precheck() { # [1 — переключение с живой сессии]
@@ -1537,7 +1536,7 @@ proxy_start() { # url servercert cookie
     ocp=$(ocproxy_bin) || ocp=ocproxy
     mkdir -p "$USER_STATE" "$LOG_DIR"
     # Ротация до запуска: дальше файл держит openconnect, и переименование
-    # его не переключит (D28).
+    # его не переключит.
     rotate_log "$PROXY_LOG" "${OCBAR_LOG_MAX:-1048576}" 2
     # Программа туннеля — мы сами (_proxy-tun): записать адрес и DNS от шлюза
     # в proxy.env и уступить место ocproxy через exec, дескриптор VPNFD
@@ -1652,7 +1651,7 @@ proxy_stop() {
 # networksetup -setsocksfirewallproxy на активном сетевом сервисе. Запись
 # требует прав администратора, поэтому через хелпер (socks-set/socks-clear),
 # со своим манифестом socks.state по образцу zones.state: снимаем только то,
-# что ставили сами, чужой SOCKS хелпер не перезаписывает (D40).
+# что ставили сами, чужой SOCKS хелпер не перезаписывает.
 # Формат хелпера 0.8.0 — «сервис<TAB>порт»; старый — «сервис порт» (порт — последнее слово).
 socks_state_services() {
     [ -f "$SOCKS_STATE" ] || return 0
@@ -1790,7 +1789,7 @@ cmd_connect() {
 
 # Выйти совсем: отключиться и стереть сессии провайдеров входа в хранилище
 # окна входа — следующий connect покажет форму целиком. Для проверок входа с
-# нуля (D68). Пароль и секрет кода в связке ключей не трогаются.
+# нуля. Пароль и секрет кода в связке ключей не трогаются.
 cmd_logout() {
     local auth; auth=$(auth_path) || die "не найден ocbar-auth"
     if [ "$DRY_RUN" = 1 ]; then info "[dry-run] ocbar disconnect, затем $auth --forget-sessions"; return 0; fi
@@ -2396,7 +2395,7 @@ cmd_toggle_pause() {
 cmd_cleanup() { proxy_cleanup; socks_cleanup; priv cleanup; }
 
 # ------------------------------------------------------------ supervise ----
-# Цикл: держать туннель профиля из $DESIRED. Опрос раз в 5 с (DECISIONS D9).
+# Цикл: держать туннель профиля из $DESIRED. Опрос раз в 5 с.
 wake_ts() { sysctl -n kern.waketime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p'; }
 primary_iface() { scutil <<< 'show State:/Network/Global/IPv4' 2>/dev/null | awk '/PrimaryInterface/{print $3}'; }
 # 0 = туннель отвечает (или спросить нечего — тогда критерий только процесс).
@@ -2424,7 +2423,7 @@ cmd_supervise() {
 
     # bash держит функции в памяти: после правки скрипта живой супервизор
     # продолжает работать по СТАРОМУ коду. Один раз это уже стоило цикла
-    # неверных TOTP и 401 (DECISIONS D15). Поэтому следим за своим файлом
+    # неверных TOTP и 401. Поэтому следим за своим файлом
     # и перезапускаемся через exec — pid сохраняется, pidfile остаётся верным.
     local self_mtime; self_mtime=$(stat -f %m "$SELF" 2>/dev/null || echo 0)
     # Перезапуск идёт через exec: pid и время старта процесса не меняются,
@@ -2474,7 +2473,7 @@ cmd_supervise() {
         desired=$(cat "$DESIRED" 2>/dev/null || true)
         st=$(tunnel_state)
         # Идёт ocbar connect: туннель поднимается, а желание профиля ещё не
-        # записано. Не гасить «лишний» туннель и не входить вторым (D66).
+        # записано. Не гасить «лишний» туннель и не входить вторым.
         if connect_in_progress; then
             [ "$connecting_logged" = 1 ] || { log "идёт подключение (pid $(head -1 "$CONNECTING")) — жду, не вмешиваюсь"; connecting_logged=1; }
             [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
@@ -2671,7 +2670,7 @@ cmd_install() {
         # разбирает migrate-state ниже.
         steps+=("install -d -o root -g wheel -m 755 $LIBDIR $LIBDIR/csd $STATE_DIR_ROOT")
         steps+=("install -o root -g wheel -m 755 $src_helper $HELPER_INSTALLED")
-        # Режим full убран (D4) — его штатный скрипт больше не нужен.
+        # Режим full убран — его штатный скрипт больше не нужен.
         [ -e "$LIBDIR/vpnc-script-full" ] && steps+=("rm -f $LIBDIR/vpnc-script-full")
         local p csd
         while read -r p; do
@@ -3278,7 +3277,7 @@ PROFILE
     is "лаунчер: сборка проекта не копируется" "$tmp/proj/app/.build/ocbar.app" "$(OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$tmp/proj/app/.build/ocbar.app" || true)"
     rm -rf "$tmp/Cellar" "$tmp/Applications" "$tmp/proj"
 
-    # Группы уведомлений и повторы (D69).
+    # Группы уведомлений и повторы.
     np="$tmp/notifyprefs.plist"
     is "уведомления: «нужен вход» — по умолчанию да" yes "$(OCBAR_NOTIFY_PREFS="$np" run _notify-gate 'ocbar: нужен вход' login || true)"
     is "уведомления: то же за 10 минут — нет" no "$(OCBAR_NOTIFY_PREFS="$np" run _notify-gate 'ocbar: нужен вход' login || true)"
@@ -3289,7 +3288,7 @@ PROFILE
     rm -f "$np" "$tmp/state/notify.last"
 
     # Уведомления: только через приложение, с его токеном и разрешением
-    # системы; своего запасного показа («Script Editor») у клиента нет (D61).
+    # системы; своего запасного показа («Script Editor») у клиента нет.
     tok=0123456789abcdef0123456789abcdef
     printf '%s\n' "$tok" > "$tmp/state/notify.token"; chmod 600 "$tmp/state/notify.token"
     printf '1\n' > "$tmp/state/notify.allowed"
@@ -3467,7 +3466,7 @@ app_pid() { pgrep -f 'ocbar\.app/Contents/MacOS/ocbar-app' 2>/dev/null | head -1
 # Лаунчер и Spotlight видят программы только в /Applications и ~/Applications,
 # а Homebrew кладёт бандл в свой Cellar и за пределы префикса писать не может.
 # Поэтому бандл из Homebrew запускается из копии в ~/Applications, и копия
-# обновляется, когда отличается от источника (D64). Символическая ссылка не
+# обновляется, когда отличается от источника. Символическая ссылка не
 # годится — лаунчер ссылки не показывает. Сборка из дерева проекта не
 # копируется: это сборка разработчика. Печатает путь, который запускать.
 app_bundle_version() { plutil -extract CFBundleShortVersionString raw "$1/Contents/Info.plist" 2>/dev/null || true; }

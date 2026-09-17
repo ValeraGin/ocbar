@@ -141,7 +141,7 @@ enum Autofill {
                 // смены документа): формы на Vue и React включают кнопку не
                 // сразу после ввода. Неактивную не жмём — ждём следующей
                 // попытки: нажатие в неактивную кнопку пропадало, а повторять
-                // его на той же странице было нельзя (D67).
+                // его на той же странице было нельзя.
                 let cond = unconditional ? "visible(e) && !emptyKnown()"
                     : "visible(e) && (filled.length > 0 || window.__ocbarFilledHere) && !emptyKnown()"
                 body += "  { var e = document.querySelector(\(sel)); if (\(cond)) { if (e.disabled || e.getAttribute('aria-disabled') === 'true') return {pending: \(sel), filled: filled}; e.click(); return {clicked: \(sel), filled: filled}; } }\n"

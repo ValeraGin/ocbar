@@ -47,7 +47,7 @@ struct ProfileDoc {
     var idpHosts = ""
     var health = ""
     // Как пускать трафик: tunnel — интерфейс и маршруты, proxy — локальный
-    // SOCKS через ocproxy (docs/09-proxy-mode.md).
+    // SOCKS через ocproxy.
     var mode = "tunnel"
     var proxyPort = "11080"
     // Значение SystemProxy как в файле. Системный SOCKS включается только при
@@ -515,7 +515,7 @@ enum ProfileCheck {
         if !port.isEmpty {
             if digits(port, 1...5), let n = Int(port) {
                 if n < 1024 || n > 65535 { err("порт SOCKS \(n) вне диапазона 1024-65535") }
-                if n == 10808 { warn("порт 10808 занят сторонним SOCKS на этой машине — возьмите другой") }
+                if n == 10808 { warn("порт 10808 — SOCKS v2ray/Xray по умолчанию, часто занят — лучше другой") }
             } else {
                 err("порт SOCKS «\(port)» — не число")
             }
