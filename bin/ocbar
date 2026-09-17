@@ -159,9 +159,51 @@ notify_route() { # заголовок, текст
     if [ -z "$url" ]; then printf 'off не удалось собрать адрес\n'; return 0; fi
     printf 'app %s\n' "$url"
 }
-notify() { # заголовок, текст
+# Группы уведомлений (D69), переключаются в настройках приложения (ключи
+# NotifyLogin, NotifyProblems, NotifyEvents в ru.ocbar.app):
+#   login    — нужен вход, лимит входов           — по умолчанию да;
+#   problems — связь потеряна, доступа нет, …     — да;
+#   events   — восстановление, пауза, «подключено» после автоподключения — нет.
+# OCBAR_NOTIFY_PREFS — другой домен или файл настроек (самопроверка).
+notify_wanted() { # группа
+    local key def v
+    case "$1" in
+        login) key=NotifyLogin; def=1 ;;
+        problems) key=NotifyProblems; def=1 ;;
+        events) key=NotifyEvents; def=0 ;;
+        *) return 0 ;;
+    esac
+    v=$(defaults read "${OCBAR_NOTIFY_PREFS:-ru.ocbar.app}" "$key" 2>/dev/null || true)
+    [ "${v:-$def}" = 1 ]
+}
+# Одно и то же уведомление — не чаще раза в 10 минут: при мигающей сети
+# «связь потеряна» приходило пачкой. Печатает yes, если показывать.
+notify_fresh() { # заголовок
+    local f="$USER_STATE/notify.last" now t title keep=""
+    now=$(date +%s)
+    if [ -f "$f" ]; then
+        while IFS=$'\t' read -r t title; do
+            case "$t" in ''|*[!0-9]*) continue ;; esac
+            [ $((now - t)) -lt 600 ] || continue
+            if [ "$title" = "$1" ]; then echo no; return 0; fi
+            keep+="$t"$'\t'"$title"$'\n'
+        done < "$f"
+    fi
+    mkdir -p "$USER_STATE"
+    printf '%s%s\t%s\n' "$keep" "$now" "$1" > "$f" 2>/dev/null || true
+    echo yes
+}
+# «Подключено» — только если подключал супервизор: человек, нажавший
+# «Подключить», видит итог в меню.
+notify_event() { # заголовок, текст
+    [ "${OCBAR_SILENT:-}" = 1 ] || return 0
+    notify "$1" "$2" events
+}
+notify() { # заголовок, текст, группа
     [ "${OCBAR_NOTIFY:-1}" = 1 ] || return 0
     [ "$NOTIFY_ENABLED" = 0 ] && return 0
+    notify_wanted "${3:-}" || { log "уведомление выключено в настройках: $1"; return 0; }
+    [ "$(notify_fresh "$1")" = yes ] || { log "уведомление уже было за 10 минут: $1"; return 0; }
     local r a n=0
     r=$(notify_route "$1" "$2")
     if [ "$r" = launch ]; then
@@ -1336,7 +1378,7 @@ do_connect() { # профиль уже загружен
         mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
         rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
         log "подключён (прокси): $P_NAME → SOCKS 127.0.0.1:$(proxy_port), адрес $(penv_get IP4)"
-        notify "ocbar: подключено (прокси)" "$P_TITLE · SOCKS 127.0.0.1:$(proxy_port)"
+        notify_event "ocbar: подключено (прокси)" "$P_TITLE · SOCKS 127.0.0.1:$(proxy_port)"
         report_health || true
         return 0
     fi
@@ -1352,7 +1394,7 @@ do_connect() { # профиль уже загружен
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
     mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
     rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
-    notify "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
+    notify_event "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
     report_health || true
 }
 
@@ -1654,7 +1696,7 @@ socks_apply() {
         printf '%s\n' "$why" > "$PROXY_ENV.socks-refused"
         log "системный SOCKS не включён: $why"
         warn "Системный SOCKS" "$why"
-        notify "ocbar: системный SOCKS не включён" "$why"
+        notify "ocbar: системный SOCKS не включён" "$why" problems
     fi
     rm -f "$err"
     return 0
@@ -1731,7 +1773,7 @@ report_health() {   # печатает и уведомляет; не роняе�
     else
         warn "Проверка доступа" "$P_HEALTH НЕ отвечает — туннель поднят, но доступа нет"
         log "проверка после подключения: $P_HEALTH не отвечает"
-        notify "ocbar: доступа нет" "Туннель поднят, но $P_HEALTH не отвечает"
+        notify "ocbar: доступа нет" "Туннель поднят, но $P_HEALTH не отвечает" problems
         return 1
     fi
 }
@@ -2332,7 +2374,7 @@ cmd_pause() {
     esac
     require_fresh_helper
     priv suspend
-    [ "$DRY_RUN" = 1 ] || { log "пауза"; notify "ocbar: пауза" "Маршруты и зоны сняты, туннель и вход сохранены"; cmd_status; }
+    [ "$DRY_RUN" = 1 ] || { log "пауза"; notify "ocbar: пауза" "Маршруты и зоны сняты, туннель и вход сохранены" events; cmd_status; }
 }
 
 cmd_resume() {
@@ -2344,7 +2386,7 @@ cmd_resume() {
     esac
     require_fresh_helper
     priv resume
-    [ "$DRY_RUN" = 1 ] || { log "возобновлено"; notify "ocbar: возобновлено" "Маршруты и зоны вернулись"; report_health || true; cmd_status; }
+    [ "$DRY_RUN" = 1 ] || { log "возобновлено"; notify "ocbar: возобновлено" "Маршруты и зоны вернулись" events; report_health || true; cmd_status; }
 }
 
 cmd_toggle_pause() {
@@ -2506,7 +2548,7 @@ cmd_supervise() {
                     [ "$probe_bad_since" = 0 ] && { probe_bad_since=$now; printf '%s\n' "$now" > "$LINK_LOST"; }
                     if [ $((now - probe_bad_since)) -ge "${OCBAR_PROXY_GRACE:-10}" ]; then
                         log "прокси: SOCKS 127.0.0.1:$(proxy_port) не отвечает при живом openconnect — перезапускаю целиком"
-                        notify "ocbar: прокси перезапускается" "SOCKS перестал отвечать, поднимаю заново"
+                        notify "ocbar: прокси перезапускается" "SOCKS перестал отвечать, поднимаю заново" events
                         proxy_stop >>"$SUP_LOG" 2>&1 || true
                         probe_bad_since=0; rm -f "$LINK_LOST" 2>/dev/null || true
                         next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
@@ -2521,7 +2563,7 @@ cmd_supervise() {
                     if [ -n "$miss" ]; then log "маршруты пропали:$miss — восстанавливаю"; for net in $miss; do priv route-add "$net" || true; done; fi
                     if [ "$probe_bad_since" != 0 ]; then
                         log "связь восстановилась сама за $((now - probe_bad_since)) с — вход не потребовался"
-                        notify "ocbar: связь восстановлена" "openconnect поднял сессию сам, без повторного входа"
+                        notify "ocbar: связь восстановлена" "openconnect поднял сессию сам, без повторного входа" events
                     fi
                     rm -f "$LINK_LOST" 2>/dev/null || true
                     probe_bad_since=0; backoff=5
@@ -2539,7 +2581,7 @@ cmd_supervise() {
                     fi
                     if [ "$waited" -ge "$reconnect_grace" ]; then
                         log "за $waited с сессия не восстановилась — закрываю и захожу заново"
-                        notify "ocbar: связь потеряна" "Сессия не восстановилась за $waited с, подключаюсь заново"
+                        notify "ocbar: связь потеряна" "Сессия не восстановилась за $waited с, подключаюсь заново" problems
                         priv tunnel-stop || true
                         probe_bad_since=0; rm -f "$LINK_LOST" 2>/dev/null || true
                         # Этот путь тоже наращивает задержку: раньше он её
@@ -2562,7 +2604,7 @@ cmd_supervise() {
                 if [ "$logins" -ge "$logins_max" ]; then
                     if [ $((now - last_probe_log)) -ge 300 ]; then
                         log "за час уже $logins входов — больше не пробую автоматически (ocbar connect вручную)"
-                        notify "ocbar: слишком много входов" "Автоподключение приостановлено, чтобы не заблокировать учётную запись"
+                        notify "ocbar: слишком много входов" "Автоподключение приостановлено, чтобы не заблокировать учётную запись" login
                         last_probe_log=$now
                     fi
                     [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
@@ -2588,10 +2630,10 @@ cmd_supervise() {
                     # Дальше решает человек — сами окно не открываем.
                     mkdir -p "$USER_STATE"; : > "$NEEDS_LOGIN"
                     log "молча войти не удалось — нужен вход человеком, автопопытки остановлены"
-                    notify "ocbar: нужен вход" "Сессия истекла. Откройте терминал: ocbar connect"
+                    notify "ocbar: нужен вход" "Сессия истекла — подключитесь из меню ocbar" login
                 else
                     log "подключение не удалось, следующая попытка через $backoff с"
-                    [ "$backoff" -ge 40 ] && notify "ocbar: не удаётся подключиться" "Попытки продолжаются, следующая через $backoff с"
+                    [ "$backoff" -ge 40 ] && notify "ocbar: не удаётся подключиться" "Попытки продолжаются, следующая через $backoff с" problems
                     next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
                 fi
             fi
@@ -3236,6 +3278,16 @@ PROFILE
     is "лаунчер: сборка проекта не копируется" "$tmp/proj/app/.build/ocbar.app" "$(OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$tmp/proj/app/.build/ocbar.app" || true)"
     rm -rf "$tmp/Cellar" "$tmp/Applications" "$tmp/proj"
 
+    # Группы уведомлений и повторы (D69).
+    np="$tmp/notifyprefs.plist"
+    is "уведомления: «нужен вход» — по умолчанию да" yes "$(OCBAR_NOTIFY_PREFS="$np" run _notify-gate 'ocbar: нужен вход' login || true)"
+    is "уведомления: то же за 10 минут — нет" no "$(OCBAR_NOTIFY_PREFS="$np" run _notify-gate 'ocbar: нужен вход' login || true)"
+    is "уведомления: «восстановлено» — по умолчанию нет" off "$(OCBAR_NOTIFY_PREFS="$np" run _notify-gate 'ocbar: связь восстановлена' events || true)"
+    defaults write "$np" NotifyEvents -bool true; defaults write "$np" NotifyProblems -bool false
+    is "уведомления: группа включена в настройках" yes "$(OCBAR_NOTIFY_PREFS="$np" run _notify-gate 'ocbar: связь восстановлена' events || true)"
+    is "уведомления: группа выключена в настройках" off "$(OCBAR_NOTIFY_PREFS="$np" run _notify-gate 'ocbar: доступа нет' problems || true)"
+    rm -f "$np" "$tmp/state/notify.last"
+
     # Уведомления: только через приложение, с его токеном и разрешением
     # системы; своего запасного показа («Script Editor») у клиента нет (D61).
     tok=0123456789abcdef0123456789abcdef
@@ -3644,7 +3696,8 @@ case "${1:-}" in
     # Загрузка и проверка профиля без входа: отрицательные проверки selftest
     # идут сюда, а не в connect — при поломке валидации дело не дойдёт до входа.
     _check-profile) shift; load_profile "${1:-}"; echo ok ;;
-    _notify-route) shift; notify_route "${1:-}" "${2:-}" ;;                                   # для selftest
+    _notify-route) shift; notify_route "${1:-}" "${2:-}" ;;
+    _notify-gate)  shift; if notify_wanted "${2:-}"; then notify_fresh "${1:-}"; else echo off; fi ;;   # для selftest                                   # для selftest
     _qr-apply) shift; load_profile "${1:-}"; qr_entry_check "${2:-}"; qr_apply_params "${2:-}" ;;  # для selftest
     # Уборка прокси и системный SOCKS изнутри — только для selftest и только с
     # заглушкой хелпера: настоящий хелпер отсюда не зовётся.
