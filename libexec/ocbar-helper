@@ -670,8 +670,11 @@ vpnc_connect() {
         i=$((i+1))
     done
 
+    # Сначала «применяю», и только после маршрутов и зон — «подключено»:
+    # иначе сбой посередине оставлял статус «подключено» без маршрутов, и ни
+    # супервизор, ни человек не видели, что настройка не доведена.
     {
-        printf 'STATE=connected\nREASON=%s\nTUNDEV=%s\nIP4=%s\nMTU=%s\nGATEWAY=%s\nDNS=%s\nDEF_DOMAIN=%s\nGW_SPLIT_INC=%s\nCONNECTED=%s\n' \
+        printf 'STATE=applying\nREASON=%s\nTUNDEV=%s\nIP4=%s\nMTU=%s\nGATEWAY=%s\nDNS=%s\nDEF_DOMAIN=%s\nGW_SPLIT_INC=%s\nCONNECTED=%s\n' \
             "$(clean "${reason:-}")" "$dev" "$ip" "$mtu" "$(clean "${VPNGATEWAY:-}")" "$(clean "${INTERNAL_IP4_DNS:-}")" \
             "$(clean "${CISCO_DEF_DOMAIN:-}")" "${inc# }" "$(date +%s)"
         [ -f "$TUNNEL_ENV" ] && grep -E '^(MODE|URL|STARTED)=' "$TUNNEL_ENV" || true
@@ -682,12 +685,23 @@ vpnc_connect() {
     # «как будто выключен», обрыв связи этого не меняет.
     if [ -f "$PAUSED" ]; then
         say "туннель поднят, но стоит пауза — маршруты и зоны не применяю"
+        tunnel_env_state connected
         return 0
     fi
 
     apply_wanted_routes "$dev"
 
     apply_wanted_zones
+    tunnel_env_state connected
+    say "маршруты и зоны применены — туннель готов"
+}
+
+# Переписать STATE в tunnel.env, не трогая остальные строки.
+tunnel_env_state() { # состояние
+    [ -f "$TUNNEL_ENV" ] || return 0
+    local tmp="$TUNNEL_ENV.tmp"
+    { printf 'STATE=%s\n' "$1"; grep -vE '^STATE=' "$TUNNEL_ENV" || true; } > "$tmp"
+    mv "$tmp" "$TUNNEL_ENV"; chmod 644 "$TUNNEL_ENV"
 }
 
 vpnc_disconnect() {
@@ -845,6 +859,9 @@ cmd_socks_clear() {
 # 127.0.0.1 там поставил кто-то другой, и снимать его — не наше дело. doctor
 # об этом предупреждает и говорит, как сбросить руками.
 cmd_cleanup() {
+    if [ -f "$TUNNEL_ENV" ] && grep -qx 'STATE=applying' "$TUNNEL_ENV" 2>/dev/null; then
+        say "прошлая настройка не доведена до конца (STATE=applying) — убираю её следы"
+    fi
     local did=0
     if ! tunnel_alive; then
         if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; did=1; fi
