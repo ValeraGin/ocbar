@@ -3,6 +3,25 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.1 — 2026-09-17
+
+Fixes found by a review of what the app still lacks:
+
+- The helper no longer removes a host route to the gateway that another VPN
+  created: the route is recorded as ours only when we added it, and it is
+  checked again before removal.
+- Our `openconnect` is identified by start time as well as name, so a reused
+  pid cannot be mistaken for our tunnel.
+- The one-time code is fetched when the form is filled, not before the window
+  opens: a code from KeePassXC or a custom command no longer expires in flight.
+- A network failure during a silent login is no longer reported as "login
+  required": the supervisor retries with backoff instead of stopping and
+  waiting for a human.
+- The liveness probe asks every resolver pushed by the gateway, not just the
+  first one.
+- `STATE=connected` is published only after routes and DNS zones are applied;
+  an interrupted setup is visible and cleaned up.
+
 ## 0.4.0 — 2026-09-17
 
 - Notifications are grouped (login required / connection problems /
