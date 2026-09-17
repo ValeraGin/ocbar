@@ -5,7 +5,7 @@ class Ocbar < Formula
   # архива не нужно считать заранее.
   url "https://github.com/ValeraGin/ocbar.git",
       tag:      "v0.4.0",
-      revision: "a63e544a689aced878269b6765e2678fa64648b9"
+      revision: "c6d68f58005f23a43235fa0431b5997add355c6d"
   license "MIT"
   head "https://github.com/ValeraGin/ocbar.git", branch: "main"
 
