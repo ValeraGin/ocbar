@@ -247,9 +247,19 @@ tunnel_pid() { [ -f "$PIDFILE" ] && grep -E '^[0-9]+$' "$PIDFILE" 2>/dev/null | 
 # root чужому процессу недопустим, поэтому сверяем имя (как в CLI). ps, а не
 # kill -0: под обычным пользователем (--dry-run) kill -0 на root-процесс
 # возвращает EPERM.
+# Запуск нашего openconnect: "<pid> <время старта>". Имени процесса мало:
+# номер мог достаться другому openconnect (второй VPN, чужой запуск).
+STARTED="$STATE_DIR/openconnect.started"
 is_openconnect() { # pid
-    case "$(ps -p "$1" -o comm= 2>/dev/null)" in openconnect|*/openconnect) return 0 ;; esac
-    return 1
+    case "$(ps -p "$1" -o comm= 2>/dev/null)" in openconnect|*/openconnect) ;; *) return 1 ;; esac
+    if [ -f "$STARTED" ]; then
+        local sp st now; read -r sp st < "$STARTED" 2>/dev/null || true
+        if [ "$sp" = "$1" ] && [ -n "${st:-}" ]; then
+            now=$(ps -p "$1" -o lstart= 2>/dev/null | tr -s ' ')
+            [ "$now" = "$st" ] || return 1
+        fi
+    fi
+    return 0
 }
 # pid живого openconnect из pidfile. Номер занят другим процессом — туннель
 # считается мёртвым, pidfile убирается.
@@ -575,7 +585,9 @@ cmd_tunnel_start() {
         printf 'STATE=failed\nRC=%s\n' "$rc" >> "$TUNNEL_ENV"
         return "$rc"
     }
-    say "openconnect ушёл в фон, pid $(tunnel_pid)"
+    local np; np=$(tunnel_pid)
+    [ -n "$np" ] && printf '%s %s\n' "$np" "$(ps -p "$np" -o lstart= 2>/dev/null | tr -s ' ')" > "$STARTED"
+    say "openconnect ушёл в фон, pid $np"
 }
 
 cmd_tunnel_stop() {
@@ -594,7 +606,7 @@ cmd_tunnel_stop() {
         # Мог умереть сам — убрать хвосты.
         vpnc_disconnect
     fi
-    rm -f "$PIDFILE" "$ROUTES_WANTED" "$ZONES_WANTED" "$PAUSED" 2>/dev/null || true
+    rm -f "$PIDFILE" "$STARTED" "$ROUTES_WANTED" "$ZONES_WANTED" "$PAUSED" 2>/dev/null || true
     [ -f "$TUNNEL_ENV" ] && printf 'STATE=disconnected\nSTOPPED=%s\n' "$(date +%s)" > "$TUNNEL_ENV" || true
 }
 
@@ -631,8 +643,18 @@ vpnc_connect() {
     local gw; gw=$(default_gateway)
     if [ -n "${VPNGATEWAY:-}" ] && valid_ip "$VPNGATEWAY" && valid_ip "${gw:-x}"; then
         case "$VPNGATEWAY" in 127.*) ;; *)
-            run_quiet route -n add -host "$VPNGATEWAY" "$gw" || true
-            printf '%s %s\n' "$VPNGATEWAY" "$gw" > "$GW_ROUTE" ;;
+            # «Наш» только если добавили именно мы. При живом WireGuard или
+            # v2ray такой маршрут уже есть: route add вернёт ошибку, а до
+            # него это видно по route get. Без проверки при отключении мы
+            # сняли бы чужой маршрут.
+            local have; have=$(route -n get -host "$VPNGATEWAY" 2>/dev/null | awk '/gateway:/{print $2; exit}')
+            if [ -n "${have:-}" ] && [ "$have" != "$gw" ]; then
+                say "маршрут до шлюза $VPNGATEWAY уже есть (через $have) — не мой, при отключении не трогаю"
+            elif run_quiet route -n add -host "$VPNGATEWAY" "$gw"; then
+                printf '%s %s\n' "$VPNGATEWAY" "$gw" > "$GW_ROUTE"
+            else
+                say "маршрут до шлюза $VPNGATEWAY добавить не вышло — не мой, при отключении не трогаю"
+            fi ;;
         esac
     fi
 
@@ -671,8 +693,15 @@ vpnc_connect() {
 vpnc_disconnect() {
     clear_state_routes
     if [ -f "$GW_ROUTE" ]; then
-        local g via; read -r g via _ < "$GW_ROUTE" || true
-        if valid_ip "${g:-x}" && valid_ip "${via:-x}"; then run_quiet route -n delete -host "$g" "$via" || true; fi
+        local g via now; read -r g via _ < "$GW_ROUTE" || true
+        if valid_ip "${g:-x}" && valid_ip "${via:-x}"; then
+            now=$(route -n get -host "$g" 2>/dev/null | awk '/gateway:/{print $2; exit}')
+            if [ -z "$now" ] || [ "$now" = "$via" ]; then
+                run_quiet route -n delete -host "$g" "$via" || true
+            else
+                say "маршрут до шлюза $g теперь через $now, а не $via — оставляю: он уже не наш"
+            fi
+        fi
         rm -f "$GW_ROUTE"
     fi
     if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; fi

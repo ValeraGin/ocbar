@@ -62,10 +62,14 @@ SD="$SD"
 dflt() { printf '   route to: default\ndestination: default\n       mask: default\n    gateway: 192.0.2.1\n  interface: en0\n'; }
 if [ "\${1:-}" = -n ] && [ "\${2:-}" = get ]; then
     if [ "\${3:-}" = -net ]; then f="\$SD/route-\$(printf '%s' "\$4" | tr '/' '_')"; [ -f "\$f" ] && cat "\$f" || dflt
+    elif [ "\${3:-}" = -host ] && [ -f "\$SD/route-host-\$4" ]; then cat "\$SD/route-host-\$4"
     else dflt; fi
     exit 0
 fi
-echo "route \$*" >> "\$SD/CALLED"; exit 0
+echo "route \$*" >> "\$SD/CALLED"
+# «Маршрут уже есть»: так ведёт себя route add при живом чужом host-route.
+[ "\${2:-}" = add ] && [ "\${3:-}" = -host ] && [ -f "\$SD/route-busy-\$4" ] && exit 1
+exit 0
 EOF
 for c in ifconfig dscacheutil killall; do
     printf '#!/bin/bash\necho "%s $*" >> "%s/CALLED"\nexit 0\n' "$c" "$SD" > "$STUB/$c"
@@ -117,6 +121,10 @@ fresh() {
 H_()  { OUT=$(OCBAR_STATE_DIR="${STDIR:-$ST}" "$H" --dry-run "$@" 2>&1 </dev/null); RC=$?; }
 Hin() { local in="$1"; shift; OUT=$(printf '%s' "$in" | OCBAR_STATE_DIR="$ST" "$H" --dry-run "$@" 2>&1); RC=$?; }
 Henv() { OUT=$(env OCBAR_STATE_DIR="$ST" "$@" 2>&1 </dev/null); RC=$?; }
+# Без --dry-run: нужно там, где проверяется реакция на код возврата команды
+# (в холостом прогоне команда не запускается). Безопасно: каталог состояния
+# временный, PATH копии ведёт на заглушки, RESOLVER_DIR подменён.
+Hreal() { OUT=$(OCBAR_STATE_DIR="$ST" "$H" "$@" 2>&1 </dev/null); RC=$?; }
 has()    { printf '%s' "$OUT" | grep -Fq -- "$1"; }
 hasnt()  { ! has "$1"; }
 rc0()    { [ "$RC" = 0 ]; }
@@ -234,6 +242,33 @@ fresh; echo "10.8.0.0/16 utun5" > "$ST/routes.state"; route_fixture 10.8.0.0/16 
 H_ cleanup
 check 5 "cleanup: сеть из routes.state теперь через чужой utun — не трогаем" \
     all 'hasnt "маршрут снят"' 'hasnt "route -n delete -net 10.8"'
+
+# Маршрут до шлюза: наш — только если добавили мы.
+fresh; printf '   route to: 198.51.100.9\n    gateway: 203.0.113.7\n  interface: utun3\n' > "$SD/route-host-198.51.100.9"
+Henv reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 VPNGATEWAY=198.51.100.9 "$H" --dry-run vpnc
+check 5 "маршрут до шлюза уже есть через чужой шлюз — не наш" \
+    all 'has "не мой"' 'test ! -f "$ST/gateway.route"'
+fresh
+Henv reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 VPNGATEWAY=198.51.100.9 "$H" --dry-run vpnc
+check 5 "маршрут до шлюза добавили мы — записали в состояние" \
+    all 'fline "$ST/gateway.route" "198.51.100.9 192.0.2.1"'
+printf '   route to: 198.51.100.9\n    gateway: 203.0.113.7\n  interface: utun3\n' > "$SD/route-host-198.51.100.9"
+H_ cleanup
+check 5 "маршрут до шлюза теперь через чужой — не снимаем" \
+    all 'has "уже не наш"' 'hasnt "route -n delete -host 198.51.100.9"'
+fresh; printf '198.51.100.9 192.0.2.1\n' > "$ST/gateway.route"
+H_ cleanup
+check 5 "маршрут до шлюза наш и не изменился — снимаем" \
+    all 'has "route -n delete -host 198.51.100.9 192.0.2.1"'
+
+# Свой openconnect — по времени запуска, а не только по имени процесса.
+fresh; sleep 30 & sp=$!
+printf '%s\n' "$sp" > "$ST/openconnect.pid"
+printf '%s чужое время\n' "$sp" > "$ST/openconnect.started"
+H_ tunnel-stop
+check 3 "pid жив, но время запуска другое — не наш процесс" \
+    all 'hasnt "останавливаю openconnect"'
+kill "$sp" 2>/dev/null || true; wait "$sp" 2>/dev/null || true
 
 # ------------------------------------------------------------------ 6 ----
 fresh; printf 'Wi-Fi\nWi-Fi 2\n' > "$SD/services"

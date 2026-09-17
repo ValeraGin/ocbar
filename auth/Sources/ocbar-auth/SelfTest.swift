@@ -223,6 +223,18 @@ enum AuthSelfTest {
         ok("после нажатия страница изменилась — можно", r.mayRun(signature: "B"))
         r.newPage()
         ok("новая страница с той же сигнатурой — можно", r.mayRun(signature: "A"))
+        // Источник кода в момент заполнения: секрет считаем сами, команду
+        // спрашиваем заново, готовый код — последним. Готовый приходит из
+        // окружения до открытия окна и за десятки секунд протухает.
+        let p6 = TOTPParams()
+        let bySecret = WebAuth.freshCode(secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", params: p6, command: "echo 111111", ready: "222222")
+        let byCommand = WebAuth.freshCode(secret: nil, params: p6, command: "echo 333333", ready: "222222")
+        let byReady = WebAuth.freshCode(secret: nil, params: p6, command: nil, ready: "222222")
+        let badCommand = WebAuth.freshCode(secret: nil, params: p6, command: "echo не-код", ready: "222222")
+        ok("код: секрет важнее команды и готового", bySecret != nil && bySecret != "111111" && bySecret != "222222", bySecret ?? "-")
+        ok("код: команда спрашивается заново, а не берётся готовый", byCommand == "333333", byCommand ?? "-")
+        ok("код: без секрета и команды — готовый", byReady == "222222", byReady ?? "-")
+        ok("код: команда ответила мусором — берём готовый", badCommand == "222222", badCommand ?? "-")
         // Нажатие ушло в неготовую форму: страница та же — одно повторное через 4 с.
         var rc = AutofillGate()
         let t0 = Date(timeIntervalSince1970: 1000)
