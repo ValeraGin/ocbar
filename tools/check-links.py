@@ -18,7 +18,7 @@ def anchors(path):
 def main():
     bad, checked = [], 0
     for base, dirs, files in os.walk(ROOT):
-        dirs[:] = [d for d in dirs if d not in {'.git', '.build', 'node_modules'}]
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in {'.build', 'node_modules'}]
         for name in files:
             if not name.endswith('.md'):
                 continue
