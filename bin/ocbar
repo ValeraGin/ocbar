@@ -2242,6 +2242,71 @@ cmd_export() {
 valid_name_soft() { local re='^[A-Za-z0-9][A-Za-z0-9._-]*$'; [[ $1 =~ $re ]]; }
 
 # ---------------------------------------------------------------- doctor ----
+# Отчёт для разбора: версии, диагностика и хвосты журналов одним файлом.
+# По умолчанию корпоративные подробности скрываются — отчёт отправляют
+# постороннему человеку. Адреса, домены, логины и cookie заменяются метками;
+# --raw оставляет как есть (для себя).
+report_redact() {
+    # Текст — на стандартный ввод, скрипт — аргументом: через heredoc python
+    # забирал бы стандартный ввод себе, и отчёт выходил пустым.
+    OCBAR_R_HOME="$HOME" OCBAR_R_USER="$(/usr/bin/id -un)" /usr/bin/python3 -c "
+import os, re, sys
+t = sys.stdin.read()
+home, user = os.environ.get('OCBAR_R_HOME', ''), os.environ.get('OCBAR_R_USER', '')
+if home: t = t.replace(home, '~')
+if user: t = re.sub(r'\\b' + re.escape(user) + r'\\b', '<логин>', t)
+t = re.sub(r'(?i)\\b(cookie|token|secret|password|пароль)\\s*[:=]\\s*\\S+', r'\\1=<скрыто>', t)
+t = re.sub(r'https?://\\S+', 'https://<шлюз>', t)
+def ip(m):
+    a = m.group(0)
+    return a if a.startswith(('127.', '0.0.0.0', '255.')) else '<адрес>'
+t = re.sub(r'\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b', ip, t)
+t = re.sub(r'\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b', '<почта>', t)
+t = re.sub(r'(?m)^(\\s*(?:User|user|Пользователь)\\s*[:=]\\s*).+$', r'\\1<логин>', t)
+# Имена файлов и каталогов доменами не считаем: иначе supervisor.log и
+# ocbar.app превращались в <домен> и отчёт становился нечитаемым.
+skip = 'log|app|md|sh|swift|rb|png|json|conf|ocbar|rules|plist|yml|txt|state|env|pid|bak|bundle|icns|html|tmp|py|example|local|test|1'
+def host(m):
+    h = m.group(0)
+    if h.lower().startswith(('ru.ocbar', 'ocbar.')): return h
+    last = h.rsplit('.', 1)[-1].lower()
+    if last in skip.split('|') or not last.isalpha() or len(last) < 2:
+        return h
+    return '<домен>'
+t = re.sub(r'(?<![\\w/.-])[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9-]+)+\\b', host, t, flags=re.I)
+sys.stdout.write(t)
+"
+}
+
+cmd_report() { # [файл] [--raw]
+    local out="" raw=0 a
+    for a in "$@"; do case "$a" in --raw) raw=1 ;; *) out="$a" ;; esac; done
+    [ -n "$out" ] || out="$HOME/Desktop/ocbar-report-$(date +%Y-%m-%d-%H%M).txt"
+    local tail_n="${OCBAR_REPORT_LINES:-200}"
+    {
+        printf '# Отчёт ocbar %s, %s\n' "$VERSION" "$(date '+%Y-%m-%d %H:%M:%S')"
+        printf '# Отправляйте его вместе с описанием: что делали и что ожидали.\n'
+        [ "$raw" = 1 ] && printf '# ВНИМАНИЕ: --raw, подробности не скрыты.\n'
+        printf '\n## Система\n%s\n%s\n' "$(sw_vers 2>/dev/null | tr '\n' ' ')" "$(uname -m)"
+        printf '\n## Версии и пути\n'; cmd_version --all 2>&1 || true
+        printf '\n## Диагностика\n'; cmd_doctor 2>&1 || true
+        printf '\n## Состояние\n'; cmd_status --short 2>&1 || true
+        printf '\n## Профили\n'; profiles_summary 2>&1 || true
+        local f
+        for f in "$SUP_LOG" "$LOG_DIR/auth.log" "$LOG_DIR/app.log" "$OC_LOG" "$PROXY_LOG"; do
+            [ -f "$f" ] || continue
+            printf '\n## %s (последние %s строк)\n' "$(basename "$f")" "$tail_n"
+            tail -n "$tail_n" "$f" 2>/dev/null || true
+        done
+    } > "$out.tmp" 2>&1
+    if [ "$raw" = 1 ]; then mv -f "$out.tmp" "$out"
+    else report_redact < "$out.tmp" > "$out" && rm -f "$out.tmp"; fi
+    chmod 600 "$out"
+    ok "отчёт" "$out"
+    info "  перед отправкой посмотрите его глазами: $out"
+    return 0
+}
+
 cmd_doctor() {
     local issues=0 oc h
     info "ocbar doctor"; info "========================================"
@@ -3268,6 +3333,18 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Отчёт: корпоративные подробности скрыты, локальные адреса — нет.
+    red=$(printf 'Url = https://vpn.corp.example/employees\nUser = alice\nip=10.20.30.40 dns=192.0.2.10\nlocal 127.0.0.1:11080\ncookie=SECRET123\nпочта bob@corp.example\n' | run _selftest-fn report_redact || true)
+    is "отчёт: адрес шлюза скрыт" 0 "$(printf '%s' "$red" | grep -c 'vpn.corp.example' || true)"
+    is "отчёт: логин скрыт" 0 "$(printf '%s' "$red" | grep -c 'alice' || true)"
+    is "отчёт: рабочий адрес скрыт" 0 "$(printf '%s' "$red" | grep -c '10.20.30.40' || true)"
+    is "отчёт: cookie скрыт" 0 "$(printf '%s' "$red" | grep -c 'SECRET123' || true)"
+    has "отчёт: локальный адрес оставлен" "127.0.0.1" "$red"
+    has "отчёт: порт оставлен" "11080" "$red"
+    has "отчёт: версия не принята за домен" "0.7.0" "$(printf 'helper=0.7.0\n' | run _selftest-fn report_redact || true)"
+    has "отчёт: имя журнала не принято за домен" "supervisor.log" "$(printf 'смотри ~/Library/Logs/ocbar/supervisor.log\n' | run _selftest-fn report_redact || true)"
+    is "отчёт: домашний каталог сокращён" 0 "$(printf '%s/x\n' "$HOME" | run _selftest-fn report_redact | grep -c "$HOME" || true)"
+
     # Итог входа: сеть отделена от «нужен человек» — иначе короткий обрыв
     # останавливал автоподключение до ручного действия.
     is "вход: 0 — прошло" ok "$(run _selftest-fn auth_rc_action 0 || true)"
@@ -3688,6 +3765,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
   ocbar doctor                        диагностика, ничего не меняет
+  ocbar report [файл] [--raw]         отчёт для разбора: версии, диагностика, хвосты
+                                      журналов; адреса и логины скрыты, --raw — как есть
   ocbar selftest                      проверка разбора на подставленных конфигах
   ocbar cleanup                       мусор от прошлой сессии
   ocbar supervise                     цикл реконнекта (его запускает LaunchAgent)
@@ -3714,6 +3793,7 @@ case "${1:-}" in
     connect)    shift; cmd_connect "$@" ;;
     disconnect) cmd_disconnect ;;
     logout)     cmd_logout ;;
+    report)     shift; cmd_report "$@" ;;
     status)     cmd_status "${2:-}" ;;
     profiles)   shift; cmd_profiles "$@" ;;
     routes)     shift; cmd_routes "$@" ;;
@@ -3750,6 +3830,7 @@ case "${1:-}" in
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
             app_sync_copy) app_sync_copy "${2:-}" ;;
             auth_rc_action) auth_rc_action "${2:-}" ;;
+            report_redact) report_redact ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;
