@@ -593,6 +593,7 @@ DispatchQueue.global().async {
                     case .timeout: exit(args.noWindow ? 5 : 2)
                     case .cancelled: exit(3)
                     case .needsHuman: exit(5)
+                    case .network: exit(6)
                     default: exit(1)
                     }
                 case .success(let token):

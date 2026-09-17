@@ -235,6 +235,14 @@ enum AuthSelfTest {
         ok("код: команда спрашивается заново, а не берётся готовый", byCommand == "333333", byCommand ?? "-")
         ok("код: без секрета и команды — готовый", byReady == "222222", byReady ?? "-")
         ok("код: команда ответила мусором — берём готовый", badCommand == "222222", badCommand ?? "-")
+        // Сеть отделена от «нужен человек»: молчаливый вход при обрыве
+        // должен повторяться сам, а не останавливать автоподключение.
+        ok("сбой сети — не «нужен человек»",
+           WebAuth.networkFailure(NSURLErrorNotConnectedToInternet)
+           && WebAuth.networkFailure(NSURLErrorTimedOut)
+           && WebAuth.networkFailure(NSURLErrorCannotFindHost)
+           && !WebAuth.networkFailure(NSURLErrorUserAuthenticationRequired)
+           && !WebAuth.networkFailure(NSURLErrorBadServerResponse))
         // Нажатие ушло в неготовую форму: страница та же — одно повторное через 4 с.
         var rc = AutofillGate()
         let t0 = Date(timeIntervalSince1970: 1000)

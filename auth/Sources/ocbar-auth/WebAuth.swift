@@ -72,6 +72,14 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     })();
     """
 
+    /// Сетевой сбой, а не отказ входа: повторять можно молча.
+    static func networkFailure(_ code: Int) -> Bool {
+        [NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut,
+         NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost, NSURLErrorDNSLookupFailed,
+         NSURLErrorInternationalRoamingOff, NSURLErrorDataNotAllowed,
+         NSURLErrorSecureConnectionFailed].contains(code)
+    }
+
     /// Общая конфигурация окна входа — её же проверяет --learn-selftest.
     /// Всплывающие окна без жеста человека WebKit не открывает вовсе.
     static func configuration(persistent: Bool) -> WKWebViewConfiguration {
@@ -135,11 +143,13 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
 
     enum WebAuthError: Error, CustomStringConvertible {
         case cancelled, timeout, needsHuman(String), errorCookie(String), stopped(String), navigation(String)
+        case network(String)
         var description: String {
             switch self {
             case .cancelled: return "окно закрыто пользователем"
             case .timeout: return "тайм-аут ожидания SSO"
             case .needsHuman(let s): return "нужен человек: \(s)"
+            case .network(let s): return "сеть или шлюз не ответили: \(s)"
             case .errorCookie(let s): return "шлюз вернул cookie ошибки: \(s)"
             case .stopped(let s): return "форма показала ошибку: \(s)"
             case .navigation(let s): return "навигация не удалась: \(s)"
@@ -455,6 +465,13 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
         Log.info("провал загрузки: \(error.localizedDescription)")
         statusLabel.stringValue = "Ошибка: \(error.localizedDescription)"
+        // Молча — значит подключается супервизор: страница не загрузилась,
+        // это сеть, а не истёкшая сессия. Иначе он остановил бы автопопытки
+        // и ждал человека без нужды.
+        if opts.noWindow, ns.domain == NSURLErrorDomain, Self.networkFailure(ns.code) {
+            finish(.failure(.network(error.localizedDescription)))
+            return
+        }
         show()
     }
 
