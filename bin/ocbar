@@ -15,7 +15,7 @@ set -euo pipefail
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 
-VERSION="0.4.5"
+VERSION="0.4.6"
 # SELF_ENTRY — как нас позвали (например, /opt/homebrew/bin/ocbar: этот путь
 # переживает brew upgrade, его кладём в plist). SELF — реальный файл после
 # симлинков (Cellar), рядом с ним лежат libexec/ocbar-helper и ocbar-auth.
