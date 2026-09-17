@@ -261,6 +261,19 @@ H_ cleanup
 check 5 "маршрут до шлюза наш и не изменился — снимаем" \
     all 'has "route -n delete -host 198.51.100.9 192.0.2.1"'
 
+# Статус «подключено» — только после маршрутов и зон.
+fresh; printf '10.1.0.0/16\n' > "$ST/routes.wanted"; printf 'ok.test vpn 53\n' > "$ST/zones.wanted"
+Henv reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 INTERNAL_IP4_DNS=10.0.0.53 "$H" --dry-run vpnc
+check 11 "vpnc: сначала маршруты и зоны, потом «подключено»" \
+    all 'has "маршруты и зоны применены"' 'fline "$ST/tunnel.env" "STATE=connected"'
+fresh; : > "$ST/paused"
+Henv reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 "$H" --dry-run vpnc
+check 11 "vpnc на паузе: маршруты не применяются, статус всё равно «подключено»" \
+    all 'has "стоит пауза"' 'fline "$ST/tunnel.env" "STATE=connected"'
+fresh; printf 'STATE=applying\nTUNDEV=utun9\n' > "$ST/tunnel.env"
+H_ cleanup
+check 11 "уборка говорит о недоведённой настройке" all 'has "не доведена до конца"'
+
 # Свой openconnect — по времени запуска, а не только по имени процесса.
 fresh; sleep 30 & sp=$!
 printf '%s\n' "$sp" > "$ST/openconnect.pid"
