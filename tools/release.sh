@@ -10,6 +10,18 @@ cd "$root"
 [ -z "$(git status --porcelain -- . ':!.claude')" ] || { echo "release: в дереве незакоммиченные правки" >&2; exit 1; }
 git rev-parse -q --verify "refs/tags/v$ver" >/dev/null && { echo "release: тег v$ver уже есть" >&2; exit 1; }
 
+# Проверки — до отправки: выпуск не должен зависеть от того, заметит ли
+# кто-то красный CI уже после push.
+echo "release: проверки перед выпуском"
+swift build -c release --package-path auth >/dev/null
+auth/.build/release/ocbar-auth --selftest >/dev/null
+auth/.build/release/ocbar-auth --learn-selftest >/dev/null
+tools/helper-selftest.sh >/dev/null
+OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" bin/ocbar selftest >/dev/null
+app/make-app.sh >/dev/null
+app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest >/dev/null
+grep -q "^## $ver " CHANGELOG.md || { echo "release: в CHANGELOG.md нет раздела $ver" >&2; exit 1; }
+
 sed -i '' -E "s/^VERSION=\"[^\"]*\"/VERSION=\"$ver\"/" bin/ocbar
 bin/ocbar version | grep -qx "ocbar $ver"
 git add bin/ocbar && git commit -q -m "release: $ver"
@@ -33,6 +45,14 @@ cp Formula/ocbar.rb "$tap/Formula/ocbar.rb"
 git -C "$tap" add Formula/ocbar.rb
 git -C "$tap" commit -q -m "ocbar $ver"
 git -C "$tap" push -q origin main
+
+# Заметки к релизу — из CHANGELOG, раздел этой версии.
+notes=$(awk -v v="## $ver " 'index($0, v) == 1 {f = 1; next} f && /^## / {exit} f' CHANGELOG.md)
+if command -v gh >/dev/null; then
+    printf '%s\n' "$notes" | gh release create "v$ver" --title "ocbar $ver" --notes-file - >/dev/null \
+        && echo "release: GitHub Release v$ver создан" \
+        || echo "release: GitHub Release не создан (проверьте gh auth)" >&2
+fi
 
 brew update >/dev/null
 brew upgrade ocbar
