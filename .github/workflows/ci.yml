@@ -30,6 +30,9 @@ jobs:
           brew install shellcheck
           shellcheck -S error bin/ocbar libexec/ocbar-helper tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh
 
+      - name: Markdown links
+        run: python3 tools/check-links.py
+
       - name: Formula syntax
         run: ruby -c Formula/ocbar.rb
 
