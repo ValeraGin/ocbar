@@ -3,6 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.2 — 2026-09-17
+
+- `ocbar report` (and "Save report…" in Diagnostics): one file with versions,
+  diagnostics, profiles and log tails; hosts, addresses, logins, e-mail and
+  cookies are replaced with placeholders, `--raw` keeps them.
+- `ocbar autoconnect manual | resume | always <profile>` and a picker in
+  Settings → General: who brings the tunnel up. Default is unchanged.
+- Settings → General: start at login, developer mode. The menu now says
+  "Quit ocbar (tunnel stays up)".
+
 ## 0.4.1 — 2026-09-17
 
 Fixes found by a review of what the app still lacks:

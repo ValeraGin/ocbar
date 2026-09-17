@@ -169,6 +169,8 @@ ocbar status [--short]
 ocbar profiles | import <file> | export <profile> [file] | order [name…]
 ocbar routes on|off|toggle <CIDR>     also: apply | clear | status
 ocbar dns on|off|toggle <zone>        also: apply | clear | status
+ocbar autoconnect [manual|resume|always <profile>] who brings the tunnel up
+ocbar report [file] [--raw]           support report; hosts and logins masked
 ocbar pause | resume | toggle
 ocbar secret set-password|set-totp|status|code [profile]
 ocbar secret import-qr <image> [--list] [--select NAME] [profile]

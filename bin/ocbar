@@ -38,6 +38,7 @@ RULES_FILE="$CONFIG_DIR/autofill.rules"
 
 USER_STATE="${OCBAR_USER_STATE:-$HOME/Library/Application Support/ocbar}"
 DESIRED="$USER_STATE/desired"            # имя профиля, который должен быть поднят
+AUTOCONNECT="$USER_STATE/autoconnect"    # политика автоподключения: manual | resume | always <профиль>
 CONNECTING="$USER_STATE/connecting"      # идёт ocbar connect: номер процесса
 SUP_PID="$USER_STATE/supervisor.pid"
 SUP_CODE="$USER_STATE/supervisor.code-mtime"   # с какой версией скрипта он работает
@@ -1303,6 +1304,33 @@ auth_log_tee() {
     return 0
 }
 
+# Политика автоподключения (D70). resume — держать то, что было подключено
+# (умолчание, прежнее поведение); manual — супервизор сам не входит вовсе;
+# always <профиль> — при входе в систему поднять этот профиль.
+autoconnect_policy() {
+    local line; line=$(head -1 "$AUTOCONNECT" 2>/dev/null | tr -d '\r' || true)
+    case "$line" in
+        manual) printf 'manual' ;;
+        always\ *) local p="${line#always }"; if [ -n "$p" ]; then printf 'always %s' "$p"; else printf 'resume'; fi ;;
+        *) printf 'resume' ;;
+    esac
+    return 0
+}
+cmd_autoconnect() { # [manual|resume|always <профиль>]
+    local mode="${1:-}" prof="${2:-}"
+    if [ -z "$mode" ]; then printf '%s\n' "$(autoconnect_policy)"; return 0; fi
+    mkdir -p "$USER_STATE"
+    case "$mode" in
+        manual|resume) printf '%s\n' "$mode" > "$AUTOCONNECT"; ok "автоподключение" "$mode" ;;
+        always)
+            [ -n "$prof" ] || die "autoconnect always <профиль>"
+            profile_exists "$prof" || die "профиля [$prof] нет"
+            printf 'always %s\n' "$prof" > "$AUTOCONNECT"; ok "автоподключение" "always $prof" ;;
+        *) die "autoconnect [manual|resume|always <профиль>]" ;;
+    esac
+    return 0
+}
+
 # Идёт ли ocbar connect. Желание профиля ($DESIRED) пишется после
 # «подключено», а туннель поднимается раньше: без этой отметки супервизор на
 # очередном опросе видел туннель без профиля и гасил его («профиль снят, а
@@ -2556,6 +2584,18 @@ cmd_supervise() {
         priv cleanup >>"$SUP_LOG" 2>&1 || true
     fi
     socks_cleanup >>"$SUP_LOG" 2>&1 || true
+    # «Подключать при входе в систему»: агент стартует вместе с сессией, так
+    # что политика применяется один раз здесь, а не в цикле — иначе
+    # `ocbar disconnect` тут же отменялся бы обратным подключением.
+    local policy; policy=$(autoconnect_policy)
+    case "$policy" in
+        always\ *)
+            if [ -z "$(cat "$DESIRED" 2>/dev/null || true)" ]; then
+                printf '%s\n' "${policy#always }" > "$DESIRED"
+                log "автоподключение: при входе в систему поднимаю профиль ${policy#always }"
+            fi ;;
+        manual) log "автоподключение: вручную — сам входить не буду" ;;
+    esac
     while :; do
         n=$((n+1)); now=$(date +%s)
         if [ "$(stat -f %m "$SELF" 2>/dev/null || echo 0)" != "$self_mtime" ]; then
@@ -2709,6 +2749,14 @@ cmd_supervise() {
                 if [ -f "$NEEDS_LOGIN" ]; then
                     if [ $((now - last_probe_log)) -ge 600 ]; then
                         log "жду решения человека: нужен вход (ocbar connect)"
+                        last_probe_log=$now
+                    fi
+                    [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
+                    sleep 5; continue
+                fi
+                if [ "$(autoconnect_policy)" = manual ]; then
+                    if [ $((now - last_probe_log)) -ge 600 ]; then
+                        log "туннель не поднят, но автоподключение выключено (вручную) — жду решения"
                         last_probe_log=$now
                     fi
                     [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
@@ -3333,6 +3381,22 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Автоподключение: политика читается и применяется супервизором.
+    rm -f "$tmp/state/autoconnect"
+    is "автоподключение: по умолчанию «как в прошлый раз»" resume "$(run _selftest-fn autoconnect_policy || true)"
+    run autoconnect manual >/dev/null || true
+    is "автоподключение: вручную" manual "$(run _selftest-fn autoconnect_policy || true)"
+    is "автоподключение: неизвестный профиль — отказ" fail "$( (run autoconnect always нет-такого >/dev/null 2>&1) && echo ok || echo fail)"
+    run autoconnect always t >/dev/null || true
+    is "автоподключение: выбранный профиль" "always t" "$(run _selftest-fn autoconnect_policy || true)"
+    rm -f "$tmp/state/desired"
+    run supervise --iterations=1 --dry-run >/dev/null 2>&1 || true
+    is "автоподключение: при входе в систему профиль выбран" "t" "$(cat "$tmp/state/desired" 2>/dev/null || true)"
+    run autoconnect manual >/dev/null || true
+    out=$(run supervise --iterations=1 --dry-run 2>&1 || true)
+    has "автоподключение: вручную — супервизор говорит, что не входит" "сам входить не буду" "$out$(cat "$tmp/logs/supervisor.log" 2>/dev/null)"
+    rm -f "$tmp/state/autoconnect" "$tmp/state/desired"
+
     # Отчёт: корпоративные подробности скрыты, локальные адреса — нет.
     red=$(printf 'Url = https://vpn.corp.example/employees\nUser = alice\nip=10.20.30.40 dns=192.0.2.10\nlocal 127.0.0.1:11080\ncookie=SECRET123\nпочта bob@corp.example\n' | run _selftest-fn report_redact || true)
     is "отчёт: адрес шлюза скрыт" 0 "$(printf '%s' "$red" | grep -c 'vpn.corp.example' || true)"
@@ -3769,6 +3833,9 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar ui-lab [--live]               песочница интерфейса в браузере
   ocbar version [--all]               версия; --all — все части и пути, для приложения
   ocbar doctor                        диагностика, ничего не меняет
+  ocbar autoconnect [manual|resume|always <профиль>]
+                                      кто поднимает туннель: никто, «как в прошлый раз»
+                                      (по умолчанию) или выбранный профиль при входе в систему
   ocbar report [файл] [--raw]         отчёт для разбора: версии, диагностика, хвосты
                                       журналов; адреса и логины скрыты, --raw — как есть
   ocbar selftest                      проверка разбора на подставленных конфигах
@@ -3797,6 +3864,7 @@ case "${1:-}" in
     connect)    shift; cmd_connect "$@" ;;
     disconnect) cmd_disconnect ;;
     logout)     cmd_logout ;;
+    autoconnect) shift; cmd_autoconnect "$@" ;;
     report)     shift; cmd_report "$@" ;;
     status)     cmd_status "${2:-}" ;;
     profiles)   shift; cmd_profiles "$@" ;;
@@ -3835,6 +3903,7 @@ case "${1:-}" in
             app_sync_copy) app_sync_copy "${2:-}" ;;
             auth_rc_action) auth_rc_action "${2:-}" ;;
             report_redact) report_redact ;;
+            autoconnect_policy) autoconnect_policy ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;
