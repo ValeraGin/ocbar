@@ -4,37 +4,46 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Раз в неделю — на второй поддерживаемой системе тоже.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-26, macos-15]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+  # Дёшево и быстро: синтаксис, shellcheck, ссылки. Минуты Linux в приватном
+  # репозитории считаются один к одному, macOS — один к десяти.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
-
       - name: Shell syntax
         run: |
           for f in bin/ocbar libexec/ocbar-helper tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh; do
             bash -n "$f"
           done
-
       - name: ShellCheck
         run: |
-          brew install shellcheck
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck >/dev/null
           shellcheck -S error bin/ocbar libexec/ocbar-helper tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh
-
+      - name: Formula syntax
+        run: ruby -c Formula/ocbar.rb
       - name: Markdown links
         run: python3 tools/check-links.py
 
-      - name: Formula syntax
-        run: ruby -c Formula/ocbar.rb
+  test:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ github.event_name == 'schedule' && fromJSON('["macos-26", "macos-15"]') || fromJSON('["macos-26"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
 
       - name: Build ocbar-auth
         run: swift build -c release --package-path auth
