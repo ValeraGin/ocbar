@@ -285,6 +285,20 @@ ocproxy_bin() {
     return 1
 }
 
+# Чем кончился вход (код ocbar-auth): ok — прошло; human — нужен человек
+# (сессия провайдера истекла, форма ждёт); network — сеть или шлюз не
+# ответили, повторять можно молча; fail — остальное. Раньше сетевая ошибка
+# приходила как «нужен вход», и автоподключение останавливалось до руки.
+auth_rc_action() { # код
+    case "${1:-}" in
+        0) printf ok ;;
+        5) printf human ;;
+        6) printf network ;;
+        *) printf fail ;;
+    esac
+    return 0
+}
+
 # Привилегированная операция → хелпер. stdin пробрасывается как есть.
 priv() {
     # Самопроверка подкладывает заглушку хелпера: настоящий хелпер она не
@@ -1269,6 +1283,8 @@ authenticate() { # печатает "token hash post_url"
             3) die "SSO: окно закрыто" ;;
             5) printf '%socbar: молча войти не удалось — сессия требует человека%s\n' "$c_yel" "$c_off" >&2
                return 5 ;;
+            6) printf '%socbar: шлюз или сеть не ответили — повторю позже%s\n' "$c_yel" "$c_off" >&2
+               return 6 ;;
             *) die "SSO: ошибка ($rc)" ;;
         esac
     }
@@ -1357,7 +1373,9 @@ do_connect() { # профиль уже загружен
     # не обрывает apply_teach на непредвиденной ошибке после удачного входа.
     if [ -n "$TEACH_OUT" ]; then apply_teach "$TEACH_OUT" || true; rm -f "$TEACH_OUT"; fi
     # 5 — «нужен человек»: не ошибка, а решение, которое принимает не скрипт.
-    [ "$rc" = 5 ] && { rm -f "$CONNECTING"; return 5; }
+    case "$(auth_rc_action "$rc")" in
+        human|network) rm -f "$CONNECTING"; return "$rc" ;;
+    esac
     [ "$rc" = 0 ] || { rm -f "$CONNECTING"; return "$rc"; }
     read -r token hash post_url <<< "$out"
     [ -n "$token" ] || die "аутентификация не вернула токен"
@@ -2409,12 +2427,20 @@ primary_iface() { scutil <<< 'show State:/Network/Global/IPv4' 2>/dev/null | awk
 # через туннель. Иначе проба честно проваливается на здоровом туннеле —
 # например, когда сеть с этим резолвером выключена в меню или её нет в
 # networks.conf, — и супервизор устраивает переподключение на ровном месте.
+# Проба связи: спрашиваем ВСЕ резолверы шлюза, которые идут через туннель.
+# Раньше брался только первый: его отказ рвал сессию, хотя второй отвечал, а
+# если маршрута к нему не было — «проба не применима» засчитывалась как успех.
+# Возвращает 0 — связь есть или проверить нечем, 1 — ни один не ответил.
 tunnel_probe() {
-    local dns dev; dns=$(env_get DNS); dns="${dns%% *}"
-    [ -n "$dns" ] || return 0
+    local dev one tried=0
     dev=$(env_get TUNDEV); [ -n "$dev" ] || return 0
-    [ "$(route_via "$dns/32")" = "$dev" ] || return 0
-    dig +time=2 +tries=1 @"$dns" . NS >/dev/null 2>&1
+    for one in $(env_get DNS); do
+        [ "$(route_via "$one/32")" = "$dev" ] || continue
+        tried=$((tried + 1))
+        dig +time=2 +tries=1 @"$one" . NS >/dev/null 2>&1 && return 0
+    done
+    [ "$tried" = 0 ] && return 0
+    return 1
 }
 
 cmd_supervise() {
@@ -2630,6 +2656,11 @@ cmd_supervise() {
                 ( export OCBAR_SILENT=1; load_profile "$desired" && do_connect ) >>"$SUP_LOG" 2>&1 || crc=$?
                 if [ "$crc" = 0 ]; then
                     backoff=5
+                elif [ "$(auth_rc_action "$crc")" = network ]; then
+                    # Сеть или шлюз не ответили: сессия провайдера может быть
+                    # жива, человек не нужен — повторяем с задержкой.
+                    log "шлюз или сеть не ответили — следующая попытка через $backoff с"
+                    next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
                 elif [ "$crc" = 5 ]; then
                     # Сессия у провайдера входа истекла: молча не пройти.
                     # Дальше решает человек — сами окно не открываем.
@@ -3237,6 +3268,13 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Итог входа: сеть отделена от «нужен человек» — иначе короткий обрыв
+    # останавливал автоподключение до ручного действия.
+    is "вход: 0 — прошло" ok "$(run _selftest-fn auth_rc_action 0 || true)"
+    is "вход: 5 — нужен человек" human "$(run _selftest-fn auth_rc_action 5 || true)"
+    is "вход: 6 — сеть, повторяем молча" network "$(run _selftest-fn auth_rc_action 6 || true)"
+    is "вход: прочее — ошибка" fail "$(run _selftest-fn auth_rc_action 9 || true)"
+
     # Выйти совсем: сначала отключение, потом сброс сессий окна входа.
     has "logout: отключение и сброс сессий окна входа" "--forget-sessions" "$(run logout --dry-run 2>&1 || true)"
     has "logout: есть в справке" "ocbar logout" "$(run --help 2>&1 || true)"
@@ -3711,6 +3749,7 @@ case "${1:-}" in
         case "${1:-}" in
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
             app_sync_copy) app_sync_copy "${2:-}" ;;
+            auth_rc_action) auth_rc_action "${2:-}" ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;
