@@ -1,0 +1,39 @@
+name: Bug report
+description: Something does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Attach `ocbar report` if you can (it masks hosts, addresses and logins
+        — but read it before attaching). Never paste cookies, tokens or
+        passwords. Русский тоже подходит.
+  - type: input
+    id: version
+    attributes:
+      label: ocbar version
+      description: Output of `ocbar version --all` (first lines are enough)
+    validations: {required: true}
+  - type: input
+    id: macos
+    attributes:
+      label: macOS and architecture
+      placeholder: "26.6, arm64 / 13.7, x86_64"
+    validations: {required: true}
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed via
+      options: [Homebrew tap, From source, Other]
+    validations: {required: true}
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead
+    validations: {required: true}
+  - type: textarea
+    id: logs
+    attributes:
+      label: Report or log excerpts
+      render: text
