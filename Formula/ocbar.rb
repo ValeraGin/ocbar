@@ -1,16 +1,16 @@
 class Ocbar < Formula
-  desc "OpenConnect client for macOS: SSO via WKWebView, split DNS, split tunneling, menu bar"
+  desc "AnyConnect-compatible VPN client: SSO, split DNS, split tunnel, menu bar"
   homepage "https://github.com/ValeraGin/ocbar"
-  # Репозиторий приватный: tarball с GitHub без авторизации не скачать, а git
-  # по тегу работает с теми же учётными данными, что и --HEAD. Поэтому
-  # стабильная версия — тег и коммит, а не url + sha256.
-  url "https://github.com/ValeraGin/ocbar.git", tag: "v0.4.0", revision: "a63e544a689aced878269b6765e2678fa64648b9"
-  version "0.4.0"
-  head "https://github.com/ValeraGin/ocbar.git", branch: "main"
+  # Стабильная версия — тег и коммит: версия берётся из имени тега, а хеш
+  # архива не нужно считать заранее.
+  url "https://github.com/ValeraGin/ocbar.git",
+      tag:      "v0.4.0",
+      revision: "a63e544a689aced878269b6765e2678fa64648b9"
   license "MIT"
+  head "https://github.com/ValeraGin/ocbar.git", branch: "main"
 
+  depends_on macos: :ventura
   depends_on "openconnect"
-  depends_on :macos => :ventura
 
   def install
     # Swift идёт с Command Line Tools, полный Xcode не нужен.
