@@ -2238,10 +2238,63 @@ ui_lab_snapshot() {
 }
 
 # ------------------------------------------------------- импорт/экспорт ----
+# Список серверов из профиля Cisco (XML): HostName — как показывать,
+# HostAddress — куда подключаться, UserGroup — группа в адресе. Остальное
+# (политики, posture, сертификаты) не переносится: у ocbar этого нет, и
+# делать вид, что перенесли, хуже, чем сказать вслух.
+cisco_servers() { # файл.xml → "имя<TAB>адрес[/группа]"
+    /usr/bin/python3 -c "
+import re, sys, xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except Exception as e:
+    sys.stderr.write(str(e) + chr(10)); sys.exit(2)
+def tag(el): return re.sub(r'^\{.*\}', '', el.tag)
+out = []
+for host in root.iter():
+    if tag(host) != 'HostEntry': continue
+    vals = {tag(c): (c.text or '').strip() for c in host}
+    name = vals.get('HostName', '')
+    addr = vals.get('HostAddress', '') or name
+    group = vals.get('UserGroup', '')
+    if not addr: continue
+    out.append(name + chr(9) + addr + ('/' + group if group else ''))
+print(chr(10).join(out))
+" "$1"
+}
+cmd_import_cisco() { # файл.xml
+    local src="$1" line name addr slug dst n=0
+    local servers; servers=$(cisco_servers "$src") || die "не разобрал XML: это точно профиль Cisco?"
+    [ -n "$servers" ] || die "в XML нет ни одного HostEntry — переносить нечего"
+    mkdir -p "$PROFILE_DIR"
+    while IFS=$'\t' read -r name addr; do
+        [ -n "$addr" ] || continue
+        [ -n "$name" ] || name="$addr"
+        slug=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9.-' '-' | sed 's/^-*//; s/-*$//')
+        [ -n "$slug" ] || slug="vpn$n"
+        dst="$PROFILE_DIR/$slug.ocbar"
+        if [ -f "$dst" ]; then warn "профиль [$slug] уже есть — пропускаю"; continue; fi
+        printf '[Connection]\nName        = %s\nUrl         = %s\nUser        = %s\n' "$name" "$addr" "$(id -un)" > "$dst"
+        chmod 600 "$dst"
+        n=$((n+1))
+        ok "профиль [$slug]" "$name → $addr"
+    done <<< "$servers"
+    [ "$n" -gt 0 ] || die "ничего не импортировано"
+    info ""
+    info "Перенесены только адреса серверов. Дальше укажите в профиле:"
+    info "  [Routes] — сети в туннель (список ваш, а не шлюза)"
+    info "  [DNS]    — внутренние зоны, [Auth] — источник пароля и кода"
+    info "  правила формы входа запишет первый вход: ocbar connect --teach"
+    return 0
+}
+
 cmd_import() {
     local src="${1:-}" name="${2:-}"
-    [ -n "$src" ] || die "использование: ocbar import <файл.ocbar> [имя]"
+    [ -n "$src" ] || die "использование: ocbar import <файл.ocbar|профиль Cisco .xml> [имя]"
     [ -f "$src" ] || die "нет файла $src"
+    case "$src" in
+        *.xml|*.XML) cmd_import_cisco "$src"; return 0 ;;
+    esac
     local url; url=$(pf_get "$src" Connection Url)
     [ -n "$url" ] || die "это не похоже на профиль ocbar: в [Connection] нет Url"
     [ -n "$name" ] || { name=$(basename "$src"); name="${name%.ocbar}"; name="${name%.conf}"; }
@@ -3455,6 +3508,22 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Импорт профиля Cisco: переносим только адреса серверов.
+    printf '%s' '<?xml version="1.0" encoding="UTF-8"?>
+<AnyConnectProfile xmlns="http://schemas.xmlsoap.org/encoding/">
+ <ServerList>
+  <HostEntry><HostName>Office</HostName><HostAddress>vpn.example.test</HostAddress><UserGroup>employees</UserGroup></HostEntry>
+  <HostEntry><HostName>Backup</HostName><HostAddress>vpn2.example.test</HostAddress></HostEntry>
+ </ServerList>
+</AnyConnectProfile>' > "$tmp/cisco.xml"
+    out=$(run _selftest-fn cisco_servers "$tmp/cisco.xml" || true)
+    has "Cisco XML: адрес с группой" "vpn.example.test/employees" "$out"
+    has "Cisco XML: адрес без группы" "vpn2.example.test" "$out"
+    run import "$tmp/cisco.xml" >/dev/null 2>&1 || true
+    is "Cisco XML: созданы профили" 2 "$(ls "$tmp/profiles" | grep -cE '^(office|backup)\.ocbar$' || true)"
+    has "Cisco XML: адрес в профиле" "Url         = vpn.example.test/employees" "$(cat "$tmp/profiles/office.ocbar" 2>/dev/null || true)"
+    rm -f "$tmp/profiles/office.ocbar" "$tmp/profiles/backup.ocbar" "$tmp/cisco.xml"
+
     # Проверка доступа: итог кладётся в файл и попадает в status.
     printf '[Connection]\nName = Доступ\nUrl = vpn.example.test/a\nUser = tester\n\n[Health]\nCheck = 127.0.0.1:9\n' > "$tmp/profiles/ac.ocbar"
     is "доступ: недоступный ресурс — fail" fail "$(run _selftest-fn access_check ac || true)"
@@ -3911,7 +3980,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar status [--short]              состояние; --short — машинный вид для меню
   ocbar profiles                      список профилей
   ocbar profiles order [имя…]         порядок профилей в меню; без имён — текущий
-  ocbar import <файл.ocbar> [имя]     добавить профиль одним файлом
+  ocbar import <файл> [имя]           добавить профиль: .ocbar или профиль Cisco (.xml —
+                                      переносятся только адреса серверов)
   ocbar export <профиль> [файл]       выгрузить профиль (и перевести в новый формат)
   ocbar routes [status]               состояние (то же, что ocbar status)
   ocbar routes on|off|toggle <CIDR>   сеть в туннель на лету (add|del — то же);
@@ -4008,6 +4078,7 @@ case "${1:-}" in
             autoconnect_policy) autoconnect_policy ;;
             captive_portal) captive_portal && echo portal || echo no ;;
             access_check) load_profile "${2:-}"; access_check && echo ok || echo fail ;;
+            cisco_servers) cisco_servers "${2:-}" ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;

@@ -3,6 +3,12 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.6 — 2026-09-17
+
+- `ocbar import profile.xml` reads the server list from a Cisco AnyConnect
+  XML profile and creates a profile per server (addresses and groups only).
+- README: how to drive ocbar from Shortcuts and other automation.
+
 ## 0.4.5 — 2026-09-17
 
 - The supervisor re-checks access every five minutes, not only right after
