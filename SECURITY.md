@@ -5,7 +5,7 @@
 Please report privately through GitHub:
 **Security → Report a vulnerability** on this repository. Do not open a
 public issue for anything that could give local privilege escalation or leak
-credentials. You should get an answer within a week.
+credentials. This is a single-maintainer project; reports are handled on a best-effort basis.
 
 ## Threat model
 

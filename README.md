@@ -101,6 +101,10 @@ behind. Details (in Russian): [INSTALL.md](INSTALL.md).
 
 ## Profile
 
+![Profile window](assets/profile.png)
+
+![Notification settings](assets/notifications.png)
+
 One file per connection, similar to WireGuard configs:
 `~/.config/ocbar/profiles/<name>.ocbar`. No secrets inside — only references
 to where they are stored, so a profile can be shared.

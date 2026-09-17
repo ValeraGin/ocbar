@@ -91,14 +91,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // вспыхивать поверх чужой работы, значок в Dock не нужен.
         let offscreen = CommandLine.arguments.contains("--shot")
         if !offscreen { NSApp.setActivationPolicy(.regular) }
-        let window = NSWindow(contentRect: NSRect(x: 60, y: 60, width: 1450, height: 1600),
+        // --screenshot menu|settings — кадр для README: только нужное, без подписей.
+        let args = CommandLine.arguments
+        let screenshot = args.firstIndex(of: "--screenshot").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        let size: NSSize = screenshot == "menu" ? NSSize(width: 720, height: 700)
+            : screenshot == "settings" ? NSSize(width: 948, height: 668) : NSSize(width: 1450, height: 1600)
+        let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 60, y: 60), size: size),
                               styleMask: [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "ocbar — витрина состояний"
         if CommandLine.arguments.contains("--light") {
             window.appearance = NSAppearance(named: .aqua)
         }
-        if CommandLine.arguments.contains("--windows") {
+        if screenshot == "menu" {
+            window.contentView = NSHostingView(rootView: ScreenshotMenuView())
+        } else if screenshot == "settings" {
+            window.contentView = NSHostingView(rootView: ScreenshotSettingsView())
+        } else if CommandLine.arguments.contains("--windows") {
             window.contentView = NSHostingView(rootView: StageWindowsView())
         } else if CommandLine.arguments.contains("--live") {
             window.contentView = NSHostingView(rootView: LiveStageView())
@@ -130,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // получается пустым.
         // Живому состоянию нужно время: опрос ocbar и вторая точка счётчиков.
         let settle: TimeInterval = CommandLine.arguments.contains("--live") ? 8
-            : (CommandLine.arguments.contains("--windows") ? 4 : 1.2)
+            : (CommandLine.arguments.contains("--windows") || CommandLine.arguments.contains("settings") ? 4 : 1.2)
         RunLoop.current.run(until: Date().addingTimeInterval(settle))
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
         view.cacheDisplay(in: view.bounds, to: rep)

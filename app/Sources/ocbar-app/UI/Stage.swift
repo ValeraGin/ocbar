@@ -227,3 +227,39 @@ struct StageView: View {
         }
     }
 }
+
+// Кадр для README: окно настроек в рамке, как в витрине окон.
+struct ScreenshotSettingsView: View {
+    var body: some View {
+        SettingsWindow()
+            .frame(width: 900, height: 620)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
+// Кадр для README: подключено с сетями и то же меню со списком профилей.
+struct ScreenshotMenuView: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 24) {
+            menu(expandDetails: true)
+            menu(expandProfiles: true)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+
+    private func menu(expandDetails: Bool = false, expandProfiles: Bool = false) -> some View {
+        MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles)
+            .environmentObject(StatusStore(preview: Fixture.status(.connected),
+                                           samples: Fixture.samples(active: true),
+                                           latency: "41 мс", busy: nil, actionNote: nil))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
+    }
+}
+
