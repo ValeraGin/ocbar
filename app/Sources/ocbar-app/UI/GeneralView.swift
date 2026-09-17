@@ -7,6 +7,7 @@ struct GeneralView: View {
     @ObservedObject private var store = StatusStore.shared
     @State private var autostart = false
     @State private var policy = "resume"
+    @State private var skipHere = false
     @State private var busy = false
     @State private var note: String?
     @AppStorage("DeveloperMode") private var developer = false
@@ -22,6 +23,17 @@ struct GeneralView: View {
                 }
                 Spacer(minLength: 0)
                 Toggle("Запускать при входе в систему", isOn: Binding(get: { autostart }, set: { set($0) }))
+                    .toggleStyle(.switch).labelsHidden().tint(Palette.ok).disabled(busy)
+            }
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Не подключаться в этой сети").font(.system(size: 13))
+                    Text("Дома или в офисе VPN часто не нужен. Сеть запоминается по маршрутизатору, без доступа к геопозиции; в других сетях автоподключение работает как раньше.")
+                        .font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Toggle("Не подключаться в этой сети", isOn: Binding(get: { skipHere }, set: { setSkip($0) }))
                     .toggleStyle(.switch).labelsHidden().tint(Palette.ok).disabled(busy)
             }
             VStack(alignment: .leading, spacing: 4) {
@@ -68,7 +80,22 @@ struct GeneralView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let on = OcbarClient.shared.autostart()
             let p = OcbarClient.shared.autoconnect()
-            DispatchQueue.main.async { autostart = on; policy = p }
+            let skip = OcbarClient.shared.skipHere()
+            DispatchQueue.main.async { autostart = on; policy = p; skipHere = skip }
+        }
+    }
+
+    private func setSkip(_ on: Bool) {
+        busy = true; note = nil
+        skipHere = on
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = OcbarClient.shared.setAutoconnect([on ? "skip-here" : "unskip-here"])
+            let fresh = OcbarClient.shared.skipHere()
+            DispatchQueue.main.async {
+                busy = false
+                skipHere = fresh
+                if case .failed(_, let why) = r { note = "не вышло: " + why }
+            }
         }
     }
 
