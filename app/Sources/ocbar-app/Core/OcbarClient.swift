@@ -136,6 +136,13 @@ final class OcbarClient: @unchecked Sendable {
     func toggleZone(_ zone: String) -> ActionResult { action(["dns", "toggle", zone], timeout: 30) }
     func cleanup() -> ActionResult { action(["cleanup"], timeout: 60) }
     func logout() -> ActionResult { action(["logout"], timeout: 90) }
+    /// Автозапуск приложения при входе в систему (LaunchAgent ставит CLI).
+    func autostart() -> Bool {
+        guard let binary else { return false }
+        return Shell.run(binary, ["app", "autostart", "status"], timeout: 10).out.trimmed == "on"
+    }
+    func setAutostart(_ on: Bool) -> ActionResult { action(["app", "autostart", on ? "on" : "off"], timeout: 30) }
+
     /// Отчёт для разбора: возвращает путь к файлу или причину отказа.
     func report(to path: String) -> ActionResult { action(["report", path], timeout: 120) }
 

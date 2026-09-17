@@ -3677,7 +3677,11 @@ cmd_app() {
                 off)
                     launchctl bootout "gui/$uid/$APP_LABEL" 2>/dev/null || true
                     rm -f "$APP_PLIST"; ok "автозапуск выключен" ;;
-                *) die "app autostart on|off" ;;
+                ''|status)
+                    # Машинный ответ для приложения: on|off.
+                    [ -f "$APP_PLIST" ] && launchctl print "gui/$uid/$APP_LABEL" >/dev/null 2>&1 \
+                        && printf 'on\n' || printf 'off\n' ;;
+                *) die "app autostart on|off|status" ;;
             esac ;;
         devmode)
             # Режим разработчика: в меню — «Выйти совсем (сброс входа)».
@@ -3687,7 +3691,7 @@ cmd_app() {
                 off) defaults delete ru.ocbar.app DeveloperMode 2>/dev/null || true; ok "режим разработчика выключен" ;;
                 *)   if [ "$(defaults read ru.ocbar.app DeveloperMode 2>/dev/null || true)" = 1 ]; then info "режим разработчика: включён"; else info "режим разработчика: выключен"; fi ;;
             esac ;;
-        *) die "app: start | stop | status | autostart on|off | devmode on|off" ;;
+        *) die "app: start | stop | status | autostart on|off|status | devmode on|off" ;;
     esac
 }
 

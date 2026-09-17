@@ -531,7 +531,7 @@ struct MenuView: View {
                 }
             }
             MenuRow(action: { NSApplication.shared.terminate(nil) }) {
-                Text("Выйти")
+                Text(hasDisconnectRow ? "Выйти из ocbar (туннель останется)" : "Выйти из ocbar")
                 Spacer()
                 Text("⌘Q").font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
             }
