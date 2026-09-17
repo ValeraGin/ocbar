@@ -7,7 +7,7 @@
 #   ./make-app.sh /Applications   → /Applications/ocbar.app
 #
 # Подписи Developer ID нет и не предполагается: приложение собирается у себя,
-# карантин ему не ставится (docs/06-distribution.md).
+# карантин ему не ставится.
 
 set -euo pipefail
 # Каталог скрипта — абсолютным путём и до cd: после cd относительный
@@ -18,7 +18,7 @@ cd "$HERE"
 
 DEST="${1:-.build}"
 APP="$DEST/ocbar.app"
-# Версия одна — VERSION в bin/ocbar (D47). Не прочиталась — это поломка
+# Версия одна — VERSION в bin/ocbar. Не прочиталась — это поломка
 # сборки, а не повод выпустить бандл с чужой версией.
 VERSION=$(sed -n 's/^VERSION="\(.*\)"/\1/p' ../bin/ocbar | head -1)
 if [ -z "$VERSION" ]; then

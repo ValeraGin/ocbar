@@ -86,7 +86,7 @@ KeepassKeychain = имя-сервиса-в-связке-ключей
 # click button[id=kc-login]
 
 # [Proxy]
-# Настройки прокси-режима — см. docs/09-proxy-mode.md.
+# Настройки прокси-режима — см. README, «Прокси-режим».
 # Port        = 11080                 # локальный SOCKS; 10808 бывает занят чужим
 # SystemProxy = off                   # ставить ли SOCKS всей системе при подключении
 

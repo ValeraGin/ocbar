@@ -33,7 +33,7 @@ ocbar supervise (LaunchAgent)             от пользователя, раз 
        pid туннеля · kern.waketime · PrimaryInterface · маршруты на месте
 ```
 
-Три слоя из [docs/05-architecture.md](docs/05-architecture.md): аутентификатор,
+Три слоя из [docs/05-architecture.md]: аутентификатор,
 супервизор, UI. Привилегированный код — один файл
 [libexec/ocbar-helper](libexec/ocbar-helper) с фиксированными подкомандами и
 валидацией каждого аргумента; почему так, а не root-демон — [DECISIONS.md](DECISIONS.md).
@@ -68,7 +68,7 @@ sudo ./bin/ocbar install
 
 `brew upgrade ocbar` — это и есть автообновление. Почему формула, а не
 готовый бинарь: без Apple Developer ID собранное локально не получает
-карантина, и Gatekeeper не мешает — [docs/06-distribution.md](docs/06-distribution.md).
+карантина, и Gatekeeper не мешает — [docs/06-distribution.md].
 
 ## Настройка
 
@@ -147,7 +147,7 @@ ocbar connect --teach           # или в меню: «Подключить и 
 Тот же профиль может не поднимать интерфейс вовсе: `openconnect --script-tun`
 отдаёт пакеты `ocproxy`, тот поднимает локальный SOCKS. Ни маршрутов, ни
 `/etc/resolver`, ни хелпера — всё от пользователя. Подробно и с решениями —
-[docs/09-proxy-mode.md](docs/09-proxy-mode.md).
+[docs/09-proxy-mode.md].
 
 ```ini
 [Connection]
@@ -264,7 +264,7 @@ ocbar learn                 # откроется форма входа ваше�
 
 По кнопке «Готово» правила ложатся в сам профиль — секцию `[Autofill]`
 файла `~/.config/ocbar/profiles/<имя>.ocbar`, а прошлая версия профиля
-остаётся рядом с суффиксом `.bak` (D49). В общий файл
+остаётся рядом с суффиксом `.bak`. В общий файл
 `~/.config/ocbar/autofill.rules` (или в файл из ключа `Rules`) они пишутся,
 только если профиль указывает на файл ключом `Rules`, если профиль старого
 формата (`profiles.conf`) или если задан `ocbar learn --out <файл>`. Закрытое
@@ -328,8 +328,7 @@ auth/.build/release/ocbar-auth --dump-script     # JS автозаполнени
 ## Самопроверки
 
 Ничего не трогают и не требуют ни сети, ни привилегий: конфиги подставные,
-состояние и журнал уводятся во временный каталог, вместо хелпера — заглушка
-(D60). Каждая печатает итог с числом проверок.
+состояние и журнал уводятся во временный каталог, вместо хелпера — заглушка. Каждая печатает итог с числом проверок.
 
 ```bash
 ocbar selftest                      # разбор профиля, сети и зоны, отказы, уборка только своего, уведомления
@@ -372,7 +371,7 @@ ocbar app autostart on          # запускать при входе в сис
 (cd app && ./make-app.sh)       # собрать бандл из репозитория
 ```
 
-Что в меню (D62): в шапке — профиль, под ним состояние и время, справа
+Что в меню: в шапке — профиль, под ним состояние и время, справа
 выключатель «подключить / отключить»; график трафика за минуту со
 скоростью; «Приостановить» (⌥⌘P); «Профиль · Основной ›» — смена профиля с
 подтверждением на живой сессии; «Сети и DNS» — адрес в туннеле, шлюз, MTU,
@@ -441,20 +440,20 @@ ocbar resume    # вернуть, мгновенно и без входа
 - «всё в туннель» настраивается сетями `0.0.0.0/1` и `128.0.0.0/1` в конфиге, но шлюз при этом может не выпускать в интернет — проверено;
 - IPv6 в туннеле не обрабатывается (адрес ставится, маршруты — нет);
 - без Apple Developer ID: только сборка из исходников, поэтому Homebrew formula,
-  а не cask — [docs/06-distribution.md](docs/06-distribution.md).
+  а не cask — [docs/06-distribution.md].
 
 ## Документация
 
 | Файл | О чём |
 |---|---|
-| [01-analysis.md](docs/01-analysis.md) | Что уже написано и что есть в мире |
-| [02-protocol.md](docs/02-protocol.md) | SSO: `sso-v2` против `external-browser`, почему нужен webview |
-| [03-dns.md](docs/03-dns.md) | Split DNS: `/etc/resolver`, dnsmasq, «плохие ответы» |
-| [04-routing.md](docs/04-routing.md) | Split tunneling и динамическое управление маршрутами |
-| [05-architecture.md](docs/05-architecture.md) | Три слоя, супервизор, выбор стека |
-| [06-distribution.md](docs/06-distribution.md) | Раздача и автообновление без Developer ID |
-| [07-requirements.md](docs/07-requirements.md) | Требования со статусом |
-| [08-references.md](docs/08-references.md) | Ссылки |
+| [01-analysis.md] | Что уже написано и что есть в мире |
+| [02-protocol.md] | SSO: `sso-v2` против `external-browser`, почему нужен webview |
+| [03-dns.md] | Split DNS: `/etc/resolver`, dnsmasq, «плохие ответы» |
+| [04-routing.md] | Split tunneling и динамическое управление маршрутами |
+| [05-architecture.md] | Три слоя, супервизор, выбор стека |
+| [06-distribution.md] | Раздача и автообновление без Developer ID |
+| [07-requirements.md] | Требования со статусом |
+| [08-references.md] | Ссылки |
 | [10-review-2026-09-10.md](docs/10-review-2026-09-10.md) | Проверка 0.2.10 семью агентами: находки по важности |
 | [DECISIONS.md](DECISIONS.md) | Решения этой реализации и почему |
 

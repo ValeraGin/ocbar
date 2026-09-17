@@ -850,7 +850,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
         attempt(0)
     }
 
-    // MARK: - выйти совсем (D68)
+    // MARK: - выйти совсем
 
     /// Сброс сессий стирает cookie провайдера — на временном хранилище:
     /// настоящие сессии владельца проверка не трогает.
@@ -871,7 +871,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
         }
     }
 
-    // MARK: - кнопка включается не сразу после ввода (D67)
+    // MARK: - кнопка включается не сразу после ввода
 
     /// Форма включает «Sign In» через мгновение после ввода, как на Vue.
     /// Раньше нажатие уходило в неактивную кнопку и больше не повторялось:
