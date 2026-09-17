@@ -292,11 +292,18 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         !(opts.totpSecret ?? "").isEmpty || !(opts.totpCommand ?? "").isEmpty || !(opts.totpCode ?? "").isEmpty
     }
 
-    /// Код в момент нажатия: секрет из связки, команда клиента (KeePassXC,
-    /// своя) или готовый код, если дали только его.
     private func codeNow() -> String? {
-        if let s = opts.totpSecret, !s.isEmpty { return TOTP.code(secretBase32: s, params: opts.totpParams) }
-        if let cmd = opts.totpCommand, !cmd.isEmpty {
+        Self.freshCode(secret: opts.totpSecret, params: opts.totpParams,
+                       command: opts.totpCommand, ready: opts.totpCode)
+    }
+
+    /// Код в момент, когда он нужен: секрет из связки считаем сами, команда
+    /// клиента (KeePassXC, своя) спрашивается заново, готовый код — последним.
+    /// Готовый код приходит из окружения ещё до открытия окна, а живёт
+    /// тридцать секунд: на медленной форме он успевал протухнуть.
+    static func freshCode(secret: String?, params: TOTPParams, command: String?, ready: String?) -> String? {
+        if let s = secret, !s.isEmpty { return TOTP.code(secretBase32: s, params: params) }
+        if let cmd = command, !cmd.isEmpty {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/bin/sh")
             p.arguments = ["-c", cmd]
@@ -308,9 +315,9 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             p.waitUntilExit()
             let first = String(decoding: data, as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
             let digits = first.trimmingCharacters(in: .whitespaces)
-            return (6...8).contains(digits.count) && digits.allSatisfy(\.isNumber) ? digits : nil
+            if (6...8).contains(digits.count), digits.allSatisfy(\.isNumber) { return digits }
         }
-        if let c = opts.totpCode, !c.isEmpty { return c }
+        if let c = ready, !c.isEmpty { return c }
         return nil
     }
 
@@ -561,14 +568,9 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             // Код считается ЗДЕСЬ, а не при старте: между запуском и появлением
             // поля проходят десятки секунд, а код живёт тридцать. Второй
             // автоввод не даёт AutofillGate: тот же секрет — тот же неверный код.
-            var code: String? = nil
-            if offer.code {
-                if let secret = self.opts.totpSecret, !secret.isEmpty {
-                    code = TOTP.code(secretBase32: secret, params: self.opts.totpParams)
-                } else {
-                    code = self.opts.totpCode
-                }
-            }
+            // Код — здесь и сейчас, в том числе командой клиента: между
+            // запуском и появлением поля проходят десятки секунд.
+            let code: String? = offer.code ? self.codeNow() : nil
             var creds = self.opts.creds
             if !offer.password { creds.password = nil }
             let js = Autofill.script(rules: self.opts.rules, creds: creds, totpCode: code,
