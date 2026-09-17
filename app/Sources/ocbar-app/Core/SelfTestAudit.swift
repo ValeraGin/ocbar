@@ -138,6 +138,16 @@ extension SelfTest {
         let good = URL(string: "ocbar://notify?title=t&body=b&token=0123abcd")!
         let bad = URL(string: "ocbar://notify?title=t&body=b&token=ffff")!
         let none = URL(string: "ocbar://notify?title=t&body=b")!
+        // Подсказка к ошибке: команда, которую приложение выполнить не может.
+        t.check("ошибка: «нужен root» предлагает sudo ocbar install",
+                MenuView.fix(for: "ocbar: нужен root: sudo ocbar install (посмотреть шаги — ...)")?.command == "sudo ocbar install")
+        t.check("ошибка: нет openconnect — предлагает brew install",
+                MenuView.fix(for: "нет openconnect — brew install openconnect")?.command == "brew install openconnect")
+        t.check("ошибка: обычная — без подсказки", MenuView.fix(for: "сеть 10.0.0.0/8 не включилась") == nil)
+        // Доступ: состояние читается из status --short.
+        let acc = Status.parse("state=connected\naccess=fail\naccess_at=1700000000\n")
+        t.check("доступ: состояние и время разобраны", acc.access == "fail" && acc.accessAt != nil)
+
         t.check("уведомление: свой токен принят", Notifier.parse(good) != nil)
         t.check("уведомление: чужой токен отвергнут", Notifier.parse(bad) == nil)
         t.check("уведомление: без токена отвергнуто", Notifier.parse(none) == nil)

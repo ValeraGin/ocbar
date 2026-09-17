@@ -38,6 +38,7 @@ RULES_FILE="$CONFIG_DIR/autofill.rules"
 
 USER_STATE="${OCBAR_USER_STATE:-$HOME/Library/Application Support/ocbar}"
 DESIRED="$USER_STATE/desired"            # имя профиля, который должен быть поднят
+ACCESS="$USER_STATE/access"              # итог проверки доступа: "<ok|fail|unknown> <время>"
 AUTOCONNECT="$USER_STATE/autoconnect"    # политика автоподключения: manual | resume | always <профиль>
 CONNECTING="$USER_STATE/connecting"      # идёт ocbar connect: номер процесса
 SUP_PID="$USER_STATE/supervisor.pid"
@@ -1849,6 +1850,28 @@ healthcheck() {
     esac
 }
 
+# Доступ проверяется не только сразу после подключения: туннель живёт часами,
+# и «поднят» не значит «работает». Итог кладётся в файл — его показывает меню.
+access_state() { head -1 "$ACCESS" 2>/dev/null | awk '{print $1}' || true; }
+access_check() { # профиль уже загружен
+    local was; was=$(access_state)
+    if [ -z "${P_HEALTH:-}" ]; then
+        mkdir -p "$USER_STATE"; printf 'unknown %s\n' "$(date +%s)" > "$ACCESS"
+        return 0
+    fi
+    if healthcheck; then
+        mkdir -p "$USER_STATE"; printf 'ok %s\n' "$(date +%s)" > "$ACCESS"
+        [ "$was" = fail ] && log "доступ восстановлен: $P_HEALTH отвечает"
+        return 0
+    fi
+    mkdir -p "$USER_STATE"; printf 'fail %s\n' "$(date +%s)" > "$ACCESS"
+    if [ "$was" != fail ]; then
+        log "туннель поднят, но $P_HEALTH не отвечает"
+        notify "ocbar: доступа нет" "Туннель поднят, но $P_HEALTH не отвечает" problems
+    fi
+    return 1
+}
+
 report_health() {   # печатает и уведомляет; не роняет подключение
     [ -n "${P_HEALTH:-}" ] || return 0
     if healthcheck; then
@@ -1926,6 +1949,7 @@ cmd_status() {
     fi
 
     if [ "$short" = 1 ]; then
+        printf 'access=%s\naccess_at=%s\n' "$(access_state)" "$(head -1 "$ACCESS" 2>/dev/null | awk '{print $2}')"
         printf 'paused=%s\nneeds_login=%s\n' "$(is_paused && echo 1 || echo 0)" "$([ -f "$NEEDS_LOGIN" ] && echo 1 || echo 0)"
         # Потеря связи — состояние живого туннеля, о котором знает только
         # супервизор. Без него отметка устаревает мгновенно (он же её и
@@ -2570,7 +2594,7 @@ tunnel_probe() {
 }
 
 cmd_supervise() {
-    local iterations=0 a connecting_logged=0 captive_logged=0
+    local iterations=0 a connecting_logged=0 captive_logged=0 last_access=0
     for a in "$@"; do case "$a" in --iterations=*) iterations="${a#*=}" ;; esac; done
     mkdir -p "$USER_STATE" "$LOG_DIR"
     if sup_alive && [ "$(cat "$SUP_PID")" != $$ ]; then die "супервизор уже работает (pid $(cat "$SUP_PID"))"; fi
@@ -2681,6 +2705,13 @@ cmd_supervise() {
                 fi
             fi
             no_net=0; last_iface="$iface"
+        fi
+
+        # Доступ проверяется раз в пять минут: туннель может быть поднят, а
+        # рабочие ресурсы недоступны — маршрут не тот, шлюз пускает не всюду.
+        if [ "$st" = connected ] && [ -n "$desired" ] && [ $((now - last_access)) -ge "${OCBAR_ACCESS_EVERY:-300}" ]; then
+            last_access=$now
+            ( load_profile "$desired" && access_check ) >>"$SUP_LOG" 2>&1 || true
         fi
 
         # Отсчёт потери связи имеет смысл только в connected. Иначе после
@@ -3424,6 +3455,15 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Проверка доступа: итог кладётся в файл и попадает в status.
+    printf '[Connection]\nName = Доступ\nUrl = vpn.example.test/a\nUser = tester\n\n[Health]\nCheck = 127.0.0.1:9\n' > "$tmp/profiles/ac.ocbar"
+    is "доступ: недоступный ресурс — fail" fail "$(run _selftest-fn access_check ac || true)"
+    has "доступ: итог попадает в status" "access=fail" "$(run status --short || true)"
+    printf '[Connection]\nName = Без проверки\nUrl = vpn.example.test/b\nUser = tester\n' > "$tmp/profiles/nc.ocbar"
+    is "доступ: проверять нечего — unknown" ok "$(run _selftest-fn access_check nc || true)"
+    has "доступ: без проверки — unknown в status" "access=unknown" "$(run status --short || true)"
+    rm -f "$tmp/profiles/ac.ocbar" "$tmp/profiles/nc.ocbar" "$tmp/state/access"
+
     # Портал перехвата: ответ не «Success» — значит, мы за порталом.
     printf '<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>\n' > "$tmp/captive-ok.html"
     printf '<html>Войдите в сеть отеля</html>\n' > "$tmp/captive-portal.html"
@@ -3967,6 +4007,7 @@ case "${1:-}" in
             report_redact) report_redact ;;
             autoconnect_policy) autoconnect_policy ;;
             captive_portal) captive_portal && echo portal || echo no ;;
+            access_check) load_profile "${2:-}"; access_check && echo ok || echo fail ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;

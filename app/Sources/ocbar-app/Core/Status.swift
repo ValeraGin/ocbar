@@ -72,6 +72,8 @@ struct Status {
     var systemSocksRefused = ""
     var wokeAfterConnect: Date?   // мак спал после подключения — повод проверить туннель
     var linkLostSince: Date?      // ставит супервизор, когда проба не проходит
+    var access = ""               // ok | fail | unknown — проверка доступа супервизором
+    var accessAt: Date?
     var routes: [RouteEntry] = []
     var zones: [ZoneEntry] = []
     var profiles: [ProfileEntry] = []
@@ -133,6 +135,8 @@ struct Status {
             case "supervisor":  s.supervisor = value == "1"
             case "iface":       s.iface = value
             case "link_lost":   s.linkLostSince = unixDate(value)
+            case "access":      s.access = value
+            case "access_at":   s.accessAt = unixDate(value)
             case "default":     s.defaultProfile = value
             case "route":
                 // "10.0.0.0/8 utun5 on"; вместо пустого интерфейса — "-",
