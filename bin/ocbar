@@ -721,6 +721,19 @@ load_profile_file() { # файл имя
         *) die "профиль [$P_NAME]: password = auto | keychain | keepassxc | command | ask, а не '$P_PASSWORD'" ;;
     esac
     P_HEALTH=$(pf_get "$f" Health Check)
+    # Транспорт: MTU и DTLS. Нужны редко — вложенный VPN, мобильная сеть,
+    # сети, где UDP не ходит; по умолчанию решает openconnect.
+    P_MTU=$(pf_get "$f" Connection Mtu)
+    P_DTLS=$(pf_get "$f" Connection Dtls); P_DTLS="${P_DTLS:-on}"
+    case "$P_MTU" in
+        '') ;;
+        *[!0-9]*) die "профиль [$1]: Mtu — число 576–9000, а не '$P_MTU'" ;;
+        *) [ "$P_MTU" -ge 576 ] && [ "$P_MTU" -le 9000 ] || die "профиль [$1]: Mtu вне 576–9000" ;;
+    esac
+    case "$(printf '%s' "$P_DTLS" | tr '[:upper:]' '[:lower:]')" in
+        on|off|yes|no|1|0|true|false) ;;
+        *) die "профиль [$1]: Dtls = on | off, а не '$P_DTLS'" ;;
+    esac
     case "$(pf_get "$f" Connection Notifications)" in off|0|no) NOTIFY_ENABLED=0 ;; esac
 }
 
@@ -1304,6 +1317,22 @@ auth_log_tee() {
     return 0
 }
 
+# Портал перехвата (гостиничный Wi-Fi): сеть есть, а интернета нет, пока не
+# нажмёшь «Согласен» в браузере. Без этого супервизор жёг попытки входа и
+# ставил «нужен вход», хотя войти было неоткуда. Проверка та же, что у самой
+# macOS: если ответ не «Success» — мы за порталом.
+captive_portal() {
+    local body
+    local url=http://captive.apple.com/hotspot-detect.html
+    # Подмена адреса — только в самопроверке: снаружи это была бы дырка
+    # («интернет есть» можно было бы подделать переменной окружения).
+    [ -n "${OCBAR_SELFTEST_HELPER:-}" ] && [ -n "${OCBAR_CAPTIVE_URL:-}" ] && url="$OCBAR_CAPTIVE_URL"
+    body=$(curl -s --max-time 4 -H 'Cache-Control: no-cache' "$url" 2>/dev/null || true)
+    [ -n "$body" ] || return 1                       # интернета нет вовсе — это не портал
+    case "$body" in *Success*) return 1 ;; esac
+    return 0
+}
+
 # Политика автоподключения (D70). resume — держать то, что было подключено
 # (умолчание, прежнее поведение); manual — супервизор сам не входит вовсе;
 # always <профиль> — при входе в систему поднять этот профиль.
@@ -1348,6 +1377,10 @@ connect_in_progress() {
 
 build_spec() { # cookie → stdin для tunnel-start
     printf 'cookie=%s\n' "$1"
+    [ -n "${P_MTU:-}" ] && printf 'mtu %s\n' "$P_MTU"
+    case "$(printf '%s' "${P_DTLS:-on}" | tr '[:upper:]' '[:lower:]')" in
+        off|no|0|false) printf 'nodtls\n' ;;
+    esac
     active_networks | sed 's/^/net /'
     active_zones    | sed 's/^/zone /'
 }
@@ -2537,7 +2570,7 @@ tunnel_probe() {
 }
 
 cmd_supervise() {
-    local iterations=0 a connecting_logged=0
+    local iterations=0 a connecting_logged=0 captive_logged=0
     for a in "$@"; do case "$a" in --iterations=*) iterations="${a#*=}" ;; esac; done
     mkdir -p "$USER_STATE" "$LOG_DIR"
     if sup_alive && [ "$(cat "$SUP_PID")" != $$ ]; then die "супервизор уже работает (pid $(cat "$SUP_PID"))"; fi
@@ -2754,6 +2787,16 @@ cmd_supervise() {
                     [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
                     sleep 5; continue
                 fi
+                if captive_portal; then
+                    if [ "$captive_logged" = 0 ]; then
+                        log "сеть за порталом перехвата (Wi-Fi просит согласия) — вход не пробую"
+                        notify "ocbar: сеть требует входа в браузере" "Откройте любой сайт и подтвердите доступ — потом ocbar подключится сам" problems
+                        captive_logged=1
+                    fi
+                    [ "$iterations" -gt 0 ] && [ "$n" -ge "$iterations" ] && break
+                    sleep 5; continue
+                fi
+                captive_logged=0
                 if [ "$(autoconnect_policy)" = manual ]; then
                     if [ $((now - last_probe_log)) -ge 600 ]; then
                         log "туннель не поднят, но автоподключение выключено (вручную) — жду решения"
@@ -3381,6 +3424,25 @@ PROFILE
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
 
+    # Портал перехвата: ответ не «Success» — значит, мы за порталом.
+    printf '<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>\n' > "$tmp/captive-ok.html"
+    printf '<html>Войдите в сеть отеля</html>\n' > "$tmp/captive-portal.html"
+    is "портал: обычная сеть — не портал" no "$(OCBAR_CAPTIVE_URL="file://$tmp/captive-ok.html" run _selftest-fn captive_portal || true)"
+    is "портал: чужая страница вместо Success — портал" portal "$(OCBAR_CAPTIVE_URL="file://$tmp/captive-portal.html" run _selftest-fn captive_portal || true)"
+    is "портал: сети нет вовсе — не портал" no "$(OCBAR_CAPTIVE_URL="file://$tmp/нет-такого.html" run _selftest-fn captive_portal || true)"
+    rm -f "$tmp/captive-ok.html" "$tmp/captive-portal.html"
+
+    # Транспорт: MTU и отключение DTLS доходят до openconnect, значения проверяются.
+    printf '[Connection]\nName = Транспорт\nUrl = vpn.example.test/t\nUser = tester\nMtu = 1300\nDtls = off\n\n[Auth]\nTotp = off\n' > "$tmp/profiles/tr.ocbar"
+    out=$(run connect --dry-run tr || true)
+    has "транспорт: MTU уходит в spec" "mtu 1300" "$out"
+    has "транспорт: DTLS выключается" "nodtls" "$out"
+    printf '[Connection]\nName = Плохой MTU\nUrl = vpn.example.test/t\nUser = tester\nMtu = 99\n' > "$tmp/profiles/tb.ocbar"
+    is "транспорт: MTU вне диапазона — отказ" fail "$( (run _check-profile tb >/dev/null 2>&1) && echo ok || echo fail)"
+    printf '[Connection]\nName = Плохой DTLS\nUrl = vpn.example.test/t\nUser = tester\nDtls = может-быть\n' > "$tmp/profiles/td.ocbar"
+    is "транспорт: Dtls принимает только on/off" fail "$( (run _check-profile td >/dev/null 2>&1) && echo ok || echo fail)"
+    rm -f "$tmp/profiles/tr.ocbar" "$tmp/profiles/tb.ocbar" "$tmp/profiles/td.ocbar"
+
     # Автоподключение: политика читается и применяется супервизором.
     rm -f "$tmp/state/autoconnect"
     is "автоподключение: по умолчанию «как в прошлый раз»" resume "$(run _selftest-fn autoconnect_policy || true)"
@@ -3904,6 +3966,7 @@ case "${1:-}" in
             auth_rc_action) auth_rc_action "${2:-}" ;;
             report_redact) report_redact ;;
             autoconnect_policy) autoconnect_policy ;;
+            captive_portal) captive_portal && echo portal || echo no ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;

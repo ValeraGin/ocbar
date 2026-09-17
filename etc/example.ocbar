@@ -85,6 +85,10 @@ KeepassKeychain = имя-сервиса-в-связке-ключей
 # fill  totp  input[autocomplete=one-time-code]
 # click button[id=kc-login]
 
+# Транспорт — нужен редко: вложенный VPN, мобильная сеть, сети без UDP.
+# Mtu  = 1300                        # 576–9000; по умолчанию решает openconnect
+# Dtls = off                         # выключить UDP-канал, если данные не идут
+
 # [Proxy]
 # Настройки прокси-режима — см. README, «Прокси-режим».
 # Port        = 11080                 # локальный SOCKS; 10808 бывает занят чужим

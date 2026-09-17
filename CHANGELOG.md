@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.4 — 2026-09-17
+
+- Captive portals (hotel Wi-Fi) are detected: the supervisor does not spend
+  login attempts and says what to do.
+- `Mtu` and `Dtls` in the profile reach openconnect (`--base-mtu`,
+  `--no-dtls`) for nested VPNs and networks without UDP.
+
 ## 0.4.3 — 2026-09-17
 
 - First-run wizard in the app: system component, profile, first login, each
