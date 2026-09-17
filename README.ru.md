@@ -74,6 +74,8 @@ sudo ./bin/ocbar install
 
 ### Профиль одним файлом
 
+![Окно профиля](assets/profile.png)
+
 По образцу конфигов WireGuard: один файл — одно подключение, целиком.
 Кладётся в `~/.config/ocbar/profiles/<имя>.ocbar`, образец —
 [etc/example.ocbar](etc/example.ocbar).

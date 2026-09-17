@@ -348,7 +348,7 @@ struct ProfileEditorView: View {
     private var netsSummary: String {
         let nets = doc.routes.compactMap { ProfileDoc.routeNet($0) }.count
         let zones = doc.zones.filter { !$0.zone.trimmed.isEmpty }.count
-        return "\(nets) сет\(nets % 10 == 1 && nets % 100 != 11 ? "ь" : (2...4).contains(nets % 10) && !(12...14).contains(nets % 100) ? "и" : "ей") · \(zones) зон"
+        return "\(nets) сет\(nets % 10 == 1 && nets % 100 != 11 ? "ь" : (2...4).contains(nets % 10) && !(12...14).contains(nets % 100) ? "и" : "ей") · \(zones) зон\(zones % 10 == 1 && zones % 100 != 11 ? "а" : (2...4).contains(zones % 10) && !(12...14).contains(zones % 100) ? "ы" : "")"
     }
 
     private var passwordStatus: (String, Color)? {
