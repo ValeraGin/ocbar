@@ -11,3 +11,4 @@ profiles/local-*.toml
 
 # снимок состояния для песочницы — с рабочими адресами
 tools/ui-lab/state.json
+.claude/
