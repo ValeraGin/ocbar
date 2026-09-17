@@ -4,12 +4,13 @@ import SwiftUI
 // действия, а не список окон. Переключатель свой, а не TabView: у него
 // предсказуемый вид и он не спорит с размерами вложенных экранов.
 struct SettingsWindow: View {
-    enum Tab: Int, CaseIterable { case profiles, mode, notifications, about
+    enum Tab: Int, CaseIterable { case profiles, mode, notifications, general, about
         var title: String {
             switch self {
             case .profiles: return "Профили"
             case .mode: return "Режим"
             case .notifications: return "Уведомления"
+            case .general: return "Общие"
             case .about: return "О программе"
             }
         }
@@ -28,7 +29,7 @@ struct SettingsWindow: View {
                 Picker("", selection: $tab) {
                     ForEach(Tab.allCases, id: \.rawValue) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 440)
+                .pickerStyle(.segmented).labelsHidden().frame(width: 520)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -37,6 +38,7 @@ struct SettingsWindow: View {
             case .profiles: ProfileEditorView()
             case .mode: ModeView()
             case .notifications: NotificationsView()
+            case .general: GeneralView()
             case .about:
                 AboutView().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
