@@ -26,7 +26,32 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
-swift build -c release --disable-sandbox
+# Command Line Tools 27 принесли SDK, где @State — макрос из SwiftUIMacros, а
+# сам плагин макроса лежит только в Xcode. Без Xcode такая сборка падает на
+# каждом @State; тогда собираем на предыдущем SDK из тех же CLT — он рядом.
+if ! out=$(swift build -c release --disable-sandbox 2>&1); then
+    if [ -n "${SDKROOT:-}" ] || ! grep -q "plugin for module 'SwiftUIMacros' not found" <<<"$out"; then
+        printf '%s\n' "$out" >&2; exit 1
+    fi
+    sdks_dir=$(dirname "$(xcrun --sdk macosx --show-sdk-path)")
+    current=$(xcrun --sdk macosx --show-sdk-version)
+    built=0
+    for sdk in $(ls -d "$sdks_dir"/MacOSX[0-9]*.sdk 2>/dev/null | sort -t X -k 3 -rV); do
+        v=$(basename "$sdk" .sdk); v=${v#MacOSX}
+        [ "${v%%.*}" -lt "${current%%.*}" ] || continue
+        echo "make-app.sh: в SDK $current нет плагина SwiftUIMacros (нужен Xcode) — собираю на $(basename "$sdk")" >&2
+        if SDKROOT="$sdk" swift build -c release --disable-sandbox; then
+            export SDKROOT="$sdk"; built=1; break
+        fi
+    done
+    if [ "$built" != 1 ]; then
+        printf '%s\n' "$out" >&2
+        echo "make-app.sh: SDK $current требует Xcode, а более раннего SDK в $sdks_dir нет. Поставьте Xcode или Command Line Tools 26." >&2
+        exit 1
+    fi
+else
+    printf '%s\n' "$out" | tail -1
+fi
 BIN=$(swift build -c release --show-bin-path)
 
 rm -rf "$APP"
