@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.4.8 — 2026-09-18
+
+- Builds with Command Line Tools 27 without Xcode: the macOS 27 SDK needs the
+  SwiftUI macro plugin that only Xcode ships, so `make-app.sh` falls back to
+  the previous SDK from the same Command Line Tools.
+- `ocbar-app --stage` renders windows with demo profiles instead of reading
+  `~/.config/ocbar`, so screenshots never show real servers or logins.
+
 ## 0.4.7 — 2026-09-17
 
 - "Do not connect on this network": the supervisor skips auto-connect in
