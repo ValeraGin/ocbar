@@ -53,7 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Витрина снимает окна для README: настоящие профили в кадр попасть
         // не должны, поэтому без явного OCBAR_CONFIG_DIR она читает
         // вымышленные из временного каталога.
-        if CommandLine.arguments.contains("--stage"),
+        // Живая витрина (--live) показывает настоящее состояние — ей нужны
+        // настоящие профили.
+        if CommandLine.arguments.contains("--stage"), !CommandLine.arguments.contains("--live"),
            ProcessInfo.processInfo.environment["OCBAR_CONFIG_DIR"] == nil,
            let dir = Fixture.demoConfigDir() {
             setenv("OCBAR_CONFIG_DIR", dir, 1)

@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.5.1 — 2026-09-19
+
+- The menu scrolls the profile list to the selected profile, so with many
+  profiles the current one is visible right away.
+- `ocbar-app --stage --live` shows real profiles again (0.4.8 gave it the demo
+  ones meant for screenshots).
+
 ## 0.5.0 — 2026-09-19
 
 - New menu, in the style of macOS Control Center: a status card with one
