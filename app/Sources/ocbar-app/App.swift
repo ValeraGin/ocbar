@@ -50,6 +50,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             print(code == 0 ? "ocbar-app: всё OK" : "ocbar-app: провалов \(code)")
             exit(code)
         }
+        // Витрина снимает окна для README: настоящие профили в кадр попасть
+        // не должны, поэтому без явного OCBAR_CONFIG_DIR она читает
+        // вымышленные из временного каталога.
+        if CommandLine.arguments.contains("--stage"),
+           ProcessInfo.processInfo.environment["OCBAR_CONFIG_DIR"] == nil,
+           let dir = Fixture.demoConfigDir() {
+            setenv("OCBAR_CONFIG_DIR", dir, 1)
+        }
         OcbarClient.shared.preloadVersions()
         if !CommandLine.arguments.contains("--stage") { Notifier.setup() }
         // Пауза и возобновление — единственное действие, которое стоит

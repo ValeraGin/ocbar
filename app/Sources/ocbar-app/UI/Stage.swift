@@ -5,6 +5,53 @@ import SwiftUI
 // tools/ui-lab/index.html, в поставке она не мешает: обычный запуск её не
 // показывает.
 enum Fixture {
+    static let demoProfiles: [(String, String)] = [
+        ("main", """
+        [Connection]
+        Name        = Основной
+        Description = Любые устройства
+        Url         = vpn.example.com/employees
+        User        = alice
+        [Routes]
+        10.0.0.0/8
+        172.16.0.0/12
+        [DNS]
+        example.com     = 192.0.2.10
+        int.example.com = vpn
+        [Auth]
+        Totp = keychain
+        """),
+        ("office", """
+        [Connection]
+        Name        = Из офиса
+        Description = Изнутри сети
+        Url         = vpn.example.com/office
+        User        = alice
+        [Routes]
+        10.0.0.0/8
+        """),
+        ("sms", """
+        [Connection]
+        Name        = Парольная группа
+        Description = пароль + код из SMS
+        Url         = vpn.example.com/sms
+        User        = alice
+        """),
+    ]
+
+    /// Временный каталог конфигурации с вымышленными профилями.
+    static func demoConfigDir() -> String? {
+        let dir = NSTemporaryDirectory() + "ocbar-stage-\(getpid())"
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(atPath: dir + "/profiles", withIntermediateDirectories: true)
+            for (name, body) in demoProfiles {
+                try (body + "\n").write(toFile: dir + "/profiles/\(name).ocbar", atomically: true, encoding: .utf8)
+            }
+        } catch { return nil }
+        return dir
+    }
+
     static func status(_ presentation: Presentation) -> Status {
         var s = Status()
         s.profile = "main"
