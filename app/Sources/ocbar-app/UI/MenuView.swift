@@ -323,8 +323,13 @@ struct MenuView: View {
                 // Девять профилей вместе со всем остальным не влезают на экран
                 // 13" — список прокручивается, а не растягивает меню.
                 BoundedScroll(maxHeight: 236) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(s.profiles) { p in profileRow(p) }
+                    // Выбранный профиль должен быть виден сразу: при восьми
+                    // профилях он мог оказаться под краем прокрутки.
+                    ScrollViewReader { proxy in
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(s.profiles) { p in profileRow(p).id(p.name) }
+                        }
+                        .onAppear { proxy.scrollTo(selected, anchor: .center) }
                     }
                 }
                 if let p = switchTo { switchPrompt(p) }
