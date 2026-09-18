@@ -288,12 +288,12 @@ struct ScreenshotSettingsView: View {
     }
 }
 
-// Кадр для README: подключено с сетями и то же меню со списком профилей.
+// Кадр для README: главный экран меню и второй — «Сети и DNS».
 struct ScreenshotMenuView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
+            menu()
             menu(expandDetails: true)
-            menu(expandProfiles: true)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
