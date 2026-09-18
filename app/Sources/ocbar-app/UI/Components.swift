@@ -43,6 +43,7 @@ private struct MenuRowStyle: ButtonStyle {
 // Строка «ключ — значение» в подробностях: подпись слева, моноширинное
 // значение справа.
 struct KVRow: View {
+    var mono = true
     let label: String
     let value: String
     var color: Color = Palette.text
@@ -51,10 +52,12 @@ struct KVRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label).font(.system(size: 12)).foregroundStyle(Palette.secondary)
             Spacer(minLength: 8)
+            // Несколько значений (резолверы) — по строке на каждое.
             Text(value.isEmpty ? "—" : value)
-                .font(.ocMono).foregroundStyle(color)
+                .font(mono ? .ocMono : .system(size: 12)).foregroundStyle(color)
+                .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
-                .lineLimit(1).truncationMode(.middle)
+                .lineLimit(value.contains("\n") ? nil : 1).truncationMode(.middle)
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 2)
@@ -64,12 +67,13 @@ struct KVRow: View {
 struct StateDot: View {
     let color: Color
     var pulsing: Bool = false
+    var size: CGFloat = 8
     @State private var on = false
 
     var body: some View {
         Circle()
             .fill(color)
-            .frame(width: 8, height: 8)
+            .frame(width: size, height: size)
             .opacity(pulsing ? (on ? 0.35 : 1) : 1)
             .animation(pulsing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default,
                        value: on)
@@ -148,5 +152,185 @@ struct CopyButton: View {
         .buttonStyle(.borderless)
         .disabled(text.isEmpty)
         .help("Скопировать")
+    }
+}
+
+// Группа, как в сгруппированных формах macOS: спокойная подложка и тонкая
+// обводка. С оттенком — для карточки, которая требует действия.
+extension View {
+    func groupBox(tint: Color? = nil) -> some View {
+        background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(tint.map { $0.opacity(0.12) } ?? Palette.group))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(tint.map { $0.opacity(0.35) } ?? Palette.groupLine))
+    }
+}
+
+// Главное действие меню — кнопка на всю ширину вместо выключателя: подпись
+// говорит, что произойдёт, а не в каком положении рычажок.
+struct WideButton: View {
+    enum Kind { case primary, destructive, neutral }
+    let title: String
+    var systemImage: String?
+    let kind: Kind
+    var compact = false
+    var hint: String?
+    var enabled = true
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let systemImage { Image(systemName: systemImage).font(.system(size: 11)) }
+                Text(title).font(.system(size: 13, weight: kind == .neutral ? .regular : .semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) {
+                if let hint { Text(hint).font(.system(size: 11)).opacity(0.55) }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: compact ? 26 : 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(WideButtonStyle(kind: kind))
+        .disabled(!enabled)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct WideButtonStyle: ButtonStyle {
+    let kind: WideButton.Kind
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let (fill, text): (Color, Color) = switch kind {
+        case .primary: (Palette.accent, .white)
+        case .destructive: (Palette.bad.opacity(0.18), Palette.bad)
+        case .neutral: (Palette.group, Palette.text)
+        }
+        return configuration.label
+            .foregroundStyle(text)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fill))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(kind == .neutral ? Palette.groupLine : .clear))
+            .brightness(configuration.isPressed ? -0.08 : 0)
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+// Плашка под карточкой состояния: одно предупреждение и его следующий шаг.
+struct Banner: View {
+    let color: Color
+    let symbol: String
+    let text: String
+    var selectable = false
+    var fix: (title: String, command: String)?
+    var link: (String, () -> Void)?
+    var dismiss: (() -> Void)?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(color)
+                .frame(width: 14).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                Group {
+                    if selectable { Text(text).textSelection(.enabled) } else { Text(text) }
+                }
+                .font(.system(size: 11.5)).foregroundStyle(Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(4)
+                HStack(spacing: 12) {
+                    if let fix {
+                        Button(fix.title) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(fix.command, forType: .string)
+                        }
+                        .help("Скопировать: " + fix.command)
+                    }
+                    if let link { Button(link.0, action: link.1) }
+                }
+                .buttonStyle(.link).font(.system(size: 11.5))
+            }
+            Spacer(minLength: 0)
+            if let dismiss {
+                Button(action: dismiss) {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                }
+                .buttonStyle(.borderless).foregroundStyle(Palette.tertiary)
+                .accessibilityLabel("Скрыть")
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .groupBox(tint: color)
+    }
+}
+
+// Значок строки: белый символ в цветном скруглённом квадрате, как в
+// Системных настройках.
+struct IconTile: View {
+    let symbol: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(color))
+            .accessibilityHidden(true)
+    }
+}
+
+// Значок команды в подвале меню — без подложки, по центру своей колонки.
+struct FooterIcon: View {
+    let symbol: String
+    var body: some View {
+        Image(systemName: symbol).font(.system(size: 13)).frame(width: 20).opacity(0.75)
+            .accessibilityHidden(true)
+    }
+}
+
+// Заголовок группы: подпись слева, счётчик справа.
+struct GroupHead: View {
+    let title: String
+    var trailing = ""
+    var body: some View {
+        HStack {
+            Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.secondary)
+            Spacer()
+            Text(trailing).font(.system(size: 12)).foregroundStyle(Palette.tertiary)
+        }
+        .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 4)
+    }
+}
+
+struct RowDivider: View {
+    var body: some View {
+        Rectangle().fill(Palette.groupLine).frame(height: 1).padding(.leading, 12)
+    }
+}
+
+// Значок и текст вплотную: у стандартной метки зазор рассчитан на меню.
+struct TightLabel: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) { configuration.icon; configuration.title }
+    }
+}
+
+// Знак ocbar — два сцепленных кольца на синем скруглённом квадрате. Рисуется
+// кодом: у приложения, запущенного из сборки без бандла, своей иконки нет, и
+// система подставила бы папку.
+struct AppMark: View {
+    var size: CGFloat = 22
+
+    var body: some View {
+        let ring = size * 0.36, line = max(1.5, size * 0.09)
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(Palette.accent)
+            Circle().stroke(.white, lineWidth: line).frame(width: ring, height: ring).offset(x: -ring * 0.3)
+            Circle().stroke(.white, lineWidth: line).frame(width: ring, height: ring).offset(x: ring * 0.3)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }

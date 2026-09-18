@@ -3,6 +3,15 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.5.0 — 2026-09-19
+
+- New menu, in the style of macOS Control Center: a status card with one
+  action button instead of the switch (Connect, Disconnect, Sign in, Cancel,
+  Resume), traffic, profiles as a list like the Wi-Fi menu, and "Networks and
+  DNS" as a second page with network and zone toggles and connection details.
+  Warnings are separate banners, each with its next step.
+- System colours (blue, green, orange, red) across the app.
+
 ## 0.4.8 — 2026-09-18
 
 - Builds with Command Line Tools 27 without Xcode: the macOS 27 SDK needs the

@@ -10,10 +10,16 @@ enum Palette {
     static let tertiary  = dynamic(light: "#8a8880", dark: "#74736d")
     static let line      = dynamic(light: "#e2e0d8", dark: "#303036")
     static let line2     = dynamic(light: "#cfcdc4", dark: "#45454d")
-    static let ok        = dynamic(light: "#1d7a52", dark: "#5dcaa5")
-    static let warn      = dynamic(light: "#a56a0b", dark: "#efb14a")
-    static let bad       = dynamic(light: "#b3352f", dark: "#ea7a72")
-    static let accent    = dynamic(light: "#2f6bbf", dark: "#7fb0ee")
+    // Состояния — системными цветами macOS: зелёный, оранжевый, красный,
+    // синий. Меню и настройки выглядят как часть системы, а не как сайт.
+    static let ok        = dynamic(light: "#248a3d", dark: "#30d158")
+    static let warn      = dynamic(light: "#c56a00", dark: "#ff9f0a")
+    static let bad       = dynamic(light: "#d70015", dark: "#ff453a")
+    static let accent    = dynamic(light: "#007aff", dark: "#0a84ff")
+    static let violet    = dynamic(light: "#8944ab", dark: "#bf5af2")
+    // Подложка групп и их обводка — как у сгруппированных форм.
+    static let group     = dynamic(light: "#00000008", dark: "#ffffff0d")
+    static let groupLine = dynamic(light: "#0000000f", dark: "#ffffff14")
 
     static func dynamic(light: String, dark: String) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -27,10 +33,13 @@ extension NSColor {
     convenience init(hex: String) {
         var v: UInt64 = 0
         Scanner(string: hex.hasPrefix("#") ? String(hex.dropFirst()) : hex).scanHexInt64(&v)
-        self.init(srgbRed: CGFloat((v >> 16) & 0xff) / 255,
-                  green: CGFloat((v >> 8) & 0xff) / 255,
-                  blue: CGFloat(v & 0xff) / 255,
-                  alpha: 1)
+        let raw = hex.hasPrefix("#") ? hex.dropFirst() : Substring(hex)
+        // #rrggbbaa — с прозрачностью, #rrggbb — непрозрачный.
+        let rgba = raw.count == 8 ? v : (v << 8) | 0xff
+        self.init(srgbRed: CGFloat((rgba >> 24) & 0xff) / 255,
+                  green: CGFloat((rgba >> 16) & 0xff) / 255,
+                  blue: CGFloat((rgba >> 8) & 0xff) / 255,
+                  alpha: CGFloat(rgba & 0xff) / 255)
     }
 }
 

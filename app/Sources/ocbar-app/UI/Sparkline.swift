@@ -7,6 +7,7 @@ struct Sparkline: View {
     let samples: [StatusStore.TrafficSample]
     let capacity: Int
     var active: Bool = true
+    var inset: CGFloat = 13
 
     // Нижний предел шкалы: без него холостые несколько килобайт рисуются
     // горами, и график врёт о нагрузке.
@@ -38,8 +39,8 @@ struct Sparkline: View {
             .opacity(active ? 1 : 0.4)
         }
         .frame(height: 42)
-        .padding(.horizontal, 13)
-        .padding(.top, 6)
+        .padding(.horizontal, inset)
+        .padding(.top, inset > 0 ? 6 : 0)
         .accessibilityLabel("Трафик за минуту")
     }
 
