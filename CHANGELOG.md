@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.8.1 — 2026-09-19
+
+- Profiles show the full connection address with its group
+  (`vpn.example.com/employees`), in the menu and in Settings: profiles of one
+  gateway differ only by the group. In the menu the address is the second
+  line, the description moved to the tooltip, and password groups get a small
+  "password + SMS" badge.
+
 ## 0.8.0 — 2026-09-19
 
 - `ocbar logs` and the new "All" tab in the Logs window show every log as one

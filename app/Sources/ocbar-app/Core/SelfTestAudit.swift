@@ -126,6 +126,9 @@ extension SelfTest {
         t.check("состояние: домен профиля — без схемы и группы",
                 s.profiles.first { $0.name == "pw" }?.host == "vpn.example.test",
                 s.profiles.first { $0.name == "pw" }?.host ?? "—")
+        t.check("состояние: адрес профиля — без схемы, с группой",
+                s.profiles.first { $0.name == "pw" }?.address == "vpn.example.test/sms?x=1",
+                s.profiles.first { $0.name == "pw" }?.address ?? "—")
         let odd = s.profiles.first { $0.name == "odd" }
         t.check("состояние: «|» в названии парольной группы", odd?.isPassword == true && odd?.title == "A|B",
                 "\(odd?.title ?? "—") / \(odd?.auth ?? "—")")

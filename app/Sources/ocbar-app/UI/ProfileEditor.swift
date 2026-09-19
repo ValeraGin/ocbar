@@ -753,7 +753,7 @@ struct ProfileEditorView: View {
         let s = store.status
         var parts: [String] = []
         if s.defaultProfile == name { parts.append("по умолчанию") }
-        let host = heads[name]?.host ?? s.profiles.first { $0.name == name }?.host ?? ""
+        let host = heads[name]?.host ?? s.profiles.first { $0.name == name }?.address ?? ""
         parts.append(host.isEmpty ? name + ".ocbar" : host)
         return parts.joined(separator: " · ")
     }
@@ -918,7 +918,7 @@ struct ProfileEditorView: View {
         var h: [String: (title: String, host: String)] = [:]
         for name in files {
             guard let d = ProfileStore.load(name) else { continue }
-            let host = ProfileEntry(name: name, title: d.name, auth: d.auth, descr: d.descr, url: d.url).host
+            let host = ProfileEntry(name: name, title: d.name, auth: d.auth, descr: d.descr, url: d.url).address
             h[name] = (d.name, host)
         }
         heads = h

@@ -26,6 +26,14 @@ struct ProfileEntry: Identifiable, Hashable {
     let descr: String
     var url = ""
     var id: String { name }
+    /// Адрес подключения без схемы: https://vpn.example.com/employees/ →
+    /// vpn.example.com/employees. Группа (путь) различает профили одного шлюза.
+    var address: String {
+        var u = url.trimmingCharacters(in: .whitespaces)
+        if let r = u.range(of: "://") { u = String(u[r.upperBound...]) }
+        while u.hasSuffix("/") { u.removeLast() }
+        return u
+    }
     /// Домен подключения без схемы и группы: vpn.example.com/employees → vpn.example.com.
     var host: String {
         var u = url

@@ -327,7 +327,7 @@ struct MenuView: View {
                     // профилях он мог оказаться под краем прокрутки.
                     ScrollViewReader { proxy in
                         VStack(alignment: .leading, spacing: 0) {
-                            ForEach(s.profiles) { p in profileRow(p).id(p.name) }
+                            ForEach(s.profiles) { p in profileRow(p).id(p.name).help(p.descr) }
                         }
                         .onAppear { proxy.scrollTo(selected, anchor: .center) }
                     }
@@ -344,13 +344,21 @@ struct MenuView: View {
         return MenuRow(enabled: idle, action: { choose(p) }) {
             IconTile(symbol: "link", color: on ? Palette.accent : Color.gray)
             VStack(alignment: .leading, spacing: 1) {
-                Text(p.display).font(.system(size: 13))
-                    .lineLimit(1).truncationMode(.tail)
-                // Под названием — домен подключения: одинаковые названия у
-                // разных шлюзов иначе не различить.
-                let sub = [p.isPassword ? "пароль + SMS" : p.descr, p.host].filter { !$0.isEmpty }
-                if !sub.isEmpty {
-                    Text(sub.joined(separator: " · ")).font(.system(size: 11)).opacity(0.6)
+                HStack(spacing: 6) {
+                    Text(p.display).font(.system(size: 13))
+                        .lineLimit(1).truncationMode(.tail)
+                    if p.isPassword {
+                        Text("пароль + SMS").font(.system(size: 10, weight: .medium))
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Capsule().strokeBorder(Color.primary.opacity(0.3)))
+                            .opacity(0.8)
+                    }
+                }
+                // Под названием — адрес с группой: одинаковые названия у
+                // разных шлюзов и групп иначе не различить. Описание — в
+                // подсказке: вместе с адресом в строку оно не помещалось.
+                if !p.address.isEmpty {
+                    Text(p.address).font(.system(size: 11)).opacity(0.6)
                         .lineLimit(1).truncationMode(.middle)
                 }
             }
