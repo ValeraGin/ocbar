@@ -3,6 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.6.0 — 2026-09-19
+
+- Password groups (`Auth = password`: login, password and a code from SMS)
+  connect through ocbar: the password comes from the profile's source, the
+  SMS code is asked in a small "Code from SMS" window (or on the terminal),
+  and the session is obtained with `openconnect --authenticate` as the user.
+  Auto-connect still leaves them to a human.
+- The menu shows the connection domain under each profile name.
+- Menu buttons light up under the pointer.
+
 ## 0.5.1 — 2026-09-19
 
 - The menu scrolls the profile list to the selected profile, so with many

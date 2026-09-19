@@ -1309,6 +1309,118 @@ authenticate() { # печатает "token hash post_url"
     printf '%s' "$json" | /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["session_token"], d["server_cert_hash"], d["post_url"])'
 }
 
+# Парольная группа: шлюз спрашивает логин, пароль и код из SMS обычной
+# формой AnyConnect, без браузера. Сессию получает `openconnect --authenticate`
+# от имени человека (root не нужен): драйвер ведёт его в псевдотерминале,
+# логин и пароль подставляет сам, на остальные вопросы шлюза (код из SMS)
+# отвечает человек — окном ocbar-auth или в терминале. Итог тот же, что у
+# authenticate: "token hash post_url", дальше туннель поднимает хелпер.
+PW_DRIVER='
+import os, pty, re, select, signal, subprocess, sys, time
+argv = sys.argv[1:]
+env = os.environ
+pw, user = env.get("OCBAR_PASSWORD", ""), env.get("OCBAR_USERNAME", "")
+tty = env.get("OCBAR_PROMPT_TTY") == "1"
+def log(m): sys.stderr.write("ocbar: " + m + "\n"); sys.stderr.flush()
+def ask(label, secret=False):
+    if tty:
+        import getpass
+        with open("/dev/tty", "r+") as t:
+            if secret: return getpass.getpass(label + " ", stream=t)
+            t.write(label + " "); t.flush(); return t.readline().strip()
+    r = subprocess.run(env["OCBAR_PROMPT_CMD"], shell=True, stdout=subprocess.PIPE,
+                       env=dict(env, OCBAR_PROMPT_LABEL=label))
+    if r.returncode != 0: return None, r.returncode
+    return r.stdout.decode().strip(), 0
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(argv[0], argv)
+buf, out, sent_pw, humans, rc_human, secrets = b"", b"", False, 0, 0, set()
+deadline = time.time() + float(env.get("OCBAR_PW_TIMEOUT", "600"))
+def stop(code):
+    try: os.kill(pid, signal.SIGTERM)
+    except OSError: pass
+    sys.exit(code)
+while True:
+    if time.time() > deadline: log("вход не завершился вовремя"); stop(2)
+    r, _, _ = select.select([fd], [], [], 0.4)
+    if r:
+        try: data = os.read(fd, 4096)
+        except OSError: break
+        if not data: break
+        out += data; buf += data; continue
+    tail = buf.decode("utf-8", "replace").replace("\r", "").rsplit("\n", 1)[-1].strip()
+    if not tail.endswith(":") and not tail.endswith("?"): continue
+    buf = b""
+    low = tail.lower()
+    if "accept" in low and "yes" in low:
+        log("сертификат шлюза не доверенный — отказываюсь (" + tail + ")"); os.write(fd, b"no\n"); stop(1)
+    if low.startswith("group"):
+        log("шлюз просит выбрать группу — укажите её в адресе профиля: " + tail); stop(1)
+    if ("password" in low or "парол" in low) and not sent_pw:
+        sent_pw = True
+        if not pw:
+            if not tty: log("пароля нет в связке — ocbar secret set-password <профиль>"); stop(1)
+            pw = ask(tail, secret=True)
+        secrets.add(pw); os.write(fd, (pw + "\n").encode()); log("пароль подставлен"); continue
+    if "user" in low or "логин" in low or "имя" in low:
+        os.write(fd, (user + "\n").encode()); continue
+    humans += 1
+    if humans > 3: log("шлюз спрашивает код в четвёртый раз — останавливаюсь"); stop(1)
+    log("шлюз спрашивает: " + tail + " — вводит человек")
+    if tty: code, rc = ask(tail), 0
+    else: code, rc = ask(tail)
+    if not code:
+        log("код не введён"); stop(rc if rc in (2, 3) else 3)
+    secrets.add(code); os.write(fd, (code + "\n").encode())
+_, status = os.waitpid(pid, 0)
+text = out.decode("utf-8", "replace").replace("\r", "")
+vals = dict(re.findall(r"^([A-Z_]+)=\x27([^\x27]*)\x27", text, re.M))
+if os.waitstatus_to_exitcode(status) != 0 or not vals.get("COOKIE"):
+    shown = [l for l in text.split("\n") if l.strip() and not any(x and x in l for x in secrets)
+             and not l.startswith(("COOKIE=", "POST ", "Got ", "XML "))]
+    log("вход не прошёл: " + " | ".join(shown[-4:]))
+    sys.exit(1)
+url = vals.get("CONNECT_URL") or ("https://" + vals.get("HOST", ""))
+print(vals["COOKIE"], vals.get("FINGERPRINT", ""), url)
+'
+authenticate_password() { # печатает "token hash post_url"
+    # Автоподключение не зовёт человека: код из SMS без него не получить.
+    if [ "${OCBAR_SILENT:-}" = 1 ]; then
+        printf '%socbar: парольная группа — код из SMS вводит человек%s\n' "$c_yel" "$c_off" >&2
+        return 5
+    fi
+    local oc; oc=$(openconnect_bin) || die "нет openconnect — brew install openconnect"
+    local -a cmd=("$oc" --authenticate --protocol=anyconnect --os=mac-intel -u "$P_USER")
+    [ -z "$P_UA" ]  || cmd+=(--useragent "$P_UA")
+    [ -z "$P_CSD" ] || cmd+=(--csd-wrapper "$P_CSD")
+    case "$P_URL" in https://*) cmd+=("$P_URL") ;; *) cmd+=("https://$P_URL") ;; esac
+    local pw pwerr; pwerr=$(mktemp "${TMPDIR:-/tmp}/ocbar-pw.XXXXXX")
+    pw=$(resolve_password 2>"$pwerr") || true
+    [ -n "$pw" ] || log "пароль не получен (источник $(password_source): $(head -1 "$pwerr" 2>/dev/null))"
+    rm -f "$pwerr"
+    local tty=0 prompt
+    [ -t 0 ] && [ -t 2 ] && tty=1
+    # Окно «Код из SMS» — ocbar-auth; в самопроверке — подставная команда.
+    if [ -n "${OCBAR_SELFTEST_HELPER:-}" ] && [ -n "${OCBAR_PROMPT_CMD:-}" ]; then
+        prompt=$OCBAR_PROMPT_CMD; tty=0
+    else
+        local auth; auth=$(auth_path) || die "не найден ocbar-auth — нужен для окна кода из SMS"
+        prompt="$(printf '%q' "$auth") --prompt \"\$OCBAR_PROMPT_LABEL\" --prompt-title $(printf '%q' "$P_TITLE") --timeout 300"
+    fi
+    mkdir -p "$LOG_DIR"
+    local rc=0 res
+    res=$(OCBAR_PASSWORD="$pw" OCBAR_USERNAME="$P_USER" OCBAR_PROMPT_TTY="$tty" OCBAR_PROMPT_CMD="$prompt" \
+          /usr/bin/python3 -c "$PW_DRIVER" "${cmd[@]}" 2> >(auth_log_tee)) || rc=$?
+    case $rc in
+        0) printf '%s\n' "$res" ;;
+        2) die "парольная группа: код не введён вовремя" ;;
+        3) die "парольная группа: вход отменён" ;;
+        5) return 5 ;;
+        *) die "парольная группа: вход не прошёл — подробности в $AUTH_LOG" ;;
+    esac
+}
+
 # Решения окна входа — в auth.log с временем (ocbar-auth секретов не пишет) и,
 # как раньше, в поток ошибок. Без журнала «форма не заполнилась» было не
 # разобрать: вывод уходил в терминал или в приложение и пропадал.
@@ -1431,9 +1543,6 @@ build_spec() { # cookie → stdin для tunnel-start
 }
 
 do_connect() { # профиль уже загружен
-    if [ "$P_AUTH" = password ]; then
-        die "профиль [$P_NAME] — парольная группа (auth = password): шлюз ждёт логин/пароль и OTP из SMS, ocbar этого не автоматизирует. Подключайся голым openconnect (см. README)."
-    fi
     # Тем же профилем — уже подключён, делать нечего. Другим — переключение:
     # отключить и подключить заново, с записью в журнал. Раньше здесь было
     # «уже подключён» и код 0, и меню молчало, когда человек выбирал другой
@@ -1464,14 +1573,16 @@ do_connect() { # профиль уже загружен
         build_spec "COOKIE" | priv tunnel-start "$P_URL" "0000000000000000000000000000000000000000" "$P_MODE" "$P_USER" "$P_UA" "${P_CSD:+$(basename "$P_CSD")}"
         return 0
     fi
-    info "Вход через SSO: $P_TITLE ($P_URL)…"
+    if [ "$P_AUTH" = password ]; then info "Вход в парольную группу: $P_TITLE ($P_URL) — код из SMS спросит окно…"
+    else info "Вход через SSO: $P_TITLE ($P_URL)…"; fi
     # Номер этой (под)оболочки, а не $$: супервизор подключает в подоболочке,
     # и $$ там — сам супервизор, живой всегда.
     mkdir -p "$USER_STATE"; printf '%s\n' "$(exec sh -c 'echo $PPID')" > "$CONNECTING"
     local token hash post_url out rc=0
     TEACH_OUT=""
     [ -n "${P_FILE:-}" ] && TEACH_OUT=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach.XXXXXX")
-    out=$(authenticate) || rc=$?
+    if [ "$P_AUTH" = password ]; then out=$(authenticate_password) || rc=$?
+    else out=$(authenticate) || rc=$?; fi
     # Что человек решил сохранить после входа — применяем здесь, в
     # родительской оболочке: authenticate работает в подстановке, и её
     # вывод — строка с токеном.
@@ -3262,6 +3373,54 @@ PROFILE
     has "состояние без туннеля" "state=down" "$out"
     has "профиль в списке" "profile_list=t|Проба||" "$out"
     has "адрес профиля отдельной строкой" "profile_url=t|vpn.example.test/group" "$out"
+
+    status_out=$out
+    # Парольная группа: подставной openconnect спрашивает пароль и код, как
+    # шлюз; пароль ocbar берёт из профиля, код — у «человека» (команда).
+    cat > "$tmp/profiles/pw.ocbar" <<'PROFILE'
+[Connection]
+Name = Пароль и SMS
+Url  = vpn.example.test/pw
+User = tester
+Auth = password
+
+[Auth]
+Password        = command
+PasswordCommand = echo secret-pw
+PROFILE
+    cat > "$tmp/ocpw" <<'STUB'
+#!/bin/bash
+echo "POST https://vpn.example.test/pw"
+printf 'Password:'; IFS= read -r p
+printf 'Response:'; IFS= read -r c
+printf '%s %s %s\n' "$p" "$c" "$*" > "$OCBAR_PWSTUB_LOG"
+[ "$p" = secret-pw ] && [ "$c" = 424242 ] || { echo "Login failed."; exit 1; }
+echo "COOKIE='tok123'"
+echo "HOST='192.0.2.5'"
+echo "CONNECT_URL='https://node.example.test/pw'"
+echo "FINGERPRINT='pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='"
+STUB
+    chmod +x "$tmp/ocpw"
+    out=$(OCBAR_OPENCONNECT="$tmp/ocpw" OCBAR_PWSTUB_LOG="$tmp/pwstub.log" \
+          OCBAR_PROMPT_CMD='printf "%s" "$OCBAR_PROMPT_LABEL" > '"$tmp"'/pwlabel; echo 424242' \
+          run _selftest-fn pw_auth pw </dev/null || true)
+    has "парольная группа: сессия от openconnect --authenticate" "tok123 pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= https://node.example.test/pw" "$out"
+    is "парольная группа: пароль и код дошли до шлюза" "secret-pw 424242" "$(cut -d' ' -f1-2 "$tmp/pwstub.log" 2>/dev/null)"
+    has "парольная группа: openconnect только аутентифицирует" "--authenticate" "$(cat "$tmp/pwstub.log" 2>/dev/null)"
+    is "парольная группа: человеку показана подпись шлюза" "Response:" "$(cat "$tmp/pwlabel" 2>/dev/null)"
+    hasnt "парольная группа: пароль и код не в выводе" "secret-pw" "$out"
+    out=$(OCBAR_OPENCONNECT="$tmp/ocpw" OCBAR_PWSTUB_LOG="$tmp/pwstub.log" OCBAR_PROMPT_CMD='echo 111111' \
+          run _selftest-fn pw_auth pw </dev/null; echo "rc=$?")
+    has "парольная группа: неверный код — отказ с причиной" "Login failed" "$out"
+    has "парольная группа: неверный код — ненулевой код" "rc=1" "$out"
+    out=$(OCBAR_OPENCONNECT="$tmp/ocpw" OCBAR_PWSTUB_LOG="$tmp/pwstub.log" OCBAR_PROMPT_CMD='exit 3' \
+          run _selftest-fn pw_auth pw </dev/null; echo "rc=$?")
+    has "парольная группа: отмена окна кода — вход отменён" "вход отменён" "$out"
+    out=$(OCBAR_SILENT=1 OCBAR_OPENCONNECT="$tmp/ocpw" run _selftest-fn pw_auth pw </dev/null; echo "rc=$?")
+    has "парольная группа: автоподключение не зовёт человека — код 5" "rc=5" "$out"
+    # Дальше проверки рассчитаны на единственный профиль t.
+    rm -f "$tmp/profiles/pw.ocbar"
+    out=$status_out
     has "профиль по умолчанию" "default=t" "$out"
     has "режим профиля" "profile_mode=tunnel" "$out"
     has "порт SOCKS по умолчанию" "proxy_port=11080" "$out"
@@ -4149,6 +4308,7 @@ case "${1:-}" in
             cisco_servers) cisco_servers "${2:-}" ;;
             network_skipped) network_skipped && echo skip || echo no ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
+            pw_auth) load_profile "${2:-}"; authenticate_password ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;
     install)    shift; cmd_install "$@" ;;

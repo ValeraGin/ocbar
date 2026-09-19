@@ -39,6 +39,9 @@ struct Args {
     var teachOut: String?
     var printParams = false
     var teachDialogShot: String?
+    var prompt: String?
+    var promptTitle = ""
+    var promptShot: String?
     var cameraWindowShot: String?
     var teachOn = false
     var outFile: String?
@@ -83,6 +86,10 @@ func usage() -> String {
                             предзаполнение разметки узнало бы; ничего не жмёт
       --forget-sessions     стереть сессии провайдеров входа (cookie и данные
                             сайтов окна входа): следующий вход — с формой
+      --prompt ПОДПИСЬ      окно «Код из SMS» (парольная группа): ответ — в stdout,
+                            отмена — код 3, тайм-аут (--timeout) — код 2
+        --prompt-title ИМЯ  название профиля в окне
+      --prompt-shot FILE    снимок окна «Код из SMS» в PNG
       --teach-dialog-shot FILE   снимок окна «Запомнить для следующего входа?»
                             в PNG, без показа и без записи в связку ключей
       --camera-window-shot FILE  снимок окна камеры в PNG; камера не включается
@@ -162,6 +169,9 @@ func parseArgs() -> Args {
         case "--teach-out": a.teachOut = next(arg)
         case "--teach-on": a.teachOn = true
         case "--teach-dialog-shot": a.teachDialogShot = next(arg)
+        case "--prompt": a.prompt = next(arg)
+        case "--prompt-title": a.promptTitle = next(arg)
+        case "--prompt-shot": a.promptShot = next(arg)
         case "--camera-window-shot": a.cameraWindowShot = next(arg)
         case "--out": a.outFile = next(arg)
         case "--select": a.selectEntry = next(arg)
@@ -445,6 +455,36 @@ if args.learnSelfTest {
     DispatchQueue.main.async {
         check = LearnCheck { code in exit(code) }
         check?.start()
+    }
+    app.run()
+}
+
+// Окно «Код из SMS» для парольной группы: ответ — в stdout, отмена — код 3,
+// тайм-аут — код 2 (как у окна входа).
+if let label = args.prompt {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.async {
+        let started = Date()
+        let answer = PromptDialog(label: label, profile: args.promptTitle).run(timeout: args.timeout)
+        guard let answer else {
+            let timedOut = Date().timeIntervalSince(started) >= args.timeout - 1
+            Log.info(timedOut ? "окно кода закрыто по тайм-ауту" : "код вводить не стали")
+            exit(timedOut ? 2 : 3)
+        }
+        out(answer)
+        exit(0)
+    }
+    app.run()
+}
+
+if let shotPath = args.promptShot {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.async {
+        let ok = PromptDialog.shot(to: shotPath)
+        out(ok ? "снимок: \(shotPath)" : "снимок не получился")
+        exit(ok ? 0 : 1)
     }
     app.run()
 }

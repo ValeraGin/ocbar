@@ -241,7 +241,9 @@ all. There is no update check, no crash reporting, no analytics.
 
 ## Limitations
 
-- Password groups (login + SMS OTP entered by a human) are not automated.
+- Password groups (`Auth = password`: login, password and an SMS code) need a
+  human for the code: ocbar fills in the password and asks for the SMS code in
+  a small window, so they never reconnect silently.
 - Full tunnel is configured as `0.0.0.0/1` + `128.0.0.0/1`; there is no
   "route everything and rewrite system DNS" mode.
 - IPv6 inside the tunnel: the address is set, routes are not.

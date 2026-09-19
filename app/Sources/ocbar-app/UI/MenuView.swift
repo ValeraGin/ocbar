@@ -341,7 +341,7 @@ struct MenuView: View {
 
     private func profileRow(_ p: ProfileEntry) -> some View {
         let on = p.name == selected
-        return MenuRow(enabled: idle && !p.isPassword, action: { choose(p) }) {
+        return MenuRow(enabled: idle, action: { choose(p) }) {
             IconTile(symbol: "link", color: on ? Palette.accent : Color.gray)
             VStack(alignment: .leading, spacing: 1) {
                 Text(p.display).font(.system(size: 13))
