@@ -41,6 +41,9 @@ struct MenuView: View {
                 case .networks: networksPage
                 }
             }
+            // Своя обёртка на каждый экран: высота меряется заново, а не
+            // остаётся от прошлого, более высокого.
+            .id(page)
         }
         .padding(12)
         .frame(width: Self.width)

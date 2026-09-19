@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.10.3 — 2026-09-20
+
+- The menu shrinks back after the Networks and DNS page: its height was
+  measured inside the scroll view, which stretched the content, so the height
+  only ever grew. The window stayed tall and the content looked detached from
+  the icon.
+
 ## 0.10.2 — 2026-09-20
 
 - Keeps the menu under its icon in more cases: the anchor is taken when the
