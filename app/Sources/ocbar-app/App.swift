@@ -106,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let args = CommandLine.arguments
         let screenshot = args.firstIndex(of: "--screenshot").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         let size: NSSize = screenshot == "menu" ? NSSize(width: 780, height: 700)
-            : screenshot == "settings" ? NSSize(width: 948, height: 668)
+            : screenshot == "settings" ? NSSize(width: 1048, height: 708)
             : screenshot == "setup" ? NSSize(width: 700, height: 660) : NSSize(width: 1500, height: 2400)
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 60, y: 60), size: size),
                               styleMask: [.titled, .closable, .resizable],

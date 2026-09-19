@@ -3,6 +3,17 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.7.0 — 2026-09-19
+
+- Settings in the style of macOS System Settings: sections with icons in a
+  sidebar, the profile list as the middle column, and the profile editor split
+  into Connection, Mode and Networks & DNS. Grouped forms with one short note
+  per group instead of paragraphs under every control. The Mode tab moved into
+  the profile, where the setting lives.
+- The editor chooses how to sign in: SSO in a browser window, or password and
+  SMS code.
+- New app icon: two linked rings on blue, the same mark as in the menu.
+
 ## 0.6.0 — 2026-09-19
 
 - Password groups (`Auth = password`: login, password and a code from SMS)

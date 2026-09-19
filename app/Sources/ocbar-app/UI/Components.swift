@@ -347,3 +347,16 @@ struct AppMark: View {
         .accessibilityHidden(true)
     }
 }
+
+// Пояснение под группой формы — по левому краю: подвал сгруппированной формы
+// macOS прижимает текст вправо, и длинная фраза читается плохо.
+struct Footnote: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text).font(.system(size: 11)).foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
