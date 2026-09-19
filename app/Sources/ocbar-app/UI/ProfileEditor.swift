@@ -199,6 +199,7 @@ struct ProfileEditorView: View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
+            .help("Порядок профилей — перетаскиванием; тот же порядок в меню")
             .onChange(of: selected) { name in
                 guard let name, name != loadedName else { return }
                 // Правки не теряются молча: выбор возвращается на место, пока
@@ -221,8 +222,6 @@ struct ProfileEditorView: View {
                 } label: { Image(systemName: "folder").frame(width: 22, height: 20) }
                     .help("Показать папку профилей")
                 Spacer()
-                Image(systemName: "arrow.up.arrow.down").font(.system(size: 11)).foregroundStyle(.tertiary)
-                    .help("Порядок профилей — перетаскиванием; тот же порядок в меню")
             }
             .buttonStyle(.bordered)
             .padding(10)
@@ -344,13 +343,15 @@ struct ProfileEditorView: View {
     @ViewBuilder
     private var modeSections: some View {
         Section {
+            // Обе карточки — одной высоты: по более высокой.
             HStack(alignment: .top, spacing: 12) {
                 modeCard("tunnel", "Туннель", symbol: "point.3.connected.trianglepath.dotted",
-                         lines: ["Маршруты и split DNS", "Нужен системный помощник"])
+                         lines: ["Маршруты и DNS", "Нужен системный помощник"])
                 modeCard("proxy", "Прокси SOCKS", symbol: "arrow.left.arrow.right",
                          lines: ["Для программ с поддержкой SOCKS",
                                  ocproxy == false ? "Нужен ocproxy: brew install ocproxy" : "Без прав администратора"])
             }
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 4)
         } header: {
             Text("Режим подключения")
@@ -404,7 +405,7 @@ struct ProfileEditorView: View {
                     .font(.system(size: 16)).foregroundStyle(on ? Palette.accent : Color.secondary.opacity(0.6))
             }
             .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(on ? Palette.accent.opacity(0.12) : Palette.group))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -518,8 +519,8 @@ struct ProfileEditorView: View {
     private var passwordStatus: (String, Color)? {
         guard !dirty, let v = secrets["password"] else { return nil }
         switch v {
-        case "keychain ok": return ("сохранён в связке", Palette.ok)
-        case "keychain missing": return ("в связке нет — ocbar secret set-password \(doc.fileName)", Palette.warn)
+        case "keychain ok": return ("сохранён в связке ключей", Palette.ok)
+        case "keychain missing": return ("не сохранён — ocbar предложит сохранить после входа", Palette.warn)
         default: return nil
         }
     }
@@ -527,8 +528,8 @@ struct ProfileEditorView: View {
     private var totpStatus: (String, Color)? {
         guard !dirty, let v = secrets["totp"] else { return nil }
         switch v {
-        case "keychain ok": return ("секрет в связке", Palette.ok)
-        case "keychain missing": return ("секрета нет — «Подключить и запомнить вход…» или камерой", Palette.warn)
+        case "keychain ok": return ("секрет в связке ключей", Palette.ok)
+        case "keychain missing": return ("источник кода не настроен — «Подключить и запомнить вход…»", Palette.warn)
         default: return nil
         }
     }
@@ -712,7 +713,7 @@ struct ProfileEditorView: View {
             }
             HStack(spacing: 10) {
                 if issues.isEmpty {
-                    Label("Проверка пройдена", systemImage: "checkmark.circle.fill")
+                    Label("Профиль без ошибок", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Palette.ok)
                 }
                 Spacer()
@@ -740,8 +741,14 @@ struct ProfileEditorView: View {
     // Строка формы: подпись слева, поле справа; подсказка — серым текстом в
     // пустом поле, а не отдельной строкой под ним.
     private func field(_ label: String, _ text: Binding<String>, hint: String = "") -> some View {
-        TextField(label, text: text, prompt: hint.isEmpty ? nil : Text(hint))
-            .onChange(of: text.wrappedValue) { _ in touched() }
+        LabeledContent(label) {
+            // Рамка поля — видно, что значение правится, а не просто показано.
+            TextField("", text: text, prompt: hint.isEmpty ? nil : Text(hint))
+                .labelsHidden().textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: 340)
+                .onChange(of: text.wrappedValue) { _ in touched() }
+        }
     }
 
     private func title(of name: String) -> String {

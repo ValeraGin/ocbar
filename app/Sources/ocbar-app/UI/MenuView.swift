@@ -120,6 +120,9 @@ struct MenuView: View {
             // убран, а не рисует нули.
             if look.graph, !s.isProxySession { trafficCard }
             profilesCard
+            // Вопрос о смене профиля — отдельным блоком, а не плашкой внутри
+            // прокручиваемого списка: он закрывает живую сессию.
+            if let p = switchTo { switchPrompt(p) }
             if look.details { networksLink }
             footer
         }
@@ -141,8 +144,13 @@ struct MenuView: View {
                                 .foregroundStyle(Palette.accent)
                         }
                     }
-                    Text(look.showsTime ? "\(look.subtitle) · \(humanSince(s.since))" : look.subtitle)
-                        .font(.system(size: 12)).foregroundStyle(Palette.secondary)
+                    // Состояние, которое требует внимания (нет связи, пауза,
+                    // нужен вход), — цветом и весом: по виду карточка иначе
+                    // почти не отличалась от рабочего подключения.
+                    let alarm = [.lost, .paused, .needsLogin, .missing].contains(s.presentation)
+                    Text(look.showsTime ? "\(look.subtitle) · сессия \(humanSince(s.since))" : look.subtitle)
+                        .font(.system(size: 12, weight: alarm ? .semibold : .regular))
+                        .foregroundStyle(alarm ? look.color : Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
                 }
                 Spacer(minLength: 0)
@@ -277,7 +285,7 @@ struct MenuView: View {
 
     private var trafficCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("За минуту").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            Text("Скорость за минуту").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             Sparkline(samples: store.samples, capacity: 30, active: look.graphActive, inset: 0)
             HStack {
                 Label(Size.rate(store.currentDown), systemImage: "arrow.down")
@@ -343,7 +351,6 @@ struct MenuView: View {
                         .onAppear { proxy.scrollTo(selected, anchor: .center) }
                     }
                 }
-                if let p = switchTo { switchPrompt(p) }
             }
             .padding(.bottom, 4)
             .groupBox()
@@ -383,28 +390,33 @@ struct MenuView: View {
     }
 
     private func switchPrompt(_ p: ProfileEntry) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Переключиться на «\(p.display)»? Текущая сессия закроется, потребуется вход.")
-                .font(.system(size: 11)).foregroundStyle(Palette.text)
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Переключиться на «\(p.display)»?", systemImage: "arrow.triangle.swap")
+                .font(.system(size: 13, weight: .semibold))
+            Text("Текущее подключение закроется, для нового потребуется вход.")
+                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                Button("Переключиться") {
+                WideButton(title: "Отмена", kind: .neutral, compact: true) {
+                    withAnimation(.easeOut(duration: 0.12)) { switchTo = nil }
+                }
+                .keyboardShortcut(.cancelAction)
+                WideButton(title: "Переключиться", kind: .primary, compact: true) {
                     switchTo = nil
                     store.connect(profile: p.name)
                 }
-                .controlSize(.small).keyboardShortcut(.defaultAction)
-                Button("Оставить") { withAnimation(.easeOut(duration: 0.12)) { switchTo = nil } }
-                    .controlSize(.small).keyboardShortcut(.cancelAction)
-                Spacer()
+                .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.warn.opacity(0.12)))
-        .padding(.horizontal, 8).padding(.vertical, 4)
+        .padding(12)
+        .groupBox(tint: Palette.warn)
     }
 
+    // На паузе правила сохранены, но не действуют — числа «2/3» читались бы
+    // как работающие сети.
     private var counts: String {
-        "\(s.routesOn.count)/\(s.routes.count) · \(s.zones.filter { $0.enabled }.count)/\(s.zones.count)"
+        if s.paused { return "не применяются" }
+        return "сети \(s.routesOn.count)/\(s.routes.count) · DNS \(s.zones.filter { $0.enabled }.count)/\(s.zones.count)"
     }
 
     private var networksLink: some View {
@@ -414,7 +426,7 @@ struct MenuView: View {
             store.refresh()
         }) {
             IconTile(symbol: s.isProxySession ? "arrow.left.arrow.right" : "globe", color: Palette.violet)
-            Text(s.isProxySession ? "SOCKS и туннель" : "Сети и DNS")
+            Text(s.isProxySession ? "Прокси SOCKS" : "Сети и DNS")
             Spacer()
             if !s.isProxySession {
                 Text(counts).font(.system(size: 12)).opacity(0.6)
@@ -483,7 +495,7 @@ struct MenuView: View {
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
                 Spacer()
-                Text(s.isProxySession ? "SOCKS и туннель" : "Сети и DNS")
+                Text(s.isProxySession ? "Прокси SOCKS" : "Сети и DNS")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 // Противовес «Назад», чтобы заголовок стоял по центру.
@@ -609,8 +621,9 @@ struct MenuView: View {
 
     private func hintRow(_ text: String) -> some View {
         HStack(spacing: 6) {
+            // Команду для копирования не обрезаем: переносим целиком.
             Text(text).font(.system(size: 10, design: .monospaced)).foregroundStyle(Palette.text)
-                .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             Spacer(minLength: 4)
             CopyButton(text: text)
         }
@@ -625,7 +638,7 @@ struct MenuView: View {
         return HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.net).font(.ocMono)
-                    .foregroundStyle(on ? Palette.text : Palette.tertiary)
+                    .foregroundStyle(on ? Palette.text : Palette.secondary)
                 if settled, on, let via = r.via, via != s.tundev {
                     Text("идёт мимо туннеля → \(via)").font(.system(size: 10.5)).foregroundStyle(Palette.warn)
                 } else if settled, on, r.via == nil, s.state == .connected {
@@ -645,11 +658,11 @@ struct MenuView: View {
         let on = store.zoneIsOn(z)
         return HStack(spacing: 8) {
             Text(z.zone).font(.ocMono)
-                .foregroundStyle(on ? Palette.text : Palette.tertiary)
+                .foregroundStyle(on ? Palette.text : Palette.secondary)
                 .lineLimit(1).truncationMode(.middle)
                 .layoutPriority(1)
             Spacer(minLength: 4)
-            Text(z.dns).font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+            Text(z.dns).font(.ocMonoSmall).foregroundStyle(Palette.secondary)
                 .lineLimit(1).truncationMode(.middle)
             Toggle("", isOn: Binding(get: { on }, set: { store.toggleZone(z.zone, to: $0) }))
                 .toggleStyle(.switch).controlSize(.small).labelsHidden()
@@ -720,31 +733,31 @@ struct StateLook {
         case .lost:
             let waited = s.linkLostSince.map { Int(Date().timeIntervalSince($0)) } ?? 0
             return .init(color: Palette.warn, title: name,
-                         subtitle: s.isProxySession ? "SOCKS не отвечает" : "Нет связи",
+                         subtitle: s.isProxySession ? "SOCKS не отвечает" : "Нет связи · восстанавливаю",
                          note: s.isProxySession
                              ? "SOCKS не отвечает \(waited) с — супервизор перезапустит прокси целиком."
-                             : "Связи нет \(waited) с. openconnect восстанавливает сессию сам — вход не потребуется.",
-                         showsTime: true, graph: true, graphActive: false, pulsing: true, details: true)
+                             : "Связи нет \(waited) с — восстанавливаю сессию. Повторный вход не нужен.",
+                         showsTime: false, graph: true, graphActive: false, pulsing: true, details: true)
         case .paused:
-            return .init(color: Palette.warn, title: name, subtitle: "На паузе",
-                         note: "Маршруты и зоны сняты, туннель и сессия живы — возврат без входа.",
+            return .init(color: Palette.warn, title: name, subtitle: "Приостановлено",
+                         note: "Сети и DNS временно сняты, сессия жива — возобновление без входа.",
                          showsTime: true, graph: false, graphActive: false, pulsing: false, details: true)
         case .starting:
             return .init(color: Palette.warn, title: name, subtitle: "Подключается…", note: nil,
                          showsTime: false, graph: false, graphActive: false, pulsing: true, details: false)
         case .needsLogin:
             return .init(color: Palette.bad, title: name, subtitle: "Нужен вход",
-                         note: "Сессия истекла, молча войти не удалось. Автоподключение остановлено — решение за вами.",
+                         note: "Сессия истекла, автоматически войти не удалось. Автоподключение ждёт вас.",
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .down:
-            return .init(color: Palette.line2, title: name, subtitle: "Отключён", note: nil,
+            return .init(color: Palette.line2, title: name, subtitle: "Отключено", note: nil,
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .foreign:
             return .init(color: Palette.tertiary, title: "Чужой openconnect", subtitle: "поднят не через ocbar",
-                         note: "Туннель поднят не через ocbar — он его не трогает.",
+                         note: "Это подключение ocbar не управляет и не трогает.",
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .missing:
-            return .init(color: Palette.bad, title: "ocbar не найден", subtitle: "нет клиента командной строки",
+            return .init(color: Palette.bad, title: "Не найден клиент ocbar", subtitle: "подключение недоступно",
                          note: OcbarClient.shared.lookupNote.isEmpty
                              ? "Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN."
                              : OcbarClient.shared.lookupNote,

@@ -43,7 +43,7 @@ struct SetupView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 720, minHeight: 600)
+        .frame(minWidth: 680, minHeight: 520)
         .onAppear { checkHelper() }
     }
 
@@ -106,15 +106,16 @@ struct SetupView: View {
                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: 460)
-        .padding(.top, 22)
+        .padding(.top, 16)
     }
 
     // --- шаг 1: системная часть -------------------------------------------
 
     private var systemStep: some View {
         VStack(spacing: 0) {
-            pageTitle("Установите системную часть",
-                      "Туннель поднимает помощник с правами администратора. Его ставит одна команда с паролем — один раз.")
+            pageTitle(helperReady ? "Системная часть установлена" : "Установите системную часть",
+                      helperReady ? "Можно переходить к профилю."
+                                  : "Туннель поднимает помощник с правами администратора. Его ставит одна команда с паролем — один раз.")
             Form {
                 Section {
                     LabeledContent("Состояние") {
@@ -138,7 +139,9 @@ struct SetupView: View {
                     }
                 } footer: {
                     Footnote(store.helperWarning
-                             ?? "Выполните команду в Терминале: sudo спросит пароль там, приложение само этого сделать не может. Режиму «Прокси SOCKS» помощник не нужен.")
+                             ?? (helperReady
+                                 ? "После обновления ocbar помощника обновляет та же команда."
+                                 : "Выполните команду в Терминале: sudo спросит пароль там, приложение само этого сделать не может. Режиму «Прокси SOCKS» помощник не нужен."))
                 }
             }
             .formStyle(.grouped)
@@ -194,7 +197,7 @@ struct SetupView: View {
         VStack(spacing: 18) {
             pageTitle(store.status.state == .connected ? "Готово — подключено" : "Первый вход",
                       store.status.state == .connected
-                      ? "Дальше ocbar подключается молча, а когда нужен человек — скажет в меню."
+                      ? "Дальше ocbar подключается автоматически; если понадобится вход, он скажет в меню."
                       : "Войдите как обычно, руками. ocbar запомнит форму входа и предложит сохранить пароль и источник кода.")
             if store.status.state == .connected {
                 Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(Palette.ok)

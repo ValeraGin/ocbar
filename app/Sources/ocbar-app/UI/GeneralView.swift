@@ -23,18 +23,18 @@ struct GeneralView: View {
             Section {
                 Picker("Автоподключение", selection: Binding(get: { policy }, set: { setPolicy($0) })) {
                     Text("Вручную").tag("manual")
-                    Text("Как в прошлый раз").tag("resume")
+                    Text("Восстанавливать прошлое подключение").tag("resume")
                     ForEach(store.status.profiles.filter { !$0.isPassword }) { p in
                         Text("Всегда: \(p.display)").tag("always " + p.name)
                     }
                 }
                 .disabled(busy)
-                Toggle("Не подключаться в этой сети", isOn: Binding(get: { skipHere }, set: { setSkip($0) }))
+                Toggle("Не подключаться автоматически в этой сети", isOn: Binding(get: { skipHere }, set: { setSkip($0) }))
                     .disabled(busy)
             } header: {
                 Text("Подключение")
             } footer: {
-                footnote("Сеть узнаётся по маршрутизатору, без геопозиции. Если сессия истекла, супервизор остановится и скажет «нужен вход».")
+                footnote("Сеть определяется по маршрутизатору, без геолокации. Если сессия истекла, автоподключение остановится и меню покажет «Нужен вход».")
             }
             Section {
                 Toggle("Режим разработчика", isOn: $developer)

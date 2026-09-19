@@ -23,7 +23,7 @@ struct OcbarApp: App {
 
         Window("Настройка ocbar", id: WindowID.settings) { SettingsWindow() }
         Window("Первый запуск ocbar", id: WindowID.setup) { SetupView() }
-            .defaultSize(width: 780, height: 640)
+            .defaultSize(width: 740, height: 560)
 
         Window("Журналы ocbar", id: WindowID.logs) { LogsView() }
             .defaultSize(width: 880, height: 540)

@@ -32,10 +32,11 @@ final class PromptDialog {
             .applying(.init(paletteColors: [.systemBlue]))
         if let icon = NSImage(systemSymbolName: secure ? "key.fill" : "message.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg) { alert.icon = icon }
-        var info = profile.isEmpty ? "" : "Вход в «\(profile)». "
-        info += secure ? "Пароля нет в связке ключей — введите его. Чтобы не спрашивать каждый раз: ocbar secret set-password."
-                       : "Шлюз прислал код на телефон — введите его."
-        if !gatewayLabel.isEmpty { info += "\nШлюз спрашивает: «\(gatewayLabel)»" }
+        // Подпись шлюза («Response:») в окно не выводим: человеку она ничего не
+        // говорит; она есть в журнале входа.
+        let target = profile.isEmpty ? "" : " для профиля «\(profile)»"
+        let info = secure ? "Введите пароль VPN\(target). Чтобы не спрашивать каждый раз, сохраните его: ocbar secret set-password."
+                          : "Введите код из SMS\(target)."
         alert.informativeText = info
         alert.addButton(withTitle: "Войти")
         alert.addButton(withTitle: "Отмена")
@@ -45,7 +46,7 @@ final class PromptDialog {
         } else {
             field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 28))
             field.font = .monospacedDigitSystemFont(ofSize: 17, weight: .regular)
-            field.placeholderString = "123456"
+            field.placeholderString = "Код"
             field.alignment = .center
             // Код в SMS приходит и в подсказку над клавиатурой — поле называем
             // как одноразовый код, чтобы macOS её предложила.
