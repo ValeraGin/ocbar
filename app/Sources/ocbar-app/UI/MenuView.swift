@@ -346,11 +346,12 @@ struct MenuView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(p.display).font(.system(size: 13))
                     .lineLimit(1).truncationMode(.tail)
-                if p.isPassword {
-                    Text("пароль + код из SMS — не через ocbar")
-                        .font(.system(size: 11)).opacity(0.6)
-                } else if !p.descr.isEmpty {
-                    Text(p.descr).font(.system(size: 11)).opacity(0.6).lineLimit(1)
+                // Под названием — домен подключения: одинаковые названия у
+                // разных шлюзов иначе не различить.
+                let sub = [p.isPassword ? "пароль + SMS" : p.descr, p.host].filter { !$0.isEmpty }
+                if !sub.isEmpty {
+                    Text(sub.joined(separator: " · ")).font(.system(size: 11)).opacity(0.6)
+                        .lineLimit(1).truncationMode(.middle)
                 }
             }
             Spacer()

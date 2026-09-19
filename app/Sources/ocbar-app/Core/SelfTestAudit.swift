@@ -113,6 +113,7 @@ extension SelfTest {
         profile_list=main|Дубль||
         profile_list=pw|Пароль|password|
         profile_list=odd|A|B|password|x
+        profile_url=pw|https://vpn.example.test/sms?x=1
         route=10.0.0.0/8 - on
         route=10.0.0.0/8 - on
         """)
@@ -122,6 +123,9 @@ extension SelfTest {
         t.check("состояние: «|» в названии не сдвигает поля",
                 main?.title == "Мой|офис" && main?.isPassword == false, "\(main?.title ?? "—") / \(main?.auth ?? "—")")
         t.check("состояние: парольная группа распознана", s.profiles.first { $0.name == "pw" }?.isPassword == true)
+        t.check("состояние: домен профиля — без схемы и группы",
+                s.profiles.first { $0.name == "pw" }?.host == "vpn.example.test",
+                s.profiles.first { $0.name == "pw" }?.host ?? "—")
         let odd = s.profiles.first { $0.name == "odd" }
         t.check("состояние: «|» в названии парольной группы", odd?.isPassword == true && odd?.title == "A|B",
                 "\(odd?.title ?? "—") / \(odd?.auth ?? "—")")

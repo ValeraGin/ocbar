@@ -536,7 +536,7 @@ order_sort() {
         | sort -n | cut -f2-
 }
 
-# "имя|название|auth|описание" по всем профилям, по строке на профиль.
+# "имя|название|auth|описание|адрес" по всем профилям, по строке на профиль.
 # Приложение режет строку по «|» на четыре поля, поэтому «|» внутри поля
 # заменяется на «¦»: иначе черта в названии сдвигала описание в чужое поле.
 # Каждое имя — один раз, профиль-файл важнее одноимённой секции
@@ -544,27 +544,29 @@ order_sort() {
 # файла и из profiles.conf выдавался дважды, и меню показывало всё вдвое.
 profiles_summary() { profiles_summary_raw | order_sort; }
 profiles_summary_raw() {
-    local n f files nm au ds; files=$(profile_files)
+    local n f files nm au ds ur; files=$(profile_files)
     while read -r n; do
         [ -n "$n" ] || continue
         f=$(profile_file "$n"); [ -n "$f" ] || continue
         nm=$(pf_get "$f" Connection Name); au=$(pf_get "$f" Connection Auth); ds=$(pf_get "$f" Connection Description)
-        printf '%s|%s|%s|%s\n' "${n//\|/¦}" "${nm//\|/¦}" "${au//\|/¦}" "${ds//\|/¦}"
+        ur=$(pf_get "$f" Connection Url)
+        printf '%s|%s|%s|%s|%s\n' "${n//\|/¦}" "${nm//\|/¦}" "${au//\|/¦}" "${ds//\|/¦}" "${ur//\|/¦}"
     done <<< "$files"
     [ -f "$PROFILES" ] || return 0
     OCBAR_SUMMARY_SKIP="$files" awk -v bom="$BOM" '
         function val(line,   v) { v = line; sub("^[^=]*=[ \t]*", "", v); sub("[ \t]+$", "", v); return v }
         function clean(x) { gsub(/\|/, "¦", x); return x }
         function flush() {
-            if (cur != "" && !(cur in skip) && !seen[cur]++) print clean(cur) "|" clean(nm) "|" clean(au) "|" clean(ds)
+            if (cur != "" && !(cur in skip) && !seen[cur]++) print clean(cur) "|" clean(nm) "|" clean(au) "|" clean(ds) "|" clean(ur)
         }
         BEGIN { n = split(ENVIRON["OCBAR_SUMMARY_SKIP"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") skip[a[i]] = 1 }
         FNR == 1 { sub("^" bom, "") }
         { sub(/\r$/, "") }
-        /^\[/ { flush(); cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; ds = ""; next }
+        /^\[/ { flush(); cur = $0; gsub(/^\[|\]$/, "", cur); nm = ""; au = ""; ds = ""; ur = ""; next }
         /^[ \t]*name[ \t]*=/        { if (nm == "") nm = val($0) }
         /^[ \t]*auth[ \t]*=/        { if (au == "") au = val($0) }
         /^[ \t]*description[ \t]*=/ { if (ds == "") ds = val($0) }
+        /^[ \t]*url[ \t]*=/         { if (ur == "") ur = val($0) }
         END { flush() }
     ' "$PROFILES"
 }
@@ -2024,7 +2026,13 @@ cmd_status() {
         printf 'profile_mode=%s\nproxy_port=%s\nsystem_proxy=%s\n' \
             "${P_KIND:-tunnel}" "${P_PROXY_PORT:-11080}" "${P_SYS_PROXY:-off}"
         printf 'autofill=%s\n' "$(rules_source_label)"
-        profiles_summary | while IFS= read -r line; do [ -n "$line" ] && printf 'profile_list=%s\n' "$line"; done
+        # Адрес — отдельной строкой profile_url: прежние версии приложения режут
+        # profile_list на четыре поля, и пятое сдвинуло бы описание.
+        profiles_summary | while IFS='|' read -r n nm au ds ur; do
+            [ -n "$n" ] || continue
+            printf 'profile_list=%s|%s|%s|%s\n' "$n" "$nm" "$au" "$ds"
+            [ -z "$ur" ] || printf 'profile_url=%s|%s\n' "$n" "$ur"
+        done
         printf 'default=%s\n' "$(profile_default)"
         return 0
     fi
@@ -2209,12 +2217,10 @@ profiles_order() {
 cmd_profiles() {
     if [ "${1:-}" = order ]; then shift; profiles_order "$@"; return 0; fi
     [ -n "$(profile_list)" ] || die "профилей нет: положите файл в $PROFILE_DIR (образец etc/example.ocbar) или заполните $PROFILES"
-    local d p nm au ds; d=$(profile_default)
-    while IFS='|' read -r p nm au ds; do
+    local d p nm au ds url; d=$(profile_default)
+    while IFS='|' read -r p nm au ds url; do
         [ -n "$p" ] || continue
-        case "$au" in password) au="(пароль+OTP, не SSO)" ;; esac
-        local url f; f=$(profile_file "$p")
-        if [ -n "$f" ]; then url=$(pf_get "$f" Connection Url); else url=$(profile_get "$p" url); fi
+        case "$au" in password) au="(пароль + код из SMS)" ;; esac
         printf '  %s %s %s %s  %s\n' "$([ "$p" = "$d" ] && echo '*' || echo ' ')" \
             "$(pad "$p" 18)" "$(pad "$nm" 20)" "$url" "$au"
         if [ -n "$ds" ]; then printf '      %s%s%s\n' "$c_dim" "$ds" "$c_off"; fi
@@ -3255,6 +3261,7 @@ PROFILE
     out=$(run status --short || true)
     has "состояние без туннеля" "state=down" "$out"
     has "профиль в списке" "profile_list=t|Проба||" "$out"
+    has "адрес профиля отдельной строкой" "profile_url=t|vpn.example.test/group" "$out"
     has "профиль по умолчанию" "default=t" "$out"
     has "режим профиля" "profile_mode=tunnel" "$out"
     has "порт SOCKS по умолчанию" "proxy_port=11080" "$out"
