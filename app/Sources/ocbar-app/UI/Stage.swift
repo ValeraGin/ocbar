@@ -56,9 +56,12 @@ enum Fixture {
         var s = Status()
         s.profile = "main"
         s.profiles = [
-            ProfileEntry(name: "main", title: "Основной", auth: "", descr: "Любые устройства"),
-            ProfileEntry(name: "office", title: "Из офиса", auth: "", descr: "Изнутри сети"),
-            ProfileEntry(name: "sms", title: "Парольная группа", auth: "password", descr: ""),
+            ProfileEntry(name: "main", title: "Основной", auth: "", descr: "Любые устройства",
+                         url: "vpn.example.com/employees"),
+            ProfileEntry(name: "office", title: "Из офиса", auth: "", descr: "Изнутри сети",
+                         url: "office-vpn.example.com/inside"),
+            ProfileEntry(name: "sms", title: "Парольная группа", auth: "password", descr: "",
+                         url: "vpn2.example.com/sms"),
         ]
         s.defaultProfile = "main"
         s.iface = "en0"

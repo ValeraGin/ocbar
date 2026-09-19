@@ -192,28 +192,38 @@ struct WideButton: View {
             .frame(height: compact ? 26 : 32)
             .contentShape(Rectangle())
         }
-        .buttonStyle(WideButtonStyle(kind: kind))
+        .buttonStyle(WideButtonStyle(kind: kind, hover: hover && enabled))
         .disabled(!enabled)
+        .onHover { hover = $0 }
         .accessibilityLabel(title)
     }
+    @State private var hover = false
 }
 
+// Под курсором кнопка заметно меняется: подложка плотнее, обводка ярче —
+// видно, на что сейчас нажмёшь.
 private struct WideButtonStyle: ButtonStyle {
     let kind: WideButton.Kind
+    let hover: Bool
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         let (fill, text): (Color, Color) = switch kind {
         case .primary: (Palette.accent, .white)
-        case .destructive: (Palette.bad.opacity(0.18), Palette.bad)
-        case .neutral: (Palette.group, Palette.text)
+        case .destructive: (Palette.bad.opacity(hover ? 0.30 : 0.18), Palette.bad)
+        case .neutral: (hover ? Palette.text.opacity(0.14) : Palette.group, Palette.text)
+        }
+        let stroke: Color = switch kind {
+        case .primary: hover ? .white.opacity(0.35) : .clear
+        case .destructive: hover ? Palette.bad.opacity(0.6) : .clear
+        case .neutral: hover ? Palette.text.opacity(0.3) : Palette.groupLine
         }
         return configuration.label
             .foregroundStyle(text)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fill))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(kind == .neutral ? Palette.groupLine : .clear))
-            .brightness(configuration.isPressed ? -0.08 : 0)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(stroke))
+            .brightness(configuration.isPressed ? -0.1 : (hover && kind == .primary ? 0.08 : 0))
+            .animation(.easeOut(duration: 0.1), value: hover)
             .opacity(isEnabled ? 1 : 0.45)
     }
 }

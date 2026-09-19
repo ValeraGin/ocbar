@@ -24,7 +24,14 @@ struct ProfileEntry: Identifiable, Hashable {
     let title: String
     let auth: String       // пусто = sso; "password" — парольная группа
     let descr: String
+    var url = ""
     var id: String { name }
+    /// Домен подключения без схемы и группы: vpn.example.com/employees → vpn.example.com.
+    var host: String {
+        var u = url
+        if let r = u.range(of: "://") { u = String(u[r.upperBound...]) }
+        return String(u.prefix { $0 != "/" && $0 != "?" })
+    }
     var display: String { title.isEmpty ? name : title }
     var isPassword: Bool { auth == "password" }
 }
@@ -172,6 +179,13 @@ struct Status {
                 s.profiles.append(ProfileEntry(name: name, title: title,
                                                auth: auth == "password" ? "password" : "",
                                                descr: descr))
+            case "profile_url":
+                // «имя|адрес» — отдельной строкой после profile_list.
+                guard let bar = value.firstIndex(of: "|") else { continue }
+                let name = String(value[..<bar])
+                if let i = s.profiles.firstIndex(where: { $0.name == name }) {
+                    s.profiles[i].url = String(value[value.index(after: bar)...])
+                }
             default: break
             }
         }
