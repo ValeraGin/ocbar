@@ -1326,12 +1326,13 @@ def ask(label, secret=False):
     if tty:
         import getpass
         with open("/dev/tty", "r+") as t:
-            if secret: return getpass.getpass(label + " ", stream=t)
-            t.write(label + " "); t.flush(); return t.readline().strip()
+            if secret: return getpass.getpass(label + " ", stream=t), 0
+            t.write(label + " "); t.flush(); return t.readline().strip(), 0
     r = subprocess.run(env["OCBAR_PROMPT_CMD"], shell=True, stdout=subprocess.PIPE,
-                       env=dict(env, OCBAR_PROMPT_LABEL=label))
+                       env=dict(env, OCBAR_PROMPT_LABEL=label, OCBAR_PROMPT_SECRET="1" if secret else ""))
     if r.returncode != 0: return None, r.returncode
-    return r.stdout.decode().strip(), 0
+    out = r.stdout.decode()
+    return (out[:-1] if out.endswith("\n") else out) if secret else out.strip(), 0
 pid, fd = pty.fork()
 if pid == 0:
     os.execvp(argv[0], argv)
@@ -1360,16 +1361,17 @@ while True:
     if ("password" in low or "парол" in low) and not sent_pw:
         sent_pw = True
         if not pw:
-            if not tty: log("пароля нет в связке — ocbar secret set-password <профиль>"); stop(1)
-            pw = ask(tail, secret=True)
+            # Пароля нет в связке — спросить человека (окно со звёздочками).
+            log("пароля нет в источнике профиля — спрашиваю человека")
+            pw, rc = ask(tail, secret=True)
+            if not pw: log("пароль не введён"); stop(rc if rc in (2, 3) else 3)
         secrets.add(pw); os.write(fd, (pw + "\n").encode()); log("пароль подставлен"); continue
     if "user" in low or "логин" in low or "имя" in low:
         os.write(fd, (user + "\n").encode()); continue
     humans += 1
     if humans > 3: log("шлюз спрашивает код в четвёртый раз — останавливаюсь"); stop(1)
     log("шлюз спрашивает: " + tail + " — вводит человек")
-    if tty: code, rc = ask(tail), 0
-    else: code, rc = ask(tail)
+    code, rc = ask(tail)
     if not code:
         log("код не введён"); stop(rc if rc in (2, 3) else 3)
     secrets.add(code); os.write(fd, (code + "\n").encode())
@@ -1406,11 +1408,12 @@ authenticate_password() { # печатает "token hash post_url"
         prompt=$OCBAR_PROMPT_CMD; tty=0
     else
         local auth; auth=$(auth_path) || die "не найден ocbar-auth — нужен для окна кода из SMS"
-        prompt="$(printf '%q' "$auth") --prompt \"\$OCBAR_PROMPT_LABEL\" --prompt-title $(printf '%q' "$P_TITLE") --timeout 300"
+        prompt="$(printf '%q' "$auth") --prompt \"\$OCBAR_PROMPT_LABEL\" \${OCBAR_PROMPT_SECRET:+--prompt-secure} --prompt-title \"\$OCBAR_PROMPT_TITLE\" --timeout 300"
     fi
     mkdir -p "$LOG_DIR"
     local rc=0 res
     res=$(OCBAR_PASSWORD="$pw" OCBAR_USERNAME="$P_USER" OCBAR_PROMPT_TTY="$tty" OCBAR_PROMPT_CMD="$prompt" \
+          OCBAR_PROMPT_TITLE="$P_TITLE" \
           /usr/bin/python3 -c "$PW_DRIVER" "${cmd[@]}" 2> >(auth_log_tee)) || rc=$?
     case $rc in
         0) printf '%s\n' "$res" ;;
@@ -3418,6 +3421,12 @@ STUB
     has "парольная группа: отмена окна кода — вход отменён" "вход отменён" "$out"
     out=$(OCBAR_SILENT=1 OCBAR_OPENCONNECT="$tmp/ocpw" run _selftest-fn pw_auth pw </dev/null; echo "rc=$?")
     has "парольная группа: автоподключение не зовёт человека — код 5" "rc=5" "$out"
+    # Пароля нет в источнике — его тоже спрашивают у человека, со звёздочками.
+    sed -i '' 's/^PasswordCommand = echo secret-pw/PasswordCommand = true/' "$tmp/profiles/pw.ocbar"
+    out=$(OCBAR_OPENCONNECT="$tmp/ocpw" OCBAR_PWSTUB_LOG="$tmp/pwstub.log" \
+          OCBAR_PROMPT_CMD='if [ -n "$OCBAR_PROMPT_SECRET" ]; then echo secret-pw; else echo 424242; fi' \
+          run _selftest-fn pw_auth pw </dev/null || true)
+    has "парольная группа: пароля нет — спрошен у человека, вход прошёл" "tok123" "$out"
     # Дальше проверки рассчитаны на единственный профиль t.
     rm -f "$tmp/profiles/pw.ocbar"
     out=$status_out

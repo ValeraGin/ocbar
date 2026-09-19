@@ -3,6 +3,15 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.7.1 — 2026-09-19
+
+- The sign-in window fills the login even when the profile's rules only
+  mention the password. Rules recorded while the identity provider remembered
+  the login had no username line, so after a full sign-out the form stopped at
+  an empty login field.
+- Password groups ask for the password in a secure window when the profile's
+  source has none, instead of giving up before the SMS step.
+
 ## 0.7.0 — 2026-09-19
 
 - Settings in the style of macOS System Settings: sections with icons in a

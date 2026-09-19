@@ -42,6 +42,7 @@ struct Args {
     var prompt: String?
     var promptTitle = ""
     var promptShot: String?
+    var promptSecure = false
     var cameraWindowShot: String?
     var teachOn = false
     var outFile: String?
@@ -89,6 +90,7 @@ func usage() -> String {
       --prompt ПОДПИСЬ      окно «Код из SMS» (парольная группа): ответ — в stdout,
                             отмена — код 3, тайм-аут (--timeout) — код 2
         --prompt-title ИМЯ  название профиля в окне
+        --prompt-secure     спросить пароль (поле со звёздочками)
       --prompt-shot FILE    снимок окна «Код из SMS» в PNG
       --teach-dialog-shot FILE   снимок окна «Запомнить для следующего входа?»
                             в PNG, без показа и без записи в связку ключей
@@ -172,6 +174,7 @@ func parseArgs() -> Args {
         case "--prompt": a.prompt = next(arg)
         case "--prompt-title": a.promptTitle = next(arg)
         case "--prompt-shot": a.promptShot = next(arg)
+        case "--prompt-secure": a.promptSecure = true
         case "--camera-window-shot": a.cameraWindowShot = next(arg)
         case "--out": a.outFile = next(arg)
         case "--select": a.selectEntry = next(arg)
@@ -466,7 +469,7 @@ if let label = args.prompt {
     app.setActivationPolicy(.accessory)
     DispatchQueue.main.async {
         let started = Date()
-        let answer = PromptDialog(label: label, profile: args.promptTitle).run(timeout: args.timeout)
+        let answer = PromptDialog(label: label, profile: args.promptTitle, secure: args.promptSecure).run(timeout: args.timeout)
         guard let answer else {
             let timedOut = Date().timeIntervalSince(started) >= args.timeout - 1
             Log.info(timedOut ? "окно кода закрыто по тайм-ауту" : "код вводить не стали")

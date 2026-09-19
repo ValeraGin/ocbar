@@ -6,12 +6,15 @@ import AppKit
 final class PromptDialog {
     let label: String
     let profile: String
+    /// Пароль, а не код: поле со звёздочками и другие слова.
+    let secure: Bool
     private(set) var alert = NSAlert()
     private var field: NSTextField!
 
-    init(label: String, profile: String) {
+    init(label: String, profile: String, secure: Bool = false) {
         self.label = label
         self.profile = profile
+        self.secure = secure
     }
 
     /// Подпись шлюза «Response:» или «Verification code:» — человеку понятнее
@@ -22,26 +25,32 @@ final class PromptDialog {
 
     func build() {
         alert = NSAlert()
-        alert.messageText = "Код из SMS"
+        alert.messageText = secure ? "Пароль VPN" : "Код из SMS"
         // У ocbar-auth нет бандла и своей иконки — без этого NSAlert
         // показал бы папку.
         let cfg = NSImage.SymbolConfiguration(pointSize: 40, weight: .regular)
             .applying(.init(paletteColors: [.systemBlue]))
-        if let icon = NSImage(systemSymbolName: "message.fill", accessibilityDescription: nil)?
+        if let icon = NSImage(systemSymbolName: secure ? "key.fill" : "message.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg) { alert.icon = icon }
         var info = profile.isEmpty ? "" : "Вход в «\(profile)». "
-        info += "Шлюз прислал код на телефон — введите его."
+        info += secure ? "Пароля нет в связке ключей — введите его. Чтобы не спрашивать каждый раз: ocbar secret set-password."
+                       : "Шлюз прислал код на телефон — введите его."
         if !gatewayLabel.isEmpty { info += "\nШлюз спрашивает: «\(gatewayLabel)»" }
         alert.informativeText = info
         alert.addButton(withTitle: "Войти")
         alert.addButton(withTitle: "Отмена")
-        field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 28))
-        field.font = .monospacedDigitSystemFont(ofSize: 17, weight: .regular)
-        field.placeholderString = "123456"
-        field.alignment = .center
-        // Код в SMS приходит и в подсказку над клавиатурой — поле называем
-        // как одноразовый код, чтобы macOS её предложила.
-        field.contentType = .oneTimeCode
+        if secure {
+            field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+            field.contentType = .password
+        } else {
+            field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 28))
+            field.font = .monospacedDigitSystemFont(ofSize: 17, weight: .regular)
+            field.placeholderString = "123456"
+            field.alignment = .center
+            // Код в SMS приходит и в подсказку над клавиатурой — поле называем
+            // как одноразовый код, чтобы macOS её предложила.
+            field.contentType = .oneTimeCode
+        }
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
     }
@@ -56,7 +65,7 @@ final class PromptDialog {
         let response = alert.runModal()
         t.invalidate()
         guard response == .alertFirstButtonReturn else { return nil }
-        let v = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let v = secure ? field.stringValue : field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return v.isEmpty ? nil : v
     }
 

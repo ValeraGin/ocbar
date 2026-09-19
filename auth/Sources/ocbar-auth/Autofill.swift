@@ -90,6 +90,7 @@ enum Autofill {
     /// встроенные функции, которыми он сравнивает хост.
     static func script(rules: [AutofillRule], creds: Credentials, totpCode: String?,
                        allowed: [[String: Any]]? = nil) -> String {
+        let rules = withImplicitUsername(rules, creds: creds)
         var body = "(function(){\n"
         if let allowed {
             let aj = String(data: (try? JSONSerialization.data(withJSONObject: allowed, options: [.sortedKeys])) ?? Data("[]".utf8),
@@ -152,6 +153,25 @@ enum Autofill {
         body += "  var seen = []; document.querySelectorAll('input').forEach(function(i){ if (visible(i)) seen.push((i.type||'')+':'+(i.name||i.id||'')); });\n"
         body += "  return {filled: filled, inputs: seen, waiting: emptyKnown()};\n})()"
         return body
+    }
+
+    /// Логин, о котором правила молчат. Разметка записывает только то, что
+    /// человек отметил, а поле логина провайдер часто заполняет сам (помнит
+    /// по cookie) — тогда в правилах его нет. После сброса входа та же форма
+    /// приходит с пустым логином, и вход вставал. Поэтому: если правила
+    /// заполняют пароль, а про логин не говорят ничего, встроенные селекторы
+    /// логина встают перед первым заполнением. Заполненное поле не трогаем —
+    /// скрипт подставляет только в пустое.
+    static func withImplicitUsername(_ rules: [AutofillRule], creds: Credentials) -> [AutofillRule] {
+        guard let user = creds.username, !user.isEmpty else { return rules }
+        func fills(_ r: AutofillRule, _ what: String) -> Bool {
+            if case .fill(let w) = r.action { return w == what }; return false
+        }
+        guard !rules.contains(where: { fills($0, "username") }),
+              let first = rules.firstIndex(where: { fills($0, "password") }) else { return rules }
+        var out = rules
+        out.insert(contentsOf: defaultRules.filter { fills($0, "username") }, at: first)
+        return out
     }
 
     private static func jsString(_ s: String) -> String {
