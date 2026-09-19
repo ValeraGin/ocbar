@@ -12,25 +12,54 @@ final class TopAnchor: NSObject {
     private(set) var top: CGFloat?
     private var observers: [NSObjectProtocol] = []
 
+    private var fixing = false
+    /// Подробный журнал перемещений окна меню: временно включён всем, пока
+    /// разбираемся, почему меню отъезжает от значка. Строк немного — только
+    /// при изменении размера и сдвиге.
+    private var trace: Bool { !CommandLine.arguments.contains("--stage") }
+    private func log(_ what: String, _ w: NSWindow) {
+        guard trace else { return }
+        AppLog.write(String(format: "меню-окно: %@ x=%.0f y=%.0f w=%.0f h=%.0f верх=%.0f ждём=%@",
+                            what, w.frame.minX, w.frame.minY, w.frame.width, w.frame.height,
+                            w.frame.maxY, top.map { String(format: "%.0f", $0) } ?? "—"))
+    }
+
     func attach(_ w: NSWindow) {
         guard w !== window else { return }
         detach()
         window = w
-        top = w.frame.maxY
+        top = w.isVisible ? w.frame.maxY : nil
         let nc = NotificationCenter.default
         // queue: nil — обработчик выполняется сразу, в том же потоке: окно
         // не успевает показаться в неверном месте.
-        observers.append(nc.addObserver(forName: NSWindow.didBecomeKeyNotification, object: w, queue: nil) { [weak self] _ in
-            self?.top = w.frame.maxY
-        })
+        log("привязка", w)
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didUpdateNotification] {
+            observers.append(nc.addObserver(forName: name, object: w, queue: nil) { [weak self] _ in
+                // Пока окно только показывается, его ставит система — верх
+                // берём оттуда.
+                guard let self, !self.fixing else { return }
+                if self.top == nil { self.top = w.frame.maxY; self.log("верх запомнен", w) }
+            })
+        }
         observers.append(nc.addObserver(forName: NSWindow.didResizeNotification, object: w, queue: nil) { [weak self] _ in
-            self?.keep()
+            self?.log("размер", w); self?.keep()
+        })
+        // Окно двигают и после изменения размера — держим верх и тогда.
+        observers.append(nc.addObserver(forName: NSWindow.didMoveNotification, object: w, queue: nil) { [weak self] _ in
+            self?.log("сдвиг", w); self?.keep()
+        })
+        // Меню закрылось — следующее открытие система поставит заново.
+        observers.append(nc.addObserver(forName: NSWindow.didResignKeyNotification, object: w, queue: nil) { [weak self] _ in
+            self?.top = nil; self?.log("закрыто", w)
         })
     }
 
     func keep() {
-        guard let w = window, let top, abs(w.frame.maxY - top) > 0.5 else { return }
+        guard !fixing, let w = window, let top, abs(w.frame.maxY - top) > 0.5 else { return }
+        fixing = true
         w.setFrameOrigin(NSPoint(x: w.frame.minX, y: top - w.frame.height))
+        fixing = false
+        log("поправлено", w)
     }
 
     func detach() {
