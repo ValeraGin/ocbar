@@ -4,7 +4,7 @@ import SwiftUI
 // подстроке, «показать в Finder». Ничего не меняет — только читает.
 struct LogsView: View {
     @State private var sources: [LogSource] = []
-    @State private var current: String = "supervisor"
+    @State private var current: String = "all"
     @State private var filter = ""
     @State private var snapshot = LogReader.Snapshot()
     @State private var follow = true
@@ -32,7 +32,7 @@ struct LogsView: View {
             Picker("", selection: $current) {
                 ForEach(sources) { s in Text(s.title).tag(s.id) }
             }
-            .pickerStyle(.segmented).labelsHidden().frame(width: 400)
+            .pickerStyle(.segmented).labelsHidden().frame(width: 520)
             .onChange(of: current) { _ in reload() }
 
             TextField("фильтр по подстроке", text: $filter)
@@ -112,12 +112,16 @@ struct LogsView: View {
 
     private static func sources(from v: [String: String]) -> [LogSource] {
         [
+            // «Все» — общая лента по времени; путь у неё — каталог журналов.
+            LogSource(id: "all", title: "Все",
+                      path: ((v["supervisor_log"] ?? OcbarClient.shared.supervisorLog) as NSString).deletingLastPathComponent),
             LogSource(id: "supervisor", title: "Супервизор",
                       path: v["supervisor_log"] ?? OcbarClient.shared.supervisorLog),
             LogSource(id: "openconnect", title: "openconnect",
                       path: v["openconnect_log"] ?? OcbarClient.shared.openconnectLog),
             LogSource(id: "proxy", title: "прокси",
                       path: v["proxy_log"] ?? OcbarClient.shared.proxyLog),
+            LogSource(id: "auth", title: "Вход", path: (AppLog.path as NSString).deletingLastPathComponent + "/auth.log"),
             LogSource(id: "app", title: "Приложение", path: AppLog.path),
         ]
     }
@@ -130,8 +134,10 @@ struct LogsView: View {
     private func reload() {
         guard let source else { return }
         let filter = self.filter
+        let parts = sources.filter { $0.id != "all" }.map { (tag: $0.title.lowercased(), path: $0.path) }
         DispatchQueue.global(qos: .utility).async {
-            let snap = LogReader.read(path: source.path, filter: filter)
+            let snap = source.id == "all" ? LogReader.merged(parts, filter: filter)
+                                          : LogReader.read(path: source.path, filter: filter)
             DispatchQueue.main.async { self.snapshot = snap }
         }
     }
