@@ -72,3 +72,71 @@ enum LogReader {
         return snap
     }
 }
+
+// Общая лента: хвосты нескольких журналов одним списком по времени, с меткой
+// источника — как `ocbar logs`. Строка без времени встаёт сразу за
+// предыдущей строкой своего файла.
+extension LogReader {
+    static func merged(_ sources: [(tag: String, path: String)], filter: String) -> Snapshot {
+        var snap = Snapshot()
+        let needle = filter.trimmed.lowercased()
+        var rows: [(ts: String, order: Int, tag: String, text: String)] = []
+        var order = 0
+        for src in sources {
+            let one = read(path: src.path, filter: "")
+            snap.size += one.size
+            var last = ""
+            for line in one.lines {
+                var text = line.text
+                if let (ts, rest) = splitTime(text) { last = ts; text = rest }
+                for pre in ["ocbar-auth: ", "ocbar-helper: ", "ocbar: "] where text.hasPrefix(pre) {
+                    text = String(text.dropFirst(pre.count)); break
+                }
+                guard !text.trimmed.isEmpty else { continue }
+                if !needle.isEmpty, !text.lowercased().contains(needle), !src.tag.lowercased().contains(needle) { continue }
+                rows.append((last, order, src.tag, text))
+                order += 1
+            }
+        }
+        rows.sort { ($0.ts, $0.order) < ($1.ts, $1.order) }
+        if rows.count > maxLines { rows.removeFirst(rows.count - maxLines) }
+        let width = sources.map(\.tag.count).max() ?? 0
+        var day = ""
+        var lines: [Line] = []
+        for r in rows {
+            let parts = r.ts.split(separator: " ")
+            if parts.count == 2, String(parts[0]) != day {
+                day = String(parts[0])
+                lines.append(Line(id: lines.count, text: "── \(day) ──"))
+            }
+            let time = parts.count == 2 ? String(parts[1]) : "--:--:--"
+            let tag = r.tag.padding(toLength: width, withPad: " ", startingAt: 0)
+            lines.append(Line(id: lines.count, text: "\(time)  \(tag)  \(r.text)"))
+        }
+        if lines.isEmpty { snap.problem = needle.isEmpty ? "журналы пусты" : "ни одной строки с «\(filter)»" }
+        snap.lines = lines
+        return snap
+    }
+
+    /// «2026-09-19 20:58:19 …» или «[2026-09-19 20:58:19] …» → время и остаток.
+    static func splitTime(_ s: String) -> (String, String)? {
+        var t = Substring(s)
+        let bracket = t.hasPrefix("[")
+        if bracket { t = t.dropFirst() }
+        guard t.count >= 19 else { return nil }
+        let head = t.prefix(19)
+        let ok = head.enumerated().allSatisfy { i, c in
+            switch i {
+            case 4, 7: return c == "-"
+            case 10: return c == " " || c == "T"
+            case 13, 16: return c == ":"
+            default: return c.isNumber
+            }
+        }
+        guard ok else { return nil }
+        var rest = t.dropFirst(19)
+        if bracket { guard rest.hasPrefix("]") else { return nil }; rest = rest.dropFirst() }
+        if rest.hasPrefix(" ") { rest = rest.dropFirst() }
+        return (head.replacingOccurrences(of: "T", with: " "), String(rest))
+    }
+}

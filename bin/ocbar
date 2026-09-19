@@ -1424,6 +1424,98 @@ authenticate_password() { # печатает "token hash post_url"
     esac
 }
 
+# Общий журнал: хвосты всех журналов одной лентой по времени, с меткой
+# источника. Разбирать «что было в 20:58» по пяти файлам и сводить время
+# глазами — долго; здесь видно, как вход, супервизор и openconnect шли друг
+# за другом. Строка без времени (старые записи openconnect, продолжения)
+# встаёт сразу за предыдущей строкой своего файла.
+LOGS_MERGE='
+import os, re, sys, time
+n, follow = int(sys.argv[1]), sys.argv[2] == "1"
+srcs = [a.split("=", 1) for a in sys.argv[3:]]
+TS = re.compile(r"^\[?(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d:\d\d)\]?\s?")
+TAG = {"supervisor": "супервизор", "openconnect": "openconnect", "proxy": "прокси", "auth": "вход", "app": "приложение"}
+COL = {"supervisor": "36", "openconnect": "35", "proxy": "35", "auth": "33", "app": "34"}
+tty = sys.stdout.isatty()
+width = max(len(TAG[t]) for t, _ in srcs) if srcs else 0
+def read_tail(path, limit=512 * 1024):
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            f.seek(max(0, size - limit)); data = f.read()
+    except OSError:
+        return [], 0
+    text = data.decode("utf-8", "replace")
+    if size > limit and "\n" in text: text = text.split("\n", 1)[1]
+    return text.split("\n"), size
+def parse(tag, lines, last):
+    out = []
+    for l in lines:
+        m = TS.match(l)
+        if m: last, l = m.group(1) + " " + m.group(2), l[m.end():]
+        if l.strip(): out.append((last, tag, l.rstrip()))
+    return out, last
+day = [None]
+def show(ts, tag, text):
+    d, t = (ts.split(" ") + [""])[:2] if ts else ("", "--:--:--")
+    if d and d != day[0]:
+        day[0] = d; print(("\033[2m" if tty else "") + "── " + d + " ──" + ("\033[0m" if tty else ""))
+    for pre in ("ocbar-auth: ", "ocbar-helper: ", "ocbar: "):
+        if text.startswith(pre): text = text[len(pre):]; break
+    label = TAG[tag].ljust(width)
+    if tty: label = "\033[" + COL[tag] + "m" + label + "\033[0m"
+    print(t, label, text)
+rows, state = [], {}
+for tag, path in srcs:
+    lines, size = read_tail(path)
+    got, last = parse(tag, lines[-(n * 4):], "")
+    rows += got; state[tag] = [path, size, last, ""]
+rows.sort(key=lambda r: r[0])
+for r in rows[-n:]: show(*r)
+sys.stdout.flush()
+while follow:
+    time.sleep(1)
+    for tag, st in state.items():
+        path, off, last, rest = st
+        try: size = os.path.getsize(path)
+        except OSError: continue
+        if size < off: off, rest = 0, ""
+        if size == off: continue
+        with open(path, "rb") as f:
+            f.seek(off); chunk = rest + f.read(size - off).decode("utf-8", "replace")
+        parts = chunk.split("\n"); rest = parts.pop()
+        got, last = parse(tag, parts, last)
+        for r in got: show(*r)
+        st[1:] = [size, last, rest]
+    sys.stdout.flush()
+'
+cmd_logs() {
+    local follow=0 n=200 want="" a
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -f|--follow) follow=1 ;;
+            -n) [ $# -ge 2 ] || die "logs: -n требует число"; n=$2; shift ;;
+            supervisor|openconnect|proxy|auth|app) want="$want $1" ;;
+            -h|--help) echo "ocbar logs [-f] [-n строк] [supervisor|openconnect|proxy|auth|app …] — журналы одной лентой по времени"; return 0 ;;
+            *) die "logs: [-f] [-n строк] [supervisor|openconnect|proxy|auth|app …], а не «$1»" ;;
+        esac
+        shift
+    done
+    case "$n" in ''|*[!0-9]*) die "logs: -n — число строк, а не «$n»" ;; esac
+    [ -n "$want" ] || want="supervisor openconnect proxy auth app"
+    local -a pairs=()
+    for a in $want; do
+        case "$a" in
+            supervisor)  pairs+=("supervisor=$SUP_LOG") ;;
+            openconnect) pairs+=("openconnect=$OC_LOG") ;;
+            proxy)       pairs+=("proxy=$PROXY_LOG") ;;
+            auth)        pairs+=("auth=$AUTH_LOG") ;;
+            app)         pairs+=("app=$LOG_DIR/app.log") ;;
+        esac
+    done
+    /usr/bin/python3 -c "$LOGS_MERGE" "$n" "$follow" "${pairs[@]}"
+}
+
 # Решения окна входа — в auth.log с временем (ocbar-auth секретов не пишет) и,
 # как раньше, в поток ошибок. Без журнала «форма не заполнилась» было не
 # разобрать: вывод уходил в терминал или в приложение и пропадал.
@@ -1787,7 +1879,7 @@ proxy_start() { # url servercert cookie
     # наследуется. openconnect запускает её через sh -c, отсюда кавычки.
     local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$P_USER"
                   --script-tun --script "'$SELF' _proxy-tun"
-                  --pid-file "$PROXY_PID" -b --os=mac-intel
+                  --pid-file "$PROXY_PID" -b --os=mac-intel --timestamp
                   --reconnect-timeout="${OCBAR_RECONNECT_TIMEOUT:-90}")
     [ -z "$P_UA" ] || cmd+=(--useragent "$P_UA")
     [ -n "${P_CSD:-}" ] && [ -x "$P_CSD" ] && cmd+=(--csd-wrapper "$P_CSD")
@@ -3377,6 +3469,16 @@ PROFILE
     has "профиль в списке" "profile_list=t|Проба||" "$out"
     has "адрес профиля отдельной строкой" "profile_url=t|vpn.example.test/group" "$out"
 
+    # Общий журнал: строки разных файлов — одной лентой по времени; строка
+    # без времени — сразу за предыдущей своего файла.
+    mkdir -p "$tmp/logs"
+    printf '2026-01-02 10:00:05 супервизор-пять\n2026-01-02 10:00:01 супервизор-один\n' > "$tmp/logs/supervisor.log"
+    printf '2026-01-02 10:00:03 ocbar-auth: вход-три\nпродолжение-без-времени\n' > "$tmp/logs/auth.log"
+    local merged; merged=$(run logs -n 10 supervisor auth | tr -s ' ')
+    is "общий журнал: по времени, продолжение за своей строкой" \
+       "10:00:01 супервизор супервизор-один|10:00:03 вход вход-три|10:00:03 вход продолжение-без-времени|10:00:05 супервизор супервизор-пять" \
+       "$(printf '%s\n' "$merged" | grep -v '──' | paste -sd'|' -)"
+    rm -f "$tmp/logs/supervisor.log" "$tmp/logs/auth.log"
     status_out=$out
     # Парольная группа: подставной openconnect спрашивает пароль и код, как
     # шлюз; пароль ocbar берёт из профиля, код — у «человека» (команда).
@@ -4274,6 +4376,7 @@ case "${1:-}" in
     logout)     cmd_logout ;;
     autoconnect) shift; cmd_autoconnect "$@" ;;
     report)     shift; cmd_report "$@" ;;
+    logs)       shift; cmd_logs "$@" ;;
     status)     cmd_status "${2:-}" ;;
     profiles)   shift; cmd_profiles "$@" ;;
     routes)     shift; cmd_routes "$@" ;;

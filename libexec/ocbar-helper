@@ -49,7 +49,7 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.8.0"
+VERSION="0.8.1"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
 # Манифест доверия — рядом с копией openconnect, в root-овом каталоге.
@@ -109,7 +109,13 @@ LOG="$STATE_DIR/openconnect.log"
 STATE_FILES="tunnel.env openconnect.pid zones.state zones.wanted routes.state routes.wanted gateway.route paused socks.state openconnect.log openconnect.log.1"
 
 # ------------------------------------------------------------------ вывод ----
-say()  { printf 'ocbar-helper: %s\n' "$*" >&2; }
+# Из vpnc-скрипта (его зовёт openconnect, переменная reason задана) строка
+# уходит в журнал openconnect — со временем, в том же виде, что у самого
+# openconnect с --timestamp: иначе в журнале не понять, что когда было.
+say()  {
+    if [ -n "${reason:-}" ]; then printf '[%s] ocbar-helper: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2
+    else printf 'ocbar-helper: %s\n' "$*" >&2; fi
+}
 die()  { say "$*"; exit 1; }
 
 # Выполнить команду, меняющую систему (или напечатать при --dry-run).
@@ -557,7 +563,7 @@ cmd_tunnel_start() {
     local rto="${OCBAR_RECONNECT_TIMEOUT:-90}"
     matches "$rto" '^[0-9]{1,5}$' || rto=90
     local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$user"
-                  --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel
+                  --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel --timestamp
                   --reconnect-timeout="$rto")
     [ -z "$mtu" ] || cmd+=(--base-mtu "$mtu")
     # DTLS (UDP) быстрее, но через некоторые сети и вложенные VPN не ходит

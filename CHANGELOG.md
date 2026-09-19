@@ -3,6 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.8.0 — 2026-09-19
+
+- `ocbar logs` and the new "All" tab in the Logs window show every log as one
+  timeline, with the source on each line: supervisor, openconnect, proxy,
+  sign-in and app. `-f` follows, `-n` sets the length, sources can be listed.
+  The Logs window also gained a "Sign-in" tab for `auth.log`.
+- openconnect lines carry a timestamp (`--timestamp`), and so do the helper's
+  own lines in the openconnect log. The tunnel log needs the updated helper:
+  run `sudo ocbar install` once.
+
 ## 0.7.1 — 2026-09-19
 
 - The sign-in window fills the login even when the profile's rules only
