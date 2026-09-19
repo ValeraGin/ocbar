@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.9.0 — 2026-09-19
+
+- The first-run wizard is a paged assistant: steps at the top (System
+  component → Profile → First sign-in), one screen per step, and Back / Later /
+  Continue at the bottom. The profile step asks how to sign in (SSO or password
+  and SMS code) and imports `.ocbar` and Cisco `.xml` profiles.
+
 ## 0.8.1 — 2026-09-19
 
 - Profiles show the full connection address with its group
