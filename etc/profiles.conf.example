@@ -55,4 +55,5 @@ healthcheck = wiki.example.com:443
 [legacy]
 url = vpn.example.com/otp
 name = Парольная группа
+# логин, пароль и код из SMS: пароль ocbar подставит, код спросит окном
 auth = password
