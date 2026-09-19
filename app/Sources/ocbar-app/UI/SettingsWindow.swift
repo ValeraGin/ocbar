@@ -41,18 +41,25 @@ struct SettingsWindow: View {
     }()
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 240)
-        } detail: {
-            detail
+        // Не NavigationSplitView: он ставит в заголовок кнопку «скрыть боковую
+        // панель», а убрать её можно только с macOS 14. Панель здесь не
+        // прячется — она и есть навигация.
+        HStack(spacing: 0) {
+            sidebar.frame(width: 210)
+            Divider()
+            detail.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 960, minHeight: 600)
     }
 
     private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+        HStack(spacing: 10) {
+            AppMark(size: 30)
+            Text("ocbar").font(.system(size: 15, weight: .semibold))
+        }
+        .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 8)
         List(selection: $tab) {
-            Section {
             ForEach(Tab.allCases) { t in
                 Label {
                     Text(t.title)
@@ -65,16 +72,12 @@ struct SettingsWindow: View {
                 }
                 .tag(t)
             }
-            } header: {
-                HStack(spacing: 10) {
-                    AppMark(size: 30)
-                    Text("ocbar").font(.system(size: 15, weight: .semibold)).foregroundStyle(.primary)
-                }
-                .padding(.vertical, 8)
-            }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) { connectionLine }
+        .scrollContentBackground(.hidden)
+        connectionLine
+        }
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.6))
     }
 
     // Внизу боковой панели — состояние подключения: видно, что правишь,
