@@ -25,6 +25,9 @@ enum SelfTest {
         do {
             let w = NSWindow(contentRect: NSRect(x: -20000, y: 500, width: 340, height: 300),
                              styleMask: [.borderless], backing: .buffered, defer: false)
+            // Привязка включается на показанном окне: у скрытого верх ещё
+            // ставит система.
+            w.orderFrontRegardless()
             let anchor = TopAnchor()
             anchor.attach(w)
             let top = w.frame.maxY

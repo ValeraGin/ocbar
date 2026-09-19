@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.10.2 — 2026-09-20
+
+- Keeps the menu under its icon in more cases: the anchor is taken when the
+  window is actually shown, and the window is corrected after moves as well as
+  resizes. Menu window geometry is written to the app log for now, while the
+  remaining drift is being tracked down.
+
 ## 0.10.1 — 2026-09-20
 
 - The menu stays attached to its menu-bar icon when its height changes
