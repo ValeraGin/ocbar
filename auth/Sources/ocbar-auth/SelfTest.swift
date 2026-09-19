@@ -235,6 +235,22 @@ enum AuthSelfTest {
         ok("код: команда спрашивается заново, а не берётся готовый", byCommand == "333333", byCommand ?? "-")
         ok("код: без секрета и команды — готовый", byReady == "222222", byReady ?? "-")
         ok("код: команда ответила мусором — берём готовый", badCommand == "222222", badCommand ?? "-")
+        // Правила из разметки без логина: провайдер помнил логин, и человек
+        // его не отмечал. После сброса входа поле пустое — заполняем сами.
+        let noUser = Autofill.parse(text: "fill  password input[id=password]\nclick button[type=submit]")
+        let alice = Credentials(username: "alice", password: "pw", totpSecret: nil)
+        let implicit = Autofill.withImplicitUsername(noUser, creds: alice)
+        let firstFill = implicit.first { if case .fill = $0.action { return true }; return false }
+        ok("логин: правила молчат о нём — встроенные селекторы логина перед паролем",
+           firstFill.map { if case .fill(let w) = $0.action { return w == "username" }; return false } ?? false,
+           "\(implicit.count) правил")
+        ok("логин: в скрипте подставляется alice",
+           Autofill.script(rules: noUser, creds: alice, totpCode: nil).contains("\"alice\""))
+        let withUser = Autofill.parse(text: "fill  username input[id=u]\nfill  password input[id=password]")
+        ok("логин: правило про логин есть — чужие селекторы не добавляются",
+           Autofill.withImplicitUsername(withUser, creds: alice).count == withUser.count)
+        ok("логин: логина в профиле нет — правила не меняются",
+           Autofill.withImplicitUsername(noUser, creds: Credentials(username: nil, password: "pw", totpSecret: nil)).count == noUser.count)
         // Сеть отделена от «нужен человек»: молчаливый вход при обрыве
         // должен повторяться сам, а не останавливать автоподключение.
         ok("сбой сети — не «нужен человек»",
