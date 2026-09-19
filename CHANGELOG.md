@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.10.1 — 2026-09-20
+
+- The menu stays attached to its menu-bar icon when its height changes
+  (Networks and DNS page, warnings, pause). AppKit kept the bottom edge in
+  place on resize, so a shorter menu drifted down from the icon; now the top
+  edge is kept.
+
 ## 0.10.0 — 2026-09-20
 
 - The menu no longer lists profiles: usually there is one. It shows the

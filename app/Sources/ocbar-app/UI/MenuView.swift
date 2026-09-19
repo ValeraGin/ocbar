@@ -45,6 +45,8 @@ struct MenuView: View {
         .padding(12)
         .frame(width: Self.width)
         .background(shortcuts)
+        // Верх меню — под значком, как бы ни менялась высота содержимого.
+        .background(KeepTopAnchored())
         .onAppear {
             if !CommandLine.arguments.contains("--stage") { Notifier.refreshAllowed() }
             store.menuOpen = true
