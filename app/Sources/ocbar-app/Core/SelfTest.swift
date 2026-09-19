@@ -21,6 +21,23 @@ enum SelfTest {
 
         print("ocbar-app selftest")
 
+        // --- окно меню держит верх, когда меняется высота ---
+        do {
+            let w = NSWindow(contentRect: NSRect(x: -20000, y: 500, width: 340, height: 300),
+                             styleMask: [.borderless], backing: .buffered, defer: false)
+            let anchor = TopAnchor()
+            anchor.attach(w)
+            let top = w.frame.maxY
+            // Как делает AppKit: размер меняется, нижний левый угол на месте.
+            w.setFrame(NSRect(x: w.frame.minX, y: w.frame.minY, width: 340, height: 180), display: false)
+            check("меню: стало ниже — верх остался под значком", abs(w.frame.maxY - top) < 0.5,
+                  "верх \(w.frame.maxY), ждали \(top)")
+            w.setFrame(NSRect(x: w.frame.minX, y: w.frame.minY, width: 340, height: 420), display: false)
+            check("меню: стало выше — верх остался под значком", abs(w.frame.maxY - top) < 0.5,
+                  "верх \(w.frame.maxY), ждали \(top)")
+            anchor.detach()
+        }
+
         // --- разбор профиля ---
         let sample = """
         # комментарий
