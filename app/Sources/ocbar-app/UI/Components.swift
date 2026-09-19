@@ -336,7 +336,10 @@ struct AppMark: View {
     var body: some View {
         let ring = size * 0.36, line = max(1.5, size * 0.09)
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(Palette.accent)
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .fill(LinearGradient(colors: [Color(red: 0.25, green: 0.60, blue: 1.0),
+                                              Color(red: 0.0, green: 0.38, blue: 0.87)],
+                                     startPoint: .top, endPoint: .bottom))
             Circle().stroke(.white, lineWidth: line).frame(width: ring, height: ring).offset(x: -ring * 0.3)
             Circle().stroke(.white, lineWidth: line).frame(width: ring, height: ring).offset(x: ring * 0.3)
         }
