@@ -175,6 +175,9 @@ final class StatusStore: ObservableObject {
         appliedStart = started
         let wasDevice = status.tundev
         status = s
+        // Последний подключённый профиль — к нему ведёт «Подключить» в меню:
+        // выбор профиля живёт в настройках, а не в меню.
+        if !s.profile.isEmpty, !isPreview { UserDefaults.standard.set(s.profile, forKey: "LastProfile") }
         lastError = s.error
         // Туннель пересоздан — счётчики начинаются заново, старую разницу
         // считать нельзя: получится всплеск в гигабайты.

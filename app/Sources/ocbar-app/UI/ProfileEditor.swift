@@ -238,12 +238,16 @@ struct ProfileEditorView: View {
     private var editor: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(doc.name.trimmed.isEmpty ? (loadedName == nil ? "Новый профиль" : doc.fileName) : doc.name)
-                        .font(.system(size: 20, weight: .semibold)).lineLimit(1)
-                    Text(doc.url.trimmed.isEmpty ? "адрес не задан" : doc.url)
-                        .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
-                        .textSelection(.enabled)
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(doc.name.trimmed.isEmpty ? (loadedName == nil ? "Новый профиль" : doc.fileName) : doc.name)
+                            .font(.system(size: 20, weight: .semibold)).lineLimit(1)
+                        Text(doc.url.trimmed.isEmpty ? "адрес не задан" : doc.url)
+                            .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                            .textSelection(.enabled)
+                    }
+                    Spacer()
+                    connectControl
                 }
                 Picker("", selection: $segment) {
                     ForEach(Segment.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -262,6 +266,56 @@ struct ProfileEditorView: View {
             Divider()
             bottomBar
         }
+    }
+
+    // --- подключить / отключить этот профиль ------------------------------
+
+    // Профиль выбирают здесь, а не в меню: обычно он один, а при нескольких
+    // видно, что именно подключаешь. Меню подключает последний.
+    @State private var switchAsk = false
+
+    private var isActive: Bool {
+        loadedName != nil && store.status.profile == loadedName && store.status.state != .down
+    }
+
+    private var otherActive: String? {
+        let p = store.status.profile
+        guard !p.isEmpty, store.status.state != .down, p != loadedName else { return nil }
+        return store.status.profiles.first { $0.name == p }?.display ?? p
+    }
+
+    @ViewBuilder
+    private var connectControl: some View {
+        HStack(spacing: 8) {
+            if let busy = store.busy {
+                ProgressView().controlSize(.small)
+                Text(busy).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            if isActive {
+                Label("Подключён", systemImage: "circle.fill")
+                    .font(.system(size: 12)).foregroundStyle(Palette.ok)
+                    .labelStyle(TightLabel())
+                Button("Отключить") { store.disconnect() }
+            } else {
+                Button("Подключить") {
+                    if otherActive != nil { switchAsk = true } else { connectThis() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(loadedName == nil || dirty || store.busy != nil || OcbarClient.shared.binary == nil)
+                .help(loadedName == nil || dirty ? "Сначала сохраните профиль" : "Подключиться этим профилем")
+            }
+        }
+        .alert("Переключиться на «\(doc.name.trimmed.isEmpty ? doc.fileName : doc.name)»?", isPresented: $switchAsk) {
+            Button("Переключиться") { connectThis() }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Сейчас подключён «\(otherActive ?? "")». Он отключится, для нового профиля потребуется вход.")
+        }
+    }
+
+    private func connectThis() {
+        guard let name = loadedName else { return }
+        store.connect(profile: name)
     }
 
     // --- Подключение -----------------------------------------------------
