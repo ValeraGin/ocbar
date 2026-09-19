@@ -71,9 +71,9 @@ directories, and it only touches what it created itself. See
   never opens a login window on its own; caps logins per hour.
 - **Proxy mode**: `openconnect --script-tun` + `ocproxy` gives a local SOCKS
   proxy with no routes, no DNS changes and no root at all.
-- **Menu bar app**: a status card with one action button (Connect,
-  Disconnect, Sign in, Resume), traffic, profile list, network and zone
-  toggles on a second page, profile editor, diagnostics, logs, notification settings, and a
+- **Menu bar app**: a status card with the profile, its address and one action
+  button (Connect, Disconnect, Sign in, Resume), traffic, network and zone
+  toggles on a second page; profiles are chosen and switched in Settings, profile editor, diagnostics, logs, notification settings, and a
   first-run wizard (system component → profile → first login).
 
 ## Try it without a VPN

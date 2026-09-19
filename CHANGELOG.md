@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.10.0 — 2026-09-20
+
+- The menu no longer lists profiles: usually there is one. It shows the
+  profile that is connected or was used last, with its address, and "Other
+  profile…" when there are several.
+- Settings → Profiles has "Connect" / "Disconnect" for the selected profile;
+  switching away from a live session asks first.
+
 ## 0.9.2 — 2026-09-19
 
 Fixes from a design review of every screen:

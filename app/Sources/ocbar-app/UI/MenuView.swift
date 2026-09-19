@@ -9,17 +9,13 @@ struct MenuView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var page: Page
     @State private var showConnection = true
-    // Смена профиля на живой сессии стоит нового входа: спрашиваем, а не
-    // переключаем по первому щелчку.
-    @State private var switchTo: ProfileEntry?
 
     enum Page { case main, networks }
 
-    /// expandProfiles остался от прежнего меню со сворачиваемым списком:
-    /// теперь профили видны всегда, флаг ничего не меняет.
+    /// expandProfiles и switchTo остались от меню со списком профилей: выбор
+    /// профиля теперь в настройках, флаги ничего не меняют.
     init(expandDetails: Bool = false, expandProfiles: Bool = false, switchTo: ProfileEntry? = nil) {
         _page = State(initialValue: expandDetails ? .networks : .main)
-        _switchTo = State(initialValue: switchTo)
     }
 
     private var s: Status { store.status }
@@ -56,7 +52,7 @@ struct MenuView: View {
             store.refresh()
         }
         .onDisappear {
-            store.menuOpen = false; store.detailsOpen = false; switchTo = nil
+            store.menuOpen = false; store.detailsOpen = false
             // Закрытое меню открывается с главного экрана: второй экран —
             // отступление, а не место, где меню «живёт».
             if !CommandLine.arguments.contains("--stage") { page = .main }
@@ -119,10 +115,9 @@ struct MenuView: View {
             // В прокси-режиме интерфейса нет, а с ним и счётчиков: график
             // убран, а не рисует нули.
             if look.graph, !s.isProxySession { trafficCard }
-            profilesCard
-            // Вопрос о смене профиля — отдельным блоком, а не плашкой внутри
-            // прокручиваемого списка: он закрывает живую сессию.
-            if let p = switchTo { switchPrompt(p) }
+            // Списка профилей в меню нет: обычно профиль один, а выбор и
+            // смена — в настройках, где видно, что именно подключаешь.
+            if s.profiles.isEmpty { setupRow }
             if look.details { networksLink }
             footer
         }
@@ -152,10 +147,19 @@ struct MenuView: View {
                         .font(.system(size: 12, weight: alarm ? .semibold : .regular))
                         .foregroundStyle(alarm ? look.color : Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
+                    if let address = s.profiles.first(where: { $0.name == StateLook.targetName(s) })?.address,
+                       !address.isEmpty {
+                        Text(address).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
                 }
                 Spacer(minLength: 0)
             }
             actionButtons
+            if s.profiles.count > 1 {
+                Button("Другой профиль…") { open(WindowID.settings) }
+                    .buttonStyle(.link).font(.system(size: 11))
+            }
             if let note = look.note {
                 Text(note)
                     .font(.system(size: 11)).foregroundStyle(Palette.secondary)
@@ -180,7 +184,7 @@ struct MenuView: View {
     }
 
     private var target: String? {
-        let name = s.profile.isEmpty ? s.defaultProfile : s.profile
+        let name = StateLook.targetName(s)
         return name.isEmpty ? nil : name
     }
 
@@ -301,115 +305,16 @@ struct MenuView: View {
         .groupBox()
     }
 
-    // --- профили ---------------------------------------------------------
-
-    private var sessionUp: Bool {
-        switch s.presentation {
-        case .connected, .lost, .paused, .starting: return true
-        default: return false
-        }
-    }
-
-    private func choose(_ p: ProfileEntry) {
-        if sessionUp, p.name != s.profile {
-            withAnimation(.easeOut(duration: 0.12)) { switchTo = p }
-        } else {
-            store.connect(profile: p.name)
-        }
-    }
-
-    /// Какой профиль отмечен: текущий, а без сессии — по умолчанию.
-    private var selected: String { s.profile.isEmpty ? s.defaultProfile : s.profile }
-
-    @ViewBuilder
-    private var profilesCard: some View {
-        if s.profiles.isEmpty {
-            if s.available {
-                VStack(spacing: 0) {
-                    MenuRow(action: { open(WindowID.setup) }) {
-                        IconTile(symbol: "plus", color: Palette.accent)
-                        Text("Настроить ocbar…")
-                        Spacer()
-                    }
-                }
-                .padding(.vertical, 4)
-                .groupBox()
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Профили").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-                    .padding(.horizontal, 12).padding(.top, 8)
-                // Девять профилей вместе со всем остальным не влезают на экран
-                // 13" — список прокручивается, а не растягивает меню.
-                BoundedScroll(maxHeight: 236) {
-                    // Выбранный профиль должен быть виден сразу: при восьми
-                    // профилях он мог оказаться под краем прокрутки.
-                    ScrollViewReader { proxy in
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(s.profiles) { p in profileRow(p).id(p.name).help(p.descr) }
-                        }
-                        .onAppear { proxy.scrollTo(selected, anchor: .center) }
-                    }
-                }
-            }
-            .padding(.bottom, 4)
-            .groupBox()
-        }
-    }
-
-    private func profileRow(_ p: ProfileEntry) -> some View {
-        let on = p.name == selected
-        return MenuRow(enabled: idle, action: { choose(p) }) {
-            IconTile(symbol: "link", color: on ? Palette.accent : Color.gray)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text(p.display).font(.system(size: 13))
-                        .lineLimit(1).truncationMode(.tail)
-                    if p.isPassword {
-                        Text("пароль + SMS").font(.system(size: 10, weight: .medium))
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Capsule().strokeBorder(Color.primary.opacity(0.3)))
-                            .opacity(0.8)
-                    }
-                }
-                // Под названием — адрес с группой: одинаковые названия у
-                // разных шлюзов и групп иначе не различить. Описание — в
-                // подсказке: вместе с адресом в строку оно не помещалось.
-                if !p.address.isEmpty {
-                    Text(p.address).font(.system(size: 11)).opacity(0.6)
-                        .lineLimit(1).truncationMode(.middle)
-                }
-            }
-            Spacer()
-            if on {
-                Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Palette.accent)
-                    .accessibilityLabel("выбран")
+    private var setupRow: some View {
+        VStack(spacing: 0) {
+            MenuRow(enabled: s.available, action: { open(WindowID.setup) }) {
+                IconTile(symbol: "plus", color: Palette.accent)
+                Text("Настроить ocbar…")
+                Spacer()
             }
         }
-    }
-
-    private func switchPrompt(_ p: ProfileEntry) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Переключиться на «\(p.display)»?", systemImage: "arrow.triangle.swap")
-                .font(.system(size: 13, weight: .semibold))
-            Text("Текущее подключение закроется, для нового потребуется вход.")
-                .font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                WideButton(title: "Отмена", kind: .neutral, compact: true) {
-                    withAnimation(.easeOut(duration: 0.12)) { switchTo = nil }
-                }
-                .keyboardShortcut(.cancelAction)
-                WideButton(title: "Переключиться", kind: .primary, compact: true) {
-                    switchTo = nil
-                    store.connect(profile: p.name)
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(12)
-        .groupBox(tint: Palette.warn)
+        .padding(.vertical, 4)
+        .groupBox()
     }
 
     // На паузе правила сохранены, но не действуют — числа «2/3» читались бы
@@ -718,8 +623,18 @@ struct StateLook {
     let details: Bool
 
     /// Имя для шапки и строки «Профиль»: текущий профиль, иначе по умолчанию.
+    /// К какому профилю относится меню: подключённый; иначе последний
+    /// подключённый, профиль по умолчанию, первый в списке.
+    static func targetName(_ s: Status) -> String {
+        if !s.profile.isEmpty { return s.profile }
+        let known = Set(s.profiles.map(\.name))
+        if let last = UserDefaults.standard.string(forKey: "LastProfile"), known.contains(last) { return last }
+        if !s.defaultProfile.isEmpty { return s.defaultProfile }
+        return s.profiles.first?.name ?? ""
+    }
+
     static func profileName(_ s: Status) -> String {
-        let n = s.profile.isEmpty ? s.defaultProfile : s.profile
+        let n = targetName(s)
         if n.isEmpty { return "ocbar" }
         return s.profiles.first { $0.name == n }?.display ?? n
     }
