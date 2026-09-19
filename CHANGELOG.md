@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.9.1 — 2026-09-19
+
+- The menu scrolls when it is taller than the screen: with many profiles, the
+  switch question and warnings, "Quit" used to be cut off.
+- Settings no longer show the sidebar toggle in the title bar; the sidebar is
+  the navigation and does not hide.
+
 ## 0.9.0 — 2026-09-19
 
 - The first-run wizard is a paged assistant: steps at the top (System

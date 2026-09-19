@@ -26,13 +26,24 @@ struct MenuView: View {
     private var look: StateLook { StateLook.of(s) }
 
     static let width: CGFloat = 340
+    /// Сколько меню может занять по высоте: видимая часть экрана минус строка
+    /// меню и шапка ocbar.
+    static var maxBodyHeight: CGFloat {
+        let screen = NSScreen.main?.visibleFrame.height ?? 800
+        return max(360, screen - 90)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             appHeader
-            switch page {
-            case .main: mainPage
-            case .networks: networksPage
+            // Всё ниже шапки прокручивается: восемь профилей, вопрос о смене
+            // профиля и предупреждения вместе выше экрана 13", и низ меню
+            // («Выйти») обрезался.
+            BoundedScroll(maxHeight: Self.maxBodyHeight) {
+                switch page {
+                case .main: mainPage
+                case .networks: networksPage
+                }
             }
         }
         .padding(12)
@@ -487,11 +498,9 @@ struct MenuView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .groupBox()
-            BoundedScroll(maxHeight: 560) {
-                VStack(alignment: .leading, spacing: 8) {
-                    if s.isProxySession { proxyDetails } else { networkGroups }
-                    connectionDetails
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                if s.isProxySession { proxyDetails } else { networkGroups }
+                connectionDetails
             }
         }
     }
