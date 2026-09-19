@@ -1,7 +1,7 @@
 #!/usr/bin/env swift
 //
-// Иконка приложения: монограмма «oc» на синем поле — тот же знак, что в
-// меню-баре, чтобы приложение узнавалось и в Finder, и в переключателе.
+// Иконка приложения: два сцепленных кольца на синем поле — туннель между
+// двумя сетями. Тот же знак стоит в шапке меню (AppMark).
 // Рисуется кодом, а не лежит картинкой в репозитории: бинарники в git
 // стареют молча, а здесь видно, из чего иконка сделана.
 //
@@ -29,20 +29,43 @@ func icon(_ px: Int) -> Data? {
     let inset = side * 0.09
     let rect = NSRect(x: inset, y: inset, width: side - inset * 2, height: side - inset * 2)
     let shape = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.width * 0.225)
+    // Системный синий, светлее сверху — как у иконок macOS.
     let gradient = NSGradient(colors: [
-        NSColor(srgbRed: 0.20, green: 0.44, blue: 0.78, alpha: 1),
-        NSColor(srgbRed: 0.11, green: 0.26, blue: 0.52, alpha: 1),
+        NSColor(srgbRed: 0.25, green: 0.60, blue: 1.00, alpha: 1),
+        NSColor(srgbRed: 0.00, green: 0.38, blue: 0.87, alpha: 1),
     ])
     gradient?.draw(in: shape, angle: -90)
 
-    // Знак: та же монограмма «oc», что в строке состояния.
-    let base = NSFont.systemFont(ofSize: side * 0.58, weight: .heavy)
-    let font = base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: side * 0.58) } ?? base
-    let text = NSAttributedString(string: "oc", attributes: [
-        .font: font, .foregroundColor: NSColor.white, .kern: -side * 0.03,
-    ])
-    let size = text.size()
-    text.draw(at: NSPoint(x: (side - size.width) / 2, y: (side - size.height) / 2 - side * 0.02))
+    // Знак: два кольца, сцепленные как звенья: сверху правое проходит над
+    // левым, снизу — под ним. Где одно кольцо идёт поверх другого, под ним
+    // прорезается полоса цветом поля — так видно, что кольца переплетены.
+    let r = rect.width * 0.20, line = rect.width * 0.085
+    let dx = r * 0.62
+    let left = NSPoint(x: rect.midX - dx, y: rect.midY), right = NSPoint(x: rect.midX + dx, y: rect.midY)
+    // Точки пересечения: у правого кольца — 180° ∓ α, у левого — ±α.
+    let alpha = atan2(sqrt(r * r - dx * dx), dx) * 180 / .pi
+    func arc(_ c: NSPoint, _ from: CGFloat, _ to: CGFloat, width: CGFloat = line) -> NSBezierPath {
+        let p = NSBezierPath()
+        p.appendArc(withCenter: c, radius: r, startAngle: from, endAngle: to)
+        p.lineWidth = width
+        return p
+    }
+    func cut(_ c: NSPoint, _ from: CGFloat, _ to: CGFloat) {
+        let band = arc(c, from, to).cgPath.copy(strokingWithWidth: line * 2.0, lineCap: .butt,
+                                                lineJoin: .miter, miterLimit: 10)
+        NSGraphicsContext.saveGraphicsState()
+        ctx.addPath(band); ctx.clip()
+        gradient?.draw(in: shape, angle: -90)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+    NSColor.white.setStroke()
+    arc(left, 0, 360).stroke()
+    cut(right, 180 - alpha - 22, 180 - alpha + 22)
+    NSColor.white.setStroke()
+    arc(right, 0, 360).stroke()
+    cut(left, -alpha - 22, -alpha + 22)
+    NSColor.white.setStroke()
+    arc(left, -alpha - 24, -alpha + 24).stroke()
 
     guard let rep = NSBitmapImageRep(focusedViewRect: NSRect(x: 0, y: 0, width: side, height: side))
     else { return nil }
