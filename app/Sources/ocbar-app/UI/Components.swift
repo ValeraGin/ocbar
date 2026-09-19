@@ -116,7 +116,12 @@ struct BoundedScroll<Content: View>: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
+            // fixedSize обязателен: без него прокрутка растягивает содержимое
+            // до своей высоты, измеренная высота только росла, и меню,
+            // вернувшись с «Сети и DNS», оставалось прежней высоты — с пустым
+            // местом под значком.
             content()
+                .fixedSize(horizontal: false, vertical: true)
                 .background(GeometryReader { g in
                     Color.clear.preference(key: HeightKey.self, value: g.size.height)
                 })
