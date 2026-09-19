@@ -18,65 +18,51 @@ struct AboutView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 12) {
-                // Иконка приложения, если бандл собран с ней; иначе символ.
-                if let icon = NSImage(named: NSImage.applicationIconName), icon.size.width > 0 {
-                    Image(nsImage: icon).resizable().frame(width: 44, height: 44)
-                } else {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 30)).foregroundStyle(Palette.accent)
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    AppMark(size: 56)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("ocbar").font(.system(size: 20, weight: .semibold))
+                        Text("Клиент OpenConnect для macOS: SSO, split DNS, split tunneling")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text("ValeraGin — Ignatkovich Valery · лицензия MIT")
+                            .font(.system(size: 11)).foregroundStyle(.tertiary)
+                    }
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ocbar").font(.system(size: 17, weight: .medium))
-                    Text("Клиент OpenConnect для macOS: SSO, split DNS, split tunneling")
-                        .font(.system(size: 11)).foregroundStyle(Palette.secondary)
-                }
+                .padding(.vertical, 6)
             }
-            .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 12)
-
-            VStack(spacing: 0) {
+            Section {
                 part("Приложение", AppInfo.version, Bundle.main.executablePath ?? "")
                 part("Клиент ocbar", v["ocbar"], v["ocbar_path"])
                 part("Хелпер (root)", helperVersion, v["helper_path"])
                 part("openconnect", v["openconnect"], v["openconnect_path"])
                 part("Копия для root", nil, v["openconnect_root"])
                 part("Аутентификатор", "как ocbar", v["auth_path"])
+            } header: {
+                Text("Компоненты")
+            } footer: {
+                Footnote("Приложению права не нужны: всё привилегированное делает хелпер. "
+                     + (GlobalHotkeys.shared.isRegistered("pause")
+                        ? "Пауза — ⌥⌘P из любой программы." : "⌥⌘P занято другой программой: пауза только из меню."))
             }
-            .padding(.horizontal, 18)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Приложению права не нужны: всё привилегированное делает хелпер, разрешённый через sudoers.")
-                    .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(GlobalHotkeys.shared.isRegistered("pause")
-                     ? "Пауза и возобновление — ⌥⌘P из любой программы."
-                     : "Сочетание ⌥⌘P занято другой программой: пауза только из меню.")
-                    .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 6) {
-                    Text("ValeraGin — Ignatkovich Valery").font(.system(size: 11))
-                        .foregroundStyle(Palette.secondary)
-                    Text("· лицензия MIT").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            Section {
+                HStack {
+                    Button("Журналы") { openWindow(id: WindowID.logs) }
+                    Button("Диагностика") { openWindow(id: WindowID.diagnostics) }
                     Spacer()
                 }
-            }
-            .padding(.horizontal, 18).padding(.top, 10)
-
-            Divider().padding(.vertical, 12)
-
-            VStack(alignment: .leading, spacing: 6) {
-                link("Журналы", "Супервизор и openconnect") { openWindow(id: WindowID.logs) }
-                link("Диагностика", "ocbar doctor и уборка") { openWindow(id: WindowID.diagnostics) }
                 reveal("Каталог конфигурации", v["config_dir"] ?? OcbarClient.shared.configDir)
                 reveal("Приложение", v["app_path"] ?? (Bundle.main.bundlePath))
                 reveal("Журнал супервизора", v["supervisor_log"] ?? OcbarClient.shared.supervisorLog)
                 reveal("Журнал openconnect", v["openconnect_log"] ?? OcbarClient.shared.openconnectLog)
                 reveal("Журнал приложения", AppLog.path)
+            } header: {
+                Text("Где что лежит")
             }
-            .padding(.horizontal, 18).padding(.bottom, 16)
         }
-        .frame(width: 460)
+        .formStyle(.grouped)
+        .navigationTitle("О программе")
         .onAppear { load() }
     }
 
@@ -88,33 +74,27 @@ struct AboutView: View {
     private func part(_ title: String, _ version: String?, _ path: String?) -> some View {
         Group {
             if let path, !path.isEmpty {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(title).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-                        .frame(width: 118, alignment: .leading)
-                    Text(version ?? "—").font(.ocMono).foregroundStyle(Palette.text)
-                        .frame(width: 96, alignment: .leading)
-                    Text(path).font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
+                LabeledContent {
+                    Text(version ?? "—").font(.system(size: 12, design: .monospaced))
+                } label: {
+                    Text(title)
+                    Text(Self.short(path)).font(.system(size: 11)).foregroundStyle(.secondary)
                         .lineLimit(1).truncationMode(.head).textSelection(.enabled)
-                    Spacer(minLength: 0)
                 }
-                .padding(.vertical, 2)
             }
         }
     }
 
-    private func link(_ title: String, _ note: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title)
-                Text(note).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-            }
-        }
-        .buttonStyle(.link)
-    }
+    /// Путь с «~» вместо домашнего каталога: короче и не светит имя учётной записи.
+    static func short(_ path: String) -> String { (path as NSString).abbreviatingWithTildeInPath }
 
     private func reveal(_ title: String, _ path: String) -> some View {
-        link(title, path) {
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        LabeledContent(title) {
+            Button(Self.short(path)) {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            }
+            .buttonStyle(.link).lineLimit(1).truncationMode(.head)
+            .help("Показать в Finder")
         }
     }
 
