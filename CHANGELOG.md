@@ -3,6 +3,24 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.9.2 — 2026-09-19
+
+Fixes from a design review of every screen:
+
+- The menu makes trouble visible: "No connection · reconnecting", "Paused"
+  and "Sign-in needed" are coloured and bold; network counters say "not
+  applied" while paused and name what they count ("networks 2/3 · DNS 2/3").
+- Switching profiles on a live session asks in its own block with "Cancel" and
+  "Switch", instead of a small note inside the scrolling list.
+- "Disconnect" is a calm button with red text; the status stays the focus.
+- Proxy commands wrap instead of being cut in the middle; the proxy page is
+  called "SOCKS proxy"; disabled networks stay readable.
+- Profile fields look like editable fields; "Profile has no errors" instead of
+  "Check passed"; missing secrets are explained in plain words.
+- Mode cards have equal height; General uses clearer wording; the wizard says
+  "System component installed" when it is; the SMS window no longer shows the
+  gateway's raw prompt.
+
 ## 0.9.1 — 2026-09-19
 
 - The menu scrolls when it is taller than the screen: with many profiles, the

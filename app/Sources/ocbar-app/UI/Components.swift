@@ -210,12 +210,14 @@ private struct WideButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let (fill, text): (Color, Color) = switch kind {
         case .primary: (Palette.accent, .white)
-        case .destructive: (Palette.bad.opacity(hover ? 0.30 : 0.18), Palette.bad)
+        // «Отключить» — спокойная кнопка с красной подписью: в рабочем
+        // состоянии главное на карточке — статус, а не выход из него.
+        case .destructive: (hover ? Palette.bad.opacity(0.16) : Palette.group, Palette.bad)
         case .neutral: (hover ? Palette.text.opacity(0.14) : Palette.group, Palette.text)
         }
         let stroke: Color = switch kind {
         case .primary: hover ? .white.opacity(0.35) : .clear
-        case .destructive: hover ? Palette.bad.opacity(0.6) : .clear
+        case .destructive: hover ? Palette.bad.opacity(0.5) : Palette.groupLine
         case .neutral: hover ? Palette.text.opacity(0.3) : Palette.groupLine
         }
         return configuration.label
