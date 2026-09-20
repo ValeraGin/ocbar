@@ -44,6 +44,13 @@ Profile format: one `.ocbar` file per connection, sections `[Connection]`,
 `[Routes]`, `[DNS]`, `[Auth]`, `[Proxy]`, `[Health]`, `[Autofill]`. Adding a
 key means: CLI parser, app parser, validation in both, example file, docs.
 
+UI text: every string the person sees goes through `L("…")` with the Russian
+text as the key, and `app/Resources/en.lproj/Localizable.strings` holds the
+English. `tools/i18n-scan.py --check` lists what is missing and fails the
+build, so a new screen cannot ship half-translated. Strings that are compared
+against output of the CLI, or written into files, are not UI text and stay
+unwrapped.
+
 Runtime state lives in small files under `~/Library/Application Support/ocbar`,
 one value each: `desired` (profile that should be up), `autoconnect`,
 `access`, `connecting`, `needs-login`, `link-lost`, `routes.disabled`,

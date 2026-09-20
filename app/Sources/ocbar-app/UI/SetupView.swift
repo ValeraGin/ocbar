@@ -27,7 +27,7 @@ struct SetupView: View {
     private var helperReady: Bool { store.helperWarning == nil && !doctorText.contains("не установлен") && !doctorText.isEmpty }
     private var hasProfile: Bool { saved != nil || !store.status.profiles.isEmpty }
     private var formFilled: Bool { !name.trimmed.isEmpty && !url.trimmed.isEmpty }
-    private static let titles = ["Системная часть", "Профиль", "Первый вход"]
+    private static let titles = [L("Системная часть"), L("Профиль"), L("Первый вход")]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -94,7 +94,8 @@ struct SetupView: View {
                 }
                 .frame(width: 110)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Шаг \(i + 1): \(Self.titles[i])\(done(i) ? ", готово" : i == step ? ", текущий" : "")")
+                .accessibilityLabel(L("Шаг %@: %@%@", "\(i + 1)", Self.titles[i],
+                                      done(i) ? L(", готово") : i == step ? L(", текущий") : ""))
             }
         }
     }
@@ -113,21 +114,21 @@ struct SetupView: View {
 
     private var systemStep: some View {
         VStack(spacing: 0) {
-            pageTitle(helperReady ? "Системная часть установлена" : "Установите системную часть",
-                      helperReady ? "Можно переходить к профилю."
-                                  : "Туннель поднимает помощник с правами администратора. Его ставит одна команда с паролем — один раз.")
+            pageTitle(helperReady ? L("Системная часть установлена") : L("Установите системную часть"),
+                      helperReady ? L("Можно переходить к профилю.")
+                                  : L("Туннель поднимает помощник с правами администратора. Его ставит одна команда с паролем — один раз."))
             Form {
                 Section {
-                    LabeledContent("Состояние") {
+                    LabeledContent(L("Состояние")) {
                         if checking {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label(helperReady ? "установлена" : "не установлена",
+                            Label(helperReady ? L("установлена") : L("не установлена"),
                                   systemImage: helperReady ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .foregroundStyle(helperReady ? Palette.ok : Palette.warn)
                         }
                     }
-                    LabeledContent("Команда") {
+                    LabeledContent(L("Команда")) {
                         HStack(spacing: 8) {
                             Text("sudo ocbar install").font(.ocMono).textSelection(.enabled)
                             CopyButton(text: "sudo ocbar install")
@@ -135,13 +136,13 @@ struct SetupView: View {
                     }
                     HStack {
                         Spacer()
-                        Button(checking ? "Проверяю…" : "Проверить ещё раз") { checkHelper() }.disabled(checking)
+                        Button(checking ? L("Проверяю…") : L("Проверить ещё раз")) { checkHelper() }.disabled(checking)
                     }
                 } footer: {
                     Footnote(store.helperWarning
                              ?? (helperReady
-                                 ? "После обновления ocbar помощника обновляет та же команда."
-                                 : "Выполните команду в Терминале: sudo спросит пароль там, приложение само этого сделать не может. Режиму «Прокси SOCKS» помощник не нужен."))
+                                 ? L("После обновления ocbar помощника обновляет та же команда.")
+                                 : L("Выполните команду в Терминале: sudo спросит пароль там, приложение само этого сделать не может. Режиму «Прокси SOCKS» помощник не нужен.")))
                 }
             }
             .formStyle(.grouped)
@@ -153,37 +154,37 @@ struct SetupView: View {
 
     private var profileStep: some View {
         VStack(spacing: 0) {
-            pageTitle(saved == nil ? "Добавьте профиль" : "Профиль сохранён",
-                      saved == nil ? "Адрес — как в штатном клиенте: хост и группа. Сети и DNS можно добавить позже."
-                                   : "Файл \(saved!).ocbar. Изменить его можно в «Настройках → Профили».")
+            pageTitle(saved == nil ? L("Добавьте профиль") : L("Профиль сохранён"),
+                      saved == nil ? L("Адрес — как в штатном клиенте: хост и группа. Сети и DNS можно добавить позже.")
+                                   : L("Файл %@.ocbar. Изменить его можно в «Настройках → Профили».", saved!))
             Form {
-                Section("Подключение") {
-                    TextField("Название", text: $name, prompt: Text("Рабочий"))
-                    TextField("Описание", text: $descr, prompt: Text("необязательно"))
-                    TextField("Адрес", text: $url, prompt: Text("vpn.example.com/employees"))
-                    TextField("Пользователь", text: $user, prompt: Text("alice"))
+                Section(L("Подключение")) {
+                    TextField(L("Название"), text: $name, prompt: Text(L("Рабочий")))
+                    TextField(L("Описание"), text: $descr, prompt: Text(L("необязательно")))
+                    TextField(L("Адрес"), text: $url, prompt: Text("vpn.example.com/employees"))
+                    TextField(L("Пользователь"), text: $user, prompt: Text("alice"))
                 }
                 .disabled(saved != nil)
                 Section {
-                    Picker("Как входить", selection: $auth) {
-                        Text("SSO в окне браузера").tag("")
-                        Text("Пароль и код из SMS").tag("password")
+                    Picker(L("Как входить"), selection: $auth) {
+                        Text(L("SSO в окне браузера")).tag("")
+                        Text(L("Пароль и код из SMS")).tag("password")
                     }
                     .disabled(saved != nil)
                 } header: {
-                    Text("Вход")
+                    Text(L("Вход"))
                 } footer: {
                     Footnote(auth == "password"
-                             ? "Пароль ocbar подставит из связки ключей, код из SMS спросит окном."
-                             : "Пароль и источник кода ocbar предложит сохранить после первого входа.")
+                             ? L("Пароль ocbar подставит из связки ключей, код из SMS спросит окном.")
+                             : L("Пароль и источник кода ocbar предложит сохранить после первого входа."))
                 }
                 Section {
                     HStack {
-                        Button("Импортировать файл…") { importProfile() }.disabled(busy)
+                        Button(L("Импортировать файл…")) { importProfile() }.disabled(busy)
                         Spacer()
                     }
                 } footer: {
-                    Footnote("Профиль ocbar (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml).")
+                    Footnote(L("Профиль ocbar (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)."))
                 }
             }
             .formStyle(.grouped)
@@ -195,20 +196,20 @@ struct SetupView: View {
 
     private var loginStep: some View {
         VStack(spacing: 18) {
-            pageTitle(store.status.state == .connected ? "Готово — подключено" : "Первый вход",
+            pageTitle(store.status.state == .connected ? L("Готово — подключено") : L("Первый вход"),
                       store.status.state == .connected
-                      ? "Дальше ocbar подключается автоматически; если понадобится вход, он скажет в меню."
-                      : "Войдите как обычно, руками. ocbar запомнит форму входа и предложит сохранить пароль и источник кода.")
+                      ? L("Дальше ocbar подключается автоматически; если понадобится вход, он скажет в меню.")
+                      : L("Войдите как обычно, руками. ocbar запомнит форму входа и предложит сохранить пароль и источник кода."))
             if store.status.state == .connected {
                 Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(Palette.ok)
             } else {
-                WideButton(title: store.busy ?? "Подключить и запомнить вход…", systemImage: "person.badge.key",
+                WideButton(title: store.busy ?? L("Подключить и запомнить вход…"), systemImage: "person.badge.key",
                            kind: .primary, enabled: !busy && hasProfile && store.busy == nil) {
                     store.connect(profile: saved ?? store.status.defaultProfile, teach: true)
                 }
                 .frame(width: 320)
                 if store.busy != nil {
-                    Button("Отменить") { store.cancelCurrent() }.buttonStyle(.link)
+                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(.link)
                 }
             }
             Spacer()
@@ -220,7 +221,7 @@ struct SetupView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             if step > 0 {
-                Button("Назад") { withAnimation { step -= 1 } }
+                Button(L("Назад")) { withAnimation { step -= 1 } }
             }
             if let note {
                 Text(note).font(.system(size: 11)).foregroundStyle(Palette.bad)
@@ -228,7 +229,7 @@ struct SetupView: View {
             }
             Spacer()
             if step < 2 {
-                Button("Позже") { dismiss() }
+                Button(L("Позже")) { dismiss() }
             }
             Button(primaryTitle) { primary() }
                 .buttonStyle(.borderedProminent)
@@ -241,9 +242,9 @@ struct SetupView: View {
 
     private var primaryTitle: String {
         switch step {
-        case 0: return "Продолжить"
-        case 1: return saved == nil && formFilled ? "Сохранить и продолжить" : "Продолжить"
-        default: return "Готово"
+        case 0: return L("Продолжить")
+        case 1: return saved == nil && formFilled ? L("Сохранить и продолжить") : L("Продолжить")
+        default: return L("Готово")
         }
     }
 
@@ -276,7 +277,7 @@ struct SetupView: View {
         let issues = ProfileCheck.check(doc).filter { $0.level == .error }
         guard issues.isEmpty else { note = issues.map(\.text).joined(separator: "; "); return }
         if let why = OcbarClient.shared.profileRejection(doc.render(), name: doc.fileName) {
-            note = "клиент не принимает профиль: " + why
+            note = L("клиент не принимает профиль: ") + why
             return
         }
         busy = true; note = nil
@@ -285,7 +286,7 @@ struct SetupView: View {
             let err = ProfileStore.save(doc)
             DispatchQueue.main.async {
                 busy = false
-                if let err { note = "профиль не сохранился: " + err } else { saved = file; store.refresh(); then() }
+                if let err { note = L("профиль не сохранился: ") + err } else { saved = file; store.refresh(); then() }
             }
         }
     }
@@ -294,14 +295,14 @@ struct SetupView: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = []
         panel.allowsMultipleSelection = false
-        panel.message = "Файл профиля .ocbar или профиль Cisco AnyConnect (.xml)"
+        panel.message = L("Файл профиля .ocbar или профиль Cisco AnyConnect (.xml)")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         busy = true; note = nil
         DispatchQueue.global(qos: .userInitiated).async {
             let r = OcbarClient.shared.action(["import", url.path], timeout: 30)
             DispatchQueue.main.async {
                 busy = false
-                if case .failed(_, let why) = r { note = "не вышло: " + why }
+                if case .failed(_, let why) = r { note = L("не вышло: ") + why }
                 else { saved = url.deletingPathExtension().lastPathComponent; store.refresh() }
             }
         }

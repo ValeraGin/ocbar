@@ -3,6 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.14.0 — 2026-09-20
+
+- The app speaks English when the system does: menu, settings, wizard,
+  notifications, warnings and units (2h 14m, 1.4 MB/s, 41 ms). Russian stays
+  the development language, so an untranslated string shows up in Russian
+  rather than as a key.
+- `tools/i18n-scan.py` collects the UI strings and fails the build when one
+  has no translation; it runs in CI and before every release.
+- The CLI is still Russian-only.
+
 ## 0.13.1 — 2026-09-20
 
 - State files are written whole (temp file, then rename), so a reader never

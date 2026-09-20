@@ -251,7 +251,7 @@ extension OcbarClient {
         let tail = r.out[range.upperBound...]
         let number = tail.prefix { $0.isNumber || $0 == "." }
         guard let ms = Double(number) else { return nil }
-        return "\(Int(ms.rounded())) мс"
+        return "\(Int(ms.rounded())) " + L("мс")
     }
 }
 

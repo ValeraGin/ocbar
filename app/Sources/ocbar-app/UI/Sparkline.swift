@@ -41,7 +41,7 @@ struct Sparkline: View {
         .frame(height: 42)
         .padding(.horizontal, inset)
         .padding(.top, inset > 0 ? 6 : 0)
-        .accessibilityLabel("Трафик за минуту")
+        .accessibilityLabel(L("Трафик за минуту"))
     }
 
     private func line(_ key: KeyPath<StatusStore.TrafficSample, Double>,

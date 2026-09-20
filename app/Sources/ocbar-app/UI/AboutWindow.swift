@@ -6,7 +6,7 @@ enum AppInfo {
     // незачем: они уже расходились.
     static let version: String = {
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        return (v?.isEmpty == false) ? v! : "из исходников (без бандла)"
+        return (v?.isEmpty == false) ? v! : L("из исходников (без бандла)")
     }()
 }
 
@@ -24,51 +24,51 @@ struct AboutView: View {
                     AppMark(size: 56)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("ocbar").font(.system(size: 20, weight: .semibold))
-                        Text("Клиент OpenConnect для macOS: SSO, split DNS, split tunneling")
+                        Text(L("Клиент OpenConnect для macOS: SSO, split DNS, split tunneling"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
-                        Text("ValeraGin — Ignatkovich Valery · лицензия MIT")
+                        Text(L("ValeraGin — Ignatkovich Valery · лицензия MIT"))
                             .font(.system(size: 11)).foregroundStyle(.tertiary)
                     }
                 }
                 .padding(.vertical, 6)
             }
             Section {
-                part("Приложение", AppInfo.version, Bundle.main.executablePath ?? "")
-                part("Клиент ocbar", v["ocbar"], v["ocbar_path"])
-                part("Хелпер (root)", helperVersion, v["helper_path"])
+                part(L("Приложение"), AppInfo.version, Bundle.main.executablePath ?? "")
+                part(L("Клиент ocbar"), v["ocbar"], v["ocbar_path"])
+                part(L("Хелпер (root)"), helperVersion, v["helper_path"])
                 part("openconnect", v["openconnect"], v["openconnect_path"])
-                part("Копия для root", nil, v["openconnect_root"])
-                part("Аутентификатор", "как ocbar", v["auth_path"])
+                part(L("Копия для root"), nil, v["openconnect_root"])
+                part(L("Аутентификатор"), L("как ocbar"), v["auth_path"])
             } header: {
-                Text("Компоненты")
+                Text(L("Компоненты"))
             } footer: {
-                Footnote("Приложению права не нужны: всё привилегированное делает хелпер. "
+                Footnote(L("Приложению права не нужны: всё привилегированное делает хелпер. ")
                      + (GlobalHotkeys.shared.isRegistered("pause")
-                        ? "Пауза — ⌥⌘P из любой программы." : "⌥⌘P занято другой программой: пауза только из меню."))
+                        ? L("Пауза — ⌥⌘P из любой программы.") : L("⌥⌘P занято другой программой: пауза только из меню.")))
             }
             Section {
                 HStack {
-                    Button("Журналы") { openWindow(id: WindowID.logs) }
-                    Button("Диагностика") { openWindow(id: WindowID.diagnostics) }
+                    Button(L("Журналы")) { openWindow(id: WindowID.logs) }
+                    Button(L("Диагностика")) { openWindow(id: WindowID.diagnostics) }
                     Spacer()
                 }
-                reveal("Каталог конфигурации", v["config_dir"] ?? OcbarClient.shared.configDir)
-                reveal("Приложение", v["app_path"] ?? (Bundle.main.bundlePath))
-                reveal("Журнал супервизора", v["supervisor_log"] ?? OcbarClient.shared.supervisorLog)
-                reveal("Журнал openconnect", v["openconnect_log"] ?? OcbarClient.shared.openconnectLog)
-                reveal("Журнал приложения", AppLog.path)
+                reveal(L("Каталог конфигурации"), v["config_dir"] ?? OcbarClient.shared.configDir)
+                reveal(L("Приложение"), v["app_path"] ?? (Bundle.main.bundlePath))
+                reveal(L("Журнал супервизора"), v["supervisor_log"] ?? OcbarClient.shared.supervisorLog)
+                reveal(L("Журнал openconnect"), v["openconnect_log"] ?? OcbarClient.shared.openconnectLog)
+                reveal(L("Журнал приложения"), AppLog.path)
             } header: {
-                Text("Где что лежит")
+                Text(L("Где что лежит"))
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("О программе")
+        .navigationTitle(L("О программе"))
         .onAppear { load() }
     }
 
     private var helperVersion: String? {
         guard let version = v["helper"], !version.isEmpty else { return nil }
-        return v["helper_nopasswd"] == "1" ? version : version + " · без NOPASSWD"
+        return v["helper_nopasswd"] == "1" ? version : version + L(" · без NOPASSWD")
     }
 
     private func part(_ title: String, _ version: String?, _ path: String?) -> some View {
@@ -94,7 +94,7 @@ struct AboutView: View {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
             .buttonStyle(.link).lineLimit(1).truncationMode(.head)
-            .help("Показать в Finder")
+            .help(L("Показать в Finder"))
         }
     }
 

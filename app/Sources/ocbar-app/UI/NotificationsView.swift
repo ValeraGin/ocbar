@@ -15,33 +15,33 @@ struct NotificationsView: View {
                 Section {
                     HStack(spacing: 8) {
                         Image(systemName: "bell.slash.fill").foregroundStyle(Palette.warn)
-                        Text("Система не показывает уведомления ocbar.")
+                        Text(L("Система не показывает уведомления ocbar."))
                         Spacer()
-                        Button("Разрешить…") { Notifier.openSettings() }
+                        Button(L("Разрешить…")) { Notifier.openSettings() }
                     }
                 }
             }
             Section {
-                row($login, "Нужен вход", "Сессия истекла, молча войти не удалось")
-                row($problems, "Проблемы со связью и доступом", "Связь потеряна, доступ не проходит, SOCKS не включён")
-                row($events, "Восстановление соединения", "Связь вернулась, пауза и возобновление, перезапуск прокси")
+                row($login, L("Нужен вход"), L("Сессия истекла, молча войти не удалось"))
+                row($problems, L("Проблемы со связью и доступом"), L("Связь потеряна, доступ не проходит, SOCKS не включён"))
+                row($events, L("Восстановление соединения"), L("Связь вернулась, пауза и возобновление, перезапуск прокси"))
             } header: {
-                Text("Показывать")
+                Text(L("Показывать"))
             } footer: {
-                Footnote("Одно и то же уведомление — не чаще раза в 10 минут. Стиль и звук — в Системных настройках.")
+                Footnote(L("Одно и то же уведомление — не чаще раза в 10 минут. Стиль и звук — в Системных настройках."))
             }
             Section {
                 HStack {
-                    Button("Проверить уведомление") {
-                        Notifier.show(title: "Проверка", body: "Так выглядят уведомления ocbar.")
+                    Button(L("Проверить уведомление")) {
+                        Notifier.show(title: L("Проверка"), body: L("Так выглядят уведомления ocbar."))
                     }
                     Spacer()
-                    Button("Системные настройки…") { Notifier.openSettings() }
+                    Button(L("Системные настройки…")) { Notifier.openSettings() }
                 }
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Уведомления")
+        .navigationTitle(L("Уведомления"))
         .onAppear { Notifier.refreshAllowed() }
     }
 

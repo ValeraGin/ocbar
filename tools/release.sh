@@ -13,6 +13,7 @@ git rev-parse -q --verify "refs/tags/v$ver" >/dev/null && { echo "release: те�
 # Проверки — до отправки: выпуск не должен зависеть от того, заметит ли
 # кто-то красный CI уже после push.
 echo "release: проверки перед выпуском"
+python3 tools/i18n-scan.py --check >/dev/null || { python3 tools/i18n-scan.py --check; echo "release: интерфейс переведён не весь" >&2; exit 1; }
 swift build -c release --package-path auth >/dev/null
 auth/.build/release/ocbar-auth --selftest >/dev/null
 auth/.build/release/ocbar-auth --learn-selftest >/dev/null

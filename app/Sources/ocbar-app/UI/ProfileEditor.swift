@@ -53,7 +53,7 @@ struct ProfileEditorView: View {
     @State private var secrets: [String: String] = [:]
     // Редактор разбит на три части, как вкладки профиля: вход, режим, сети.
     enum Segment: Int, CaseIterable { case connection, mode, networks
-        var title: String { ["Подключение", "Режим", "Сети и DNS"][rawValue] }
+        var title: String { [L("Подключение"), L("Режим"), L("Сети и DNS")][rawValue] }
     }
     // Витрина (--segment N) открывает нужную часть для снимка.
     @State private var segment: Segment = {
@@ -119,9 +119,9 @@ struct ProfileEditorView: View {
 
     private var alertTitle: String {
         switch alert {
-        case .unsaved: return "Несохранённые правки в «\(doc.fileName.isEmpty ? "новый профиль" : doc.fileName)»"
-        case .changedOnDisk: return "Файл профиля изменился на диске"
-        case .exists(let name): return "Профиль «\(name)» уже есть"
+        case .unsaved: return L("Несохранённые правки в «%@»", doc.fileName.isEmpty ? "новый профиль" : doc.fileName)
+        case .changedOnDisk: return L("Файл профиля изменился на диске")
+        case .exists(let name): return L("Профиль «%@» уже есть", name)
         case .none: return ""
         }
     }
@@ -129,11 +129,11 @@ struct ProfileEditorView: View {
     private func alertMessage(_ a: EditorAlert) -> String {
         switch a {
         case .unsaved:
-            return "Сохранить их, прежде чем открыть другой профиль?"
+            return L("Сохранить их, прежде чем открыть другой профиль?")
         case .changedOnDisk:
-            return "Пока профиль был открыт, файл записали снаружи — разметка формы, «Запомнить, как я вхожу» или ocbar rules. «Перечитать» покажет файл с диска, правки здесь пропадут; «Перезаписать» запишет форму, и пропадёт то, что записали снаружи."
+            return L("Пока профиль был открыт, файл записали снаружи — разметка формы, «Запомнить, как я вхожу» или ocbar rules. «Перечитать» покажет файл с диска, правки здесь пропадут; «Перезаписать» запишет форму, и пропадёт то, что записали снаружи.")
         case .exists(let name):
-            return "Файл \(ProfileStore.path(name)) уже существует. Перезаписать его содержимым этой формы? Прошлая версия останется рядом с суффиксом .bak."
+            return L("Файл %@ уже существует. Перезаписать его содержимым этой формы? Прошлая версия останется рядом с суффиксом .bak.", ProfileStore.path(name))
         }
     }
 
@@ -141,16 +141,16 @@ struct ProfileEditorView: View {
     private func alertButtons(_ a: EditorAlert) -> some View {
         switch a {
         case .unsaved(let next):
-            Button("Сохранить") { save(then: { go(next) }) }
-            Button("Не сохранять", role: .destructive) { go(next) }
-            Button("Отмена", role: .cancel) {}
+            Button(L("Сохранить")) { save(then: { go(next) }) }
+            Button(L("Не сохранять"), role: .destructive) { go(next) }
+            Button(L("Отмена"), role: .cancel) {}
         case .changedOnDisk:
-            Button("Перечитать") { afterSave = nil; if let name = loadedName { open(name) } }
-            Button("Перезаписать", role: .destructive) { let next = afterSave; afterSave = nil; save(force: true, then: next) }
-            Button("Отмена", role: .cancel) { afterSave = nil }
+            Button(L("Перечитать")) { afterSave = nil; if let name = loadedName { open(name) } }
+            Button(L("Перезаписать"), role: .destructive) { let next = afterSave; afterSave = nil; save(force: true, then: next) }
+            Button(L("Отмена"), role: .cancel) { afterSave = nil }
         case .exists:
-            Button("Перезаписать", role: .destructive) { let next = afterSave; afterSave = nil; save(force: true, then: next) }
-            Button("Отмена", role: .cancel) { afterSave = nil }
+            Button(L("Перезаписать"), role: .destructive) { let next = afterSave; afterSave = nil; save(force: true, then: next) }
+            Button(L("Отмена"), role: .cancel) { afterSave = nil }
         }
     }
 
@@ -158,7 +158,7 @@ struct ProfileEditorView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Профили").font(.system(size: 15, weight: .semibold))
+            Text(L("Профили")).font(.system(size: 15, weight: .semibold))
                 .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
             List(selection: $selected) {
                 ForEach(files, id: \.self) { name in
@@ -168,7 +168,7 @@ struct ProfileEditorView: View {
                                 .lineLimit(1).truncationMode(.tail)
                             if isConnected(name) {
                                 Circle().fill(Palette.ok).frame(width: 7, height: 7)
-                                    .accessibilityLabel("подключён")
+                                    .accessibilityLabel(L("подключён"))
                             }
                         }
                         Text(badge(of: name)).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -183,14 +183,14 @@ struct ProfileEditorView: View {
                     saveOrder()
                 }
                 if files.isEmpty {
-                    Text("ни одного").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text(L("ни одного")).font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 if !legacy.isEmpty {
-                    Section("Старый формат") {
+                    Section(L("Старый формат")) {
                         ForEach(legacy) { p in
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(p.display).font(.system(size: 12))
-                                Button("перевести в файл") { convert(p.name) }
+                                Button(L("перевести в файл")) { convert(p.name) }
                                     .buttonStyle(.link).font(.system(size: 11))
                             }
                         }
@@ -199,7 +199,7 @@ struct ProfileEditorView: View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
-            .help("Порядок профилей — перетаскиванием; тот же порядок в меню")
+            .help(L("Порядок профилей — перетаскиванием; тот же порядок в меню"))
             .onChange(of: selected) { name in
                 guard let name, name != loadedName else { return }
                 // Правки не теряются молча: выбор возвращается на место, пока
@@ -215,12 +215,12 @@ struct ProfileEditorView: View {
                 Button {
                     if dirty { alert = .unsaved(.new) } else { newDoc() }
                 } label: { Image(systemName: "plus").frame(width: 22, height: 20) }
-                    .help("Новый профиль")
+                    .help(L("Новый профиль"))
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting(
                         [URL(fileURLWithPath: OcbarClient.shared.profileDir)])
                 } label: { Image(systemName: "folder").frame(width: 22, height: 20) }
-                    .help("Показать папку профилей")
+                    .help(L("Показать папку профилей"))
                 Spacer()
             }
             .buttonStyle(.bordered)
@@ -240,9 +240,9 @@ struct ProfileEditorView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(doc.name.trimmed.isEmpty ? (loadedName == nil ? "Новый профиль" : doc.fileName) : doc.name)
+                        Text(doc.name.trimmed.isEmpty ? (loadedName == nil ? L("Новый профиль") : doc.fileName) : doc.name)
                             .font(.system(size: 20, weight: .semibold)).lineLimit(1)
-                        Text(doc.url.trimmed.isEmpty ? "адрес не задан" : doc.url)
+                        Text(doc.url.trimmed.isEmpty ? L("адрес не задан") : doc.url)
                             .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                             .textSelection(.enabled)
                     }
@@ -292,24 +292,24 @@ struct ProfileEditorView: View {
                 Text(busy).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             if isActive {
-                Label("Подключён", systemImage: "circle.fill")
+                Label(L("Подключён"), systemImage: "circle.fill")
                     .font(.system(size: 12)).foregroundStyle(Palette.ok)
                     .labelStyle(TightLabel())
-                Button("Отключить") { store.disconnect() }
+                Button(L("Отключить")) { store.disconnect() }
             } else {
-                Button("Подключить") {
+                Button(L("Подключить")) {
                     if otherActive != nil { switchAsk = true } else { connectThis() }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(loadedName == nil || dirty || store.busy != nil || OcbarClient.shared.binary == nil)
-                .help(loadedName == nil || dirty ? "Сначала сохраните профиль" : "Подключиться этим профилем")
+                .help(loadedName == nil || dirty ? L("Сначала сохраните профиль") : L("Подключиться этим профилем"))
             }
         }
-        .alert("Переключиться на «\(doc.name.trimmed.isEmpty ? doc.fileName : doc.name)»?", isPresented: $switchAsk) {
-            Button("Переключиться") { connectThis() }
-            Button("Отмена", role: .cancel) {}
+        .alert(L("Переключиться на «%@»?", doc.name.trimmed.isEmpty ? doc.fileName : doc.name), isPresented: $switchAsk) {
+            Button(L("Переключиться")) { connectThis() }
+            Button(L("Отмена"), role: .cancel) {}
         } message: {
-            Text("Сейчас подключён «\(otherActive ?? "")». Он отключится, для нового профиля потребуется вход.")
+            Text(L("Сейчас подключён «%@». Он отключится, для нового профиля потребуется вход.", otherActive ?? ""))
         }
     }
 
@@ -322,58 +322,58 @@ struct ProfileEditorView: View {
 
     @ViewBuilder
     private var connectionSections: some View {
-        Section("Подключение") {
-            field("Название", $doc.name, hint: "как в меню")
-            field("Описание", $doc.descr, hint: "вторая строка в меню")
-            field("Адрес", $doc.url, hint: "vpn.example.com/группа")
-            field("Пользователь", $doc.user)
+        Section(L("Подключение")) {
+            field(L("Название"), $doc.name, hint: L("как в меню"))
+            field(L("Описание"), $doc.descr, hint: L("вторая строка в меню"))
+            field(L("Адрес"), $doc.url, hint: L("vpn.example.com/группа"))
+            field(L("Пользователь"), $doc.user)
         }
         Section {
-            Picker("Как входить", selection: Binding(get: { doc.auth == "password" ? "password" : "" },
+            Picker(L("Как входить"), selection: Binding(get: { doc.auth == "password" ? "password" : "" },
                                                      set: { doc.auth = $0; touched() })) {
-                Text("SSO в окне браузера").tag("")
-                Text("Пароль и код из SMS").tag("password")
+                Text(L("SSO в окне браузера")).tag("")
+                Text(L("Пароль и код из SMS")).tag("password")
             }
-            sourceRow("Пароль", selection: $doc.password, options: ProfileDoc.passwordSources, status: passwordStatus)
+            sourceRow(L("Пароль"), selection: $doc.password, options: ProfileDoc.passwordSources, status: passwordStatus)
             if doc.password == "command" {
-                field("Команда для пароля", $doc.passwordCommand, hint: "op item get VPN --fields password")
+                field(L("Команда для пароля"), $doc.passwordCommand, hint: "op item get VPN --fields password")
             }
             if doc.auth != "password" {
-                sourceRow("Одноразовый код", selection: $doc.totp, options: ProfileDoc.totpSources, status: totpStatus)
-                if doc.totp == "command" { field("Команда для кода", $doc.totpCommand, hint: "op item get VPN --otp") }
+                sourceRow(L("Одноразовый код"), selection: $doc.totp, options: ProfileDoc.totpSources, status: totpStatus)
+                if doc.totp == "command" { field(L("Команда для кода"), $doc.totpCommand, hint: "op item get VPN --otp") }
             }
             if doc.totp == "keepassxc" || doc.password == "keepassxc" || !doc.keepassEntry.isEmpty {
-                field("Запись KeePassXC", $doc.keepassEntry, hint: "Группа/Запись")
-                field("База KeePassXC", $doc.keepassDb, hint: "~/Passwords.kdbx")
-                field("Мастер-пароль в связке", $doc.keepassKeychain, hint: "имя сервиса в Keychain")
+                field(L("Запись KeePassXC"), $doc.keepassEntry, hint: L("Группа/Запись"))
+                field(L("База KeePassXC"), $doc.keepassDb, hint: "~/Passwords.kdbx")
+                field(L("Мастер-пароль в связке"), $doc.keepassKeychain, hint: L("имя сервиса в Keychain"))
             }
         } header: {
-            Text("Вход")
+            Text(L("Вход"))
         } footer: {
             Footnote(doc.auth == "password"
-                 ? "Пароль ocbar подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может."
-                 : doc.password == "ask" ? "Пароль вводит человек — молчаливое переподключение работать не будет."
-                 : "Секреты хранятся вне профиля: в связке ключей или в KeePassXC.")
+                 ? L("Пароль ocbar подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может.")
+                 : doc.password == "ask" ? L("Пароль вводит человек — молчаливое переподключение работать не будет.")
+                 : L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC."))
         }
         if doc.auth != "password" {
             Section {
                 learnBlock
-            } header: { Text("Форма входа") }
+            } header: { Text(L("Форма входа")) }
         }
         Section {
             DisclosureGroup(isExpanded: $showMore) {
-                field("Имя файла", $doc.fileName, hint: "имя.ocbar в ~/.config/ocbar/profiles")
+                field(L("Имя файла"), $doc.fileName, hint: L("имя.ocbar в ~/.config/ocbar/profiles"))
                 userAgentField
-                field("CsdWrapper", $doc.csdWrapper, hint: "если шлюз просит проверку соответствия")
+                field("CsdWrapper", $doc.csdWrapper, hint: L("если шлюз просит проверку соответствия"))
                 if ["auto", "keychain"].contains(doc.totp) || doc.totpAlgorithm != "SHA1"
                     || doc.totpDigits != "6" || doc.totpPeriod != "30" {
                     totpParamsRow
                 }
-                field("Сервис в связке ключей", $doc.keychainService, hint: "ru.ocbar.client")
-                field("Хосты провайдера входа", $doc.idpHosts, hint: "пусто — только цепочка от шлюза")
-                field("Проверка доступа", $doc.health, hint: "URL, хост:порт или имя")
+                field(L("Сервис в связке ключей"), $doc.keychainService, hint: "ru.ocbar.client")
+                field(L("Хосты провайдера входа"), $doc.idpHosts, hint: L("пусто — только цепочка от шлюза"))
+                field(L("Проверка доступа"), $doc.health, hint: L("URL, хост:порт или имя"))
                 rulesEditor
-                Toggle("Показать файл, как он будет записан", isOn: $showFile)
+                Toggle(L("Показать файл, как он будет записан"), isOn: $showFile)
                 if showFile {
                     Text(doc.render())
                         .font(.system(size: 11, design: .monospaced))
@@ -384,9 +384,9 @@ struct ProfileEditorView: View {
                 }
             } label: {
                 HStack {
-                    Text("Дополнительно")
+                    Text(L("Дополнительно"))
                     Spacer()
-                    Text("User-Agent, MTU, DTLS, CSD, правила").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(L("User-Agent, MTU, DTLS, CSD, правила")).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -399,42 +399,42 @@ struct ProfileEditorView: View {
         Section {
             // Обе карточки — одной высоты: по более высокой.
             HStack(alignment: .top, spacing: 12) {
-                modeCard("tunnel", "Туннель", symbol: "point.3.connected.trianglepath.dotted",
-                         lines: ["Маршруты и DNS", "Нужен системный помощник"])
-                modeCard("proxy", "Прокси SOCKS", symbol: "arrow.left.arrow.right",
-                         lines: ["Для программ с поддержкой SOCKS",
-                                 ocproxy == false ? "Нужен ocproxy: brew install ocproxy" : "Без прав администратора"])
+                modeCard("tunnel", L("Туннель"), symbol: "point.3.connected.trianglepath.dotted",
+                         lines: [L("Маршруты и DNS"), L("Нужен системный помощник")])
+                modeCard("proxy", L("Прокси SOCKS"), symbol: "arrow.left.arrow.right",
+                         lines: [L("Для программ с поддержкой SOCKS"),
+                                 ocproxy == false ? L("Нужен ocproxy: brew install ocproxy") : L("Без прав администратора")])
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, 4)
         } header: {
-            Text("Режим подключения")
+            Text(L("Режим подключения"))
         } footer: {
-            Footnote("Режим — свойство профиля: новый режим начнёт действовать со следующего подключения.")
+            Footnote(L("Режим — свойство профиля: новый режим начнёт действовать со следующего подключения."))
         }
         if doc.mode == "proxy" {
             Section {
-                LabeledContent("Порт") {
+                LabeledContent(L("Порт")) {
                     HStack(spacing: 8) {
                         if doc.proxyPort.trimmed == "10808" {
-                            Text("порт v2ray/Xray — часто занят").font(.system(size: 11)).foregroundStyle(Palette.warn)
+                            Text(L("порт v2ray/Xray — часто занят")).font(.system(size: 11)).foregroundStyle(Palette.warn)
                         }
                         TextField("", text: $doc.proxyPort, prompt: Text("11080"))
                             .labelsHidden().font(.ocMono).frame(width: 90)
                             .onChange(of: doc.proxyPort) { _ in touched() }
                     }
                 }
-                Toggle("Включать системный SOCKS", isOn: $doc.systemProxy)
+                Toggle(L("Включать системный SOCKS"), isOn: $doc.systemProxy)
                     .onChange(of: doc.systemProxy) { _ in touched() }
             } header: {
-                Text("Параметры SOCKS")
+                Text(L("Параметры SOCKS"))
             } footer: {
                 Footnote(doc.systemProxy
-                     ? "Прокси ставится на активную сетевую службу и снимается при отключении. Чужой SOCKS ocbar не перезаписывает."
-                     : "Система не трогается: SOCKS 127.0.0.1:\(doc.proxyPort) указывают тем программам, которым он нужен.")
+                     ? L("Прокси ставится на активную сетевую службу и снимается при отключении. Чужой SOCKS ocbar не перезаписывает.")
+                     : L("Система не трогается: SOCKS 127.0.0.1:%@ указывают тем программам, которым он нужен.", doc.proxyPort))
             }
             Section {
-                Label("Сети и DNS применяются только в режиме «Туннель».", systemImage: "info.circle")
+                Label(L("Сети и DNS применяются только в режиме «Туннель»."), systemImage: "info.circle")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
         }
@@ -483,13 +483,13 @@ struct ProfileEditorView: View {
     private var networkSections: some View {
         // Кнопка «Добавить» и пояснение — строками внутри группы: в подвале
         // формы кнопка вставала рядом с текстом.
-        Section("Сети в туннеле") {
+        Section(L("Сети в туннеле")) {
             routesEditor
-            Footnote("Что не попало в список, идёт мимо туннеля. «Всё в туннель» — 0.0.0.0/1 и 128.0.0.0/1.")
+            Footnote(L("Что не попало в список, идёт мимо туннеля. «Всё в туннель» — 0.0.0.0/1 и 128.0.0.0/1."))
         }
-        Section("DNS-зоны") {
+        Section(L("DNS-зоны")) {
             zonesEditor
-            Footnote("«vpn» вместо адреса — резолвер, который прислал шлюз. Более длинная зона перебивает короткую.")
+            Footnote(L("«vpn» вместо адреса — резолвер, который прислал шлюз. Более длинная зона перебивает короткую."))
         }
     }
 
@@ -504,9 +504,9 @@ struct ProfileEditorView: View {
                 Spacer()
                 if learning {
                     ProgressView().controlSize(.small).scaleEffect(0.6)
-                    Button("Отменить") { store.cancelCurrent() }.buttonStyle(.link).font(.system(size: 11))
+                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(.link).font(.system(size: 11))
                 }
-                Button(learning ? "Идёт разметка…" : "Разметить…") { learn() }
+                Button(learning ? L("Идёт разметка…") : L("Разметить…")) { learn() }
                     .disabled(learnDisabled)
             }
             Text(learnHint)
@@ -514,7 +514,7 @@ struct ProfileEditorView: View {
                 .fixedSize(horizontal: false, vertical: true)
             if let learnResult {
                 Text(learnResult)
-                    .font(.system(size: 11)).foregroundStyle(learnResult.hasPrefix("не получилось") ? Palette.bad : Palette.ok)
+                    .font(.system(size: 11)).foregroundStyle(learnResult.hasPrefix(L("не получилось:")) ? Palette.bad : Palette.ok)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -524,18 +524,18 @@ struct ProfileEditorView: View {
     // Сами правила — для тех, кто правит руками; обычно их пишет разметка.
     private var rulesEditor: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Правила формы").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            Text(L("Правила формы")).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             TextEditor(text: Binding(
                 get: { doc.autofill.joined(separator: "\n") },
                 set: { doc.autofill = $0.split(separator: "\n", omittingEmptySubsequences: false).map(String.init); touched() }))
                 .font(.system(size: 11, design: .monospaced))
                 .frame(minHeight: 72, maxHeight: 160)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Palette.line))
-            Text("По строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Строки «# шаг N — …» — заголовки окон формы, их пишет разметка; строки с «#» и «;» — комментарии. Пусто — действует общий файл или встроенные.")
+            Text(L("По строке: stop <селектор> · fill username|password|totp <селектор> · click <селектор> · click! <селектор>. Строки «# шаг N — …» — заголовки окон формы, их пишет разметка; строки с «#» и «;» — комментарии. Пусто — действует общий файл или встроенные."))
                 .font(.system(size: 10)).foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
-            field("Общий файл правил", $doc.rulesFile,
-                  hint: "необязательно: путь к файлу на несколько профилей; при заполненных правилах выше не читается")
+            field(L("Общий файл правил"), $doc.rulesFile,
+                  hint: L("необязательно: путь к файлу на несколько профилей; при заполненных правилах выше не читается"))
         }
     }
 
@@ -543,10 +543,10 @@ struct ProfileEditorView: View {
     private var rulesSummary: String {
         let lines = doc.autofill.map { $0.trimmed }.filter { !$0.isEmpty }
         guard lines.contains(where: { !ProfileDoc.isComment($0) }) else {
-            if !doc.rulesFile.trimmed.isEmpty { return "правила из общего файла" }
-            return FileManager.default.fileExists(atPath: rulesPath) ? "правила из autofill.rules" : "встроенные правила"
+            if !doc.rulesFile.trimmed.isEmpty { return L("правила из общего файла") }
+            return FileManager.default.fileExists(atPath: rulesPath) ? L("правила из autofill.rules") : L("встроенные правила")
         }
-        let names = ["username": "логин", "password": "пароль", "totp": "код", "manual": "вручную"]
+        let names = ["username": L("логин"), "password": L("пароль"), "totp": L("код"), "manual": L("вручную")]
         var steps: [[String]] = [[]]
         for line in lines {
             if line.hasPrefix("# шаг") { if !(steps.last ?? []).isEmpty { steps.append([]) }; continue }
@@ -558,23 +558,29 @@ struct ProfileEditorView: View {
             }
         }
         let parts = steps.map { $0.joined(separator: "+") }.filter { !$0.isEmpty }
-        guard !parts.isEmpty else { return "\(lines.count) правил в профиле" }
+        guard !parts.isEmpty else { return L("%@ правил в профиле", lines.count) }
         let n = parts.count
-        let word = n == 1 ? "окно" : (2...4).contains(n) ? "окна" : "окон"
+        let word = n == 1 ? L("окно") : (2...4).contains(n) ? L("окна") : L("окон")
         return "\(n) \(word): " + parts.joined(separator: " → ")
     }
 
     private var netsSummary: String {
         let nets = doc.routes.compactMap { ProfileDoc.routeNet($0) }.count
         let zones = doc.zones.filter { !$0.zone.trimmed.isEmpty }.count
-        return "\(nets) сет\(nets % 10 == 1 && nets % 100 != 11 ? "ь" : (2...4).contains(nets % 10) && !(12...14).contains(nets % 100) ? "и" : "ей") · \(zones) зон\(zones % 10 == 1 && zones % 100 != 11 ? "а" : (2...4).contains(zones % 10) && !(12...14).contains(zones % 100) ? "ы" : "")"
+        // Русская форма слова — только в русском тексте; в переводе строка
+        // берётся целиком с числами.
+        let netWord = nets % 10 == 1 && nets % 100 != 11 ? L("сеть")
+            : (2...4).contains(nets % 10) && !(12...14).contains(nets % 100) ? L("сети") : L("сетей")
+        let zoneWord = zones % 10 == 1 && zones % 100 != 11 ? L("зона")
+            : (2...4).contains(zones % 10) && !(12...14).contains(zones % 100) ? L("зоны") : L("зон")
+        return L("%@ %@ · %@ %@", "\(nets)", netWord, "\(zones)", zoneWord)
     }
 
     private var passwordStatus: (String, Color)? {
         guard !dirty, let v = secrets["password"] else { return nil }
         switch v {
-        case "keychain ok": return ("сохранён в связке ключей", Palette.ok)
-        case "keychain missing": return ("не сохранён — ocbar предложит сохранить после входа", Palette.warn)
+        case "keychain ok": return (L("сохранён в связке ключей"), Palette.ok)
+        case "keychain missing": return (L("не сохранён — ocbar предложит сохранить после входа"), Palette.warn)
         default: return nil
         }
     }
@@ -582,18 +588,18 @@ struct ProfileEditorView: View {
     private var totpStatus: (String, Color)? {
         guard !dirty, let v = secrets["totp"] else { return nil }
         switch v {
-        case "keychain ok": return ("секрет в связке ключей", Palette.ok)
-        case "keychain missing": return ("источник кода не настроен — «Подключить и запомнить вход…»", Palette.warn)
+        case "keychain ok": return (L("секрет в связке ключей"), Palette.ok)
+        case "keychain missing": return (L("источник кода не настроен — «Подключить и запомнить вход…»"), Palette.warn)
         default: return nil
         }
     }
 
     private var learnHint: String {
-        if doc.fileName.trimmed.isEmpty { return "Укажите имя файла профиля — размечать нужно его форму входа." }
-        if !errors.isEmpty { return "В профиле ошибки (внизу окна) — исправьте, и разметка станет доступна." }
-        if let busy = store.busy, !learning { return "Сейчас идёт «\(busy)» — разметка станет доступна, когда оно закончится." }
-        if !fileExists || dirty { return "Профиль сначала сохранится — разметка идёт по его адресу, а правила ложатся в сам файл." }
-        return "Откроется форма входа портала: отметьте мышью поля и кнопку, правила запишутся в профиль. Форма в несколько окон — «Пройти шаг →»."
+        if doc.fileName.trimmed.isEmpty { return L("Укажите имя файла профиля — размечать нужно его форму входа.") }
+        if !errors.isEmpty { return L("В профиле ошибки (внизу окна) — исправьте, и разметка станет доступна.") }
+        if let busy = store.busy, !learning { return L("Сейчас идёт «%@» — разметка станет доступна, когда оно закончится.", busy) }
+        if !fileExists || dirty { return L("Профиль сначала сохранится — разметка идёт по его адресу, а правила ложатся в сам файл.") }
+        return L("Откроется форма входа портала: отметьте мышью поля и кнопку, правила запишутся в профиль. Форма в несколько окон — «Пройти шаг →».")
     }
 
     private var fileExists: Bool {
@@ -626,12 +632,12 @@ struct ProfileEditorView: View {
             if loadedName == name, !dirty { open(name) } else { checkDisk() }
             switch result {
             case .ok(let text):
-                learnResult = text.contains("отменена") ? "разметка отменена — профиль не тронут"
-                    : "правила записаны в профиль: \(doc.autofill.filter { !ProfileDoc.isComment($0.trimmed) }.count) строк"
+                learnResult = text.contains("отменена") ? L("разметка отменена — профиль не тронут")
+                    : L("правила записаны в профиль: %@ строк", doc.autofill.filter { !ProfileDoc.isComment($0.trimmed) }.count)
             case .needsLogin, .cancelled:
-                learnResult = "разметка не завершена"
+                learnResult = L("разметка не завершена")
             case .failed(_, let text):
-                learnResult = "не получилось: " + text
+                learnResult = L("не получилось: ") + text
             }
         }
     }
@@ -639,7 +645,7 @@ struct ProfileEditorView: View {
     // Параметры кода для секрета в связке ключей: ocbar пишет их сам при
     // импорте QR и после «Запомнить, как я вхожу»; руками — редко.
     private var totpParamsRow: some View {
-        LabeledContent("Параметры кода") {
+        LabeledContent(L("Параметры кода")) {
             HStack(spacing: 6) {
                 Picker("", selection: $doc.totpAlgorithm) {
                     ForEach(ProfileDoc.totpAlgorithms, id: \.self) { Text($0).tag($0) }
@@ -647,14 +653,14 @@ struct ProfileEditorView: View {
                 .labelsHidden().fixedSize()
                 .onChange(of: doc.totpAlgorithm) { _ in touched() }
                 Picker("", selection: $doc.totpDigits) {
-                    ForEach(["6", "7", "8"], id: \.self) { Text("\($0) цифр").tag($0) }
+                    ForEach(["6", "7", "8"], id: \.self) { Text(L("%@ цифр", $0)).tag($0) }
                 }
                 .labelsHidden().fixedSize()
                 .onChange(of: doc.totpDigits) { _ in touched() }
                 TextField("", text: $doc.totpPeriod, prompt: Text("30"))
                     .labelsHidden().frame(width: 44)
                     .onChange(of: doc.totpPeriod) { _ in touched() }
-                Text("с").foregroundStyle(.secondary)
+                Text(L("с")).foregroundStyle(.secondary)
             }
         }
     }
@@ -671,7 +677,7 @@ struct ProfileEditorView: View {
                     }
                 } label: { Image(systemName: "list.bullet") }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .help("Строки известных клиентов: шлюзы иногда придираются к User-Agent")
+                    .help(L("Строки известных клиентов: шлюзы иногда придираются к User-Agent"))
             }
         }
     }
@@ -690,20 +696,20 @@ struct ProfileEditorView: View {
                     let line = i < doc.routes.count ? doc.routes[i] : ""
                     if let net = ProfileDoc.routeNet(line) {
                         if !ProfileCheck.validCIDR(net) {
-                            Text("не CIDR").font(.system(size: 11)).foregroundStyle(Palette.bad)
+                            Text(L("не CIDR")).font(.system(size: 11)).foregroundStyle(Palette.bad)
                         } else if let len = ProfileCheck.prefixLength(net), len < 8 {
-                            Text("уводит почти весь трафик").font(.system(size: 11)).foregroundStyle(Palette.warn)
+                            Text(L("уводит почти весь трафик")).font(.system(size: 11)).foregroundStyle(Palette.warn)
                         }
                     } else if !line.trimmed.isEmpty {
-                        Text("комментарий").font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(L("комментарий")).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button { doc.routes.remove(at: i); touched() } label: { Image(systemName: "minus.circle") }
                         .buttonStyle(.borderless).foregroundStyle(.secondary)
-                        .help("Убрать сеть")
+                        .help(L("Убрать сеть"))
                 }
             }
-            Button { doc.routes.append(""); touched() } label: { Label("Добавить сеть", systemImage: "plus") }
+            Button { doc.routes.append(""); touched() } label: { Label(L("Добавить сеть"), systemImage: "plus") }
                 .buttonStyle(.borderless)
         }
     }
@@ -721,16 +727,16 @@ struct ProfileEditorView: View {
                     TextField("", text: Binding(
                         get: { i < doc.zones.count ? doc.zones[i].resolver : "" },
                         set: { if i < doc.zones.count { doc.zones[i].resolver = $0; touched() } }),
-                        prompt: Text("10.0.0.1 или vpn"))
+                        prompt: Text(L("10.0.0.1 или vpn")))
                         .labelsHidden().font(.ocMono).frame(maxWidth: 150)
                     Spacer()
                     Button { doc.zones.remove(at: i); touched() } label: { Image(systemName: "minus.circle") }
                         .buttonStyle(.borderless).foregroundStyle(.secondary)
-                        .help("Убрать зону")
+                        .help(L("Убрать зону"))
                 }
             }
             Button { doc.zones.append(ZoneLine(zone: "", resolver: "vpn", port: "")); touched() } label: {
-                Label("Добавить зону", systemImage: "plus")
+                Label(L("Добавить зону"), systemImage: "plus")
             }
             .buttonStyle(.borderless)
         }
@@ -741,11 +747,11 @@ struct ProfileEditorView: View {
             if diskChanged {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(Palette.warn)
-                    Text("Файл изменился на диске, пока здесь есть правки: сохранение спросит, что оставить.")
+                    Text(L("Файл изменился на диске, пока здесь есть правки: сохранение спросит, что оставить."))
                         .font(.system(size: 11)).foregroundStyle(Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("Перечитать") { if let name = loadedName { open(name) } }
+                    Button(L("Перечитать")) { if let name = loadedName { open(name) } }
                         .buttonStyle(.link).font(.system(size: 11))
                 }
             }
@@ -767,14 +773,14 @@ struct ProfileEditorView: View {
             }
             HStack(spacing: 10) {
                 if issues.isEmpty {
-                    Label("Профиль без ошибок", systemImage: "checkmark.circle.fill")
+                    Label(L("Профиль без ошибок"), systemImage: "checkmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Palette.ok)
                 }
                 Spacer()
                 // «Отменить» возвращает то, что лежит в файле.
-                Button("Отменить") { if let name = loadedName { open(name) } else { newDoc() } }
+                Button(L("Отменить")) { if let name = loadedName { open(name) } else { newDoc() } }
                     .disabled(!dirty)
-                Button("Сохранить") { save() }
+                Button(L("Сохранить")) { save() }
                     .keyboardShortcut("s")
                     .buttonStyle(.borderedProminent)
                     .disabled(!errors.isEmpty || doc.fileName.trimmed.isEmpty)
@@ -813,7 +819,7 @@ struct ProfileEditorView: View {
     private func badge(of name: String) -> String {
         let s = store.status
         var parts: [String] = []
-        if s.defaultProfile == name { parts.append("по умолчанию") }
+        if s.defaultProfile == name { parts.append(L("по умолчанию")) }
         let host = heads[name]?.host ?? s.profiles.first { $0.name == name }?.address ?? ""
         parts.append(host.isEmpty ? name + ".ocbar" : host)
         return parts.joined(separator: " · ")
@@ -839,13 +845,13 @@ struct ProfileEditorView: View {
 
     static func sourceTitle(_ v: String) -> String {
         switch v {
-        case "auto": return "авто"
-        case "keychain": return "связка ключей"
+        case "auto": return L("авто")
+        case "keychain": return L("связка ключей")
         case "keepassxc": return "KeePassXC"
-        case "command": return "своя команда"
-        case "ask": return "вводит человек"
-        case "sms": return "SMS — вводит человек"
-        case "off": return "не вводить"
+        case "command": return L("своя команда")
+        case "ask": return L("вводит человек")
+        case "sms": return L("SMS — вводит человек")
+        case "off": return L("не вводить")
         default: return v
         }
     }
@@ -896,7 +902,7 @@ struct ProfileEditorView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let r = OcbarClient.shared.action(["profiles", "order"] + names, timeout: 10)
             DispatchQueue.main.async {
-                if case .failed(_, let text) = r { message = "порядок не сохранён: " + text }
+                if case .failed(_, let text) = r { message = L("порядок не сохранён: ") + text }
                 store.refresh()
             }
         }
@@ -964,14 +970,14 @@ struct ProfileEditorView: View {
             loadedName = nil
             disk = nil
             files = ProfileStore.list()
-            message = "файл профиля удалён на диске — «Сохранить» запишет его заново"
+            message = L("файл профиля удалён на диске — «Сохранить» запишет его заново")
             return
         }
         if dirty {
             diskChanged = true
         } else {
             open(name)
-            message = "файл изменился на диске — перечитан"
+            message = L("файл изменился на диске — перечитан")
         }
     }
 
@@ -1026,11 +1032,11 @@ struct ProfileEditorView: View {
         // Последнее слово — за клиентом: он читает профиль при подключении,
         // и его отказ здесь дешевле, чем «не подключается» потом.
         if let why = OcbarClient.shared.profileRejection(doc.render(), name: name) {
-            issues.append(Issue(level: .error, text: "клиент не принимает профиль: " + why))
+            issues.append(Issue(level: .error, text: L("клиент не принимает профиль: ") + why))
             return
         }
         if let error = ProfileStore.save(doc) {
-            issues.append(Issue(level: .error, text: "не удалось записать: \(error)"))
+            issues.append(Issue(level: .error, text: L("не удалось записать: %@", error)))
             return
         }
         loadedName = name
@@ -1043,14 +1049,14 @@ struct ProfileEditorView: View {
         reloadLegacy()
         // Проверяем не своими глазами, а клиентом: профиль должен появиться
         // в его списке — значит файл разобран. В фоне: это вызов ocbar.
-        message = "сохранено"
+        message = L("сохранено")
         DispatchQueue.global(qos: .userInitiated).async {
             let seen = OcbarClient.shared.status().profiles.contains { $0.name == name }
             DispatchQueue.main.async {
                 guard loadedName == name else { return }
                 message = seen
-                    ? "сохранено, ocbar видит профиль «\(name)»"
-                    : "файл записан, но ocbar профиль не показывает — проверьте ocbar profiles"
+                    ? L("сохранено, ocbar видит профиль «%@»", name)
+                    : L("файл записан, но ocbar профиль не показывает — проверьте ocbar profiles")
             }
         }
         next?()
@@ -1071,11 +1077,11 @@ struct ProfileEditorView: View {
                     files = ProfileStore.list()
                     reloadLegacy()
                     if dirty { alert = .unsaved(.file(name)) } else { open(name) }
-                    message = "профиль \(name) переведён в файл — теперь ocbar читает его оттуда"
+                    message = L("профиль %@ переведён в файл — теперь ocbar читает его оттуда", name)
                 case .needsLogin, .cancelled:
                     message = nil
                 case .failed(_, let text):
-                    issues = [Issue(level: .error, text: "перевод не удался: \(text)")]
+                    issues = [Issue(level: .error, text: L("перевод не удался: %@", text))]
                 }
             }
         }
