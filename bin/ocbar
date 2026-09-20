@@ -267,6 +267,17 @@ auth_path() {
     return 1
 }
 
+# Вспомогательные файлы рядом с клиентом: из репозитория, из установки brew
+# или по OCBAR_LIBEXEC (самопроверка).
+libexec_file() { # имя
+    local c
+    for c in "${OCBAR_LIBEXEC:-}/$1" "$SELF_DIR/../libexec/$1" \
+             /opt/homebrew/opt/ocbar/libexec/"$1" /usr/local/opt/ocbar/libexec/"$1"; do
+        [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return 0; }
+    done
+    return 1
+}
+
 openconnect_bin() {
     local c
     # Подмена — только в самопроверке (есть заглушка хелпера): установка под
@@ -2174,6 +2185,15 @@ cmd_disconnect() {
 }
 
 # ---------------------------------------------------------------- status ----
+# Машинное состояние в JSON: то же, что --short, но с типами — списки
+# списками, числа числами. Собирается из вывода --short, чтобы источник
+# истины остался один.
+cmd_status_json() {
+    local conv; conv=$(libexec_file ocbar-status-json.py) \
+        || die "не найден ocbar-status-json.py (ищу рядом с ocbar и в libexec)"
+    cmd_status --short | /usr/bin/python3 "$conv"
+}
+
 cmd_status() {
     local short=0; [ "${1:-}" = "--short" ] && short=1
     # Сети и зоны живут в профиле, поэтому для показа его надо загрузить.
@@ -3469,6 +3489,22 @@ PROFILE
     has "профиль в списке" "profile_list=t|Проба||" "$out"
     has "адрес профиля отдельной строкой" "profile_url=t|vpn.example.test/group" "$out"
 
+    # Машинное состояние: приложение читает его целиком, поэтому проверяем
+    # не текст, а разобранный JSON.
+    # run() подмешивает поток ошибок — берём только строку JSON.
+    local js; js=$(run status --json | grep '^{' | tail -1)
+    is "status --json: состояние" "down" \
+       "$(printf '%s' "$js" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])' 2>/dev/null || echo "не JSON")"
+    is "status --json: сеть профиля списком объектов" "10.11.12.0/24 on" \
+       "$(printf '%s' "$js" | /usr/bin/python3 -c 'import json,sys
+d=json.load(sys.stdin); r=d["routes"][0]; print(r["net"], "on" if r["on"] else "off")' 2>/dev/null || echo "не JSON")"
+    is "status --json: профиль с адресом" "t vpn.example.test/group" \
+       "$(printf '%s' "$js" | /usr/bin/python3 -c 'import json,sys
+d=json.load(sys.stdin); p=d["profiles"][0]; print(p["name"], p["url"])' 2>/dev/null || echo "не JSON")"
+    is "status --json: название профиля" "Проба" \
+       "$(printf '%s' "$js" | /usr/bin/python3 -c 'import json,sys
+d=json.load(sys.stdin); print(d["profiles"][0]["title"])' 2>/dev/null || echo "не JSON")"
+
     # Общий журнал: строки разных файлов — одной лентой по времени; строка
     # без времени — сразу за предыдущей своего файла.
     mkdir -p "$tmp/logs"
@@ -4377,7 +4413,7 @@ case "${1:-}" in
     autoconnect) shift; cmd_autoconnect "$@" ;;
     report)     shift; cmd_report "$@" ;;
     logs)       shift; cmd_logs "$@" ;;
-    status)     cmd_status "${2:-}" ;;
+    status)     if [ "${2:-}" = "--json" ]; then cmd_status_json; else cmd_status "${2:-}"; fi ;;
     profiles)   shift; cmd_profiles "$@" ;;
     routes)     shift; cmd_routes "$@" ;;
     dns)        shift; cmd_dns "$@" ;;

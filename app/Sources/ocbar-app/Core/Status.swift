@@ -118,92 +118,103 @@ struct Status {
     var routesOn: [RouteEntry] { routes.filter { $0.enabled } }
     var zonesApplied: [ZoneEntry] { zones.filter { $0.applied } }
 
-    static func parse(_ text: String) -> Status {
+    /// Разбор `ocbar status --json`. Раньше приложение читало `--short`
+    /// построчно: «|» в названии профиля сдвигал поля, а каждое новое поле
+    /// приходилось прятать в отдельную строку. Теперь типы приходят от
+    /// клиента, а формат один на всех.
+    static func parse(json data: Data) -> Status? {
+        guard let w = try? JSONDecoder().decode(Wire.self, from: data) else { return nil }
         var s = Status()
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            let line = String(rawLine)
-            guard let eq = line.firstIndex(of: "=") else { continue }
-            let key = String(line[line.startIndex..<eq])
-            let value = String(line[line.index(after: eq)...])
-            switch key {
-            case "paused":      s.paused = value == "1"
-            case "needs_login": s.needsLogin = value == "1"
-            case "state":       s.state = TunnelState(rawValue: value) ?? .down
-            case "profile":     s.profile = value
-            case "tundev":      s.tundev = value
-            case "ip":          s.ip = value
-            case "since":       s.since = unixDate(value)
-            case "gateway":     s.gateway = value
-            case "dns":         s.dns = value.split(separator: " ").map(String.init)
-            case "url":         s.url = value
-            case "mode":        s.mode = value
-            case "mtu":         s.mtu = value
-            case "profile_mode": s.profileMode = value.isEmpty ? "tunnel" : value
-            case "proxy_port":  s.proxyPort = value
-            case "system_proxy": s.systemProxy = value == "on"
-            case "socks":       s.socks = value
-            case "socks_up":    s.socksUp = value == "1"
-            case "system_socks": s.systemSocksOn = value.split(separator: ",").map(String.init).filter { !$0.isEmpty }
-            case "system_socks_refused": s.systemSocksRefused = value
-            case "woke_after_connect": s.wokeAfterConnect = unixDate(value)
-            case "foreign":     s.foreign = value == "1"
-            case "supervisor":  s.supervisor = value == "1"
-            case "iface":       s.iface = value
-            case "link_lost":   s.linkLostSince = unixDate(value)
-            case "access":      s.access = value
-            case "access_at":   s.accessAt = unixDate(value)
-            case "default":     s.defaultProfile = value
-            case "route":
-                // "10.0.0.0/8 utun5 on"; вместо пустого интерфейса — "-",
-                // иначе поле схлопывается и признак "on" читается как утун.
-                let f = value.split(separator: " ").map(String.init)
-                guard f.count >= 3, !s.routes.contains(where: { $0.net == f[0] }) else { continue }
-                s.routes.append(RouteEntry(net: f[0], via: f[1] == "-" ? nil : f[1],
-                                           enabled: f[2] == "on"))
-            case "zone":
-                let f = value.split(separator: " ").map(String.init)
-                guard f.count >= 4, !s.zones.contains(where: { $0.zone == f[0] }) else { continue }
-                s.zones.append(ZoneEntry(zone: f[0], dns: f[1],
-                                         applied: f[2] == "applied", enabled: f[3] == "on"))
-            case "profile_list":
-                // «имя|название|вход|описание». Имя — первое поле; повтор
-                // имени — тот же профиль (id в списке меню должны быть
-                // уникальны). «|» в названии или описании сдвигает поля,
-                // поэтому поле входа ищется: password или пустое.
-                let f = value.components(separatedBy: "|")
-                guard let name = f.first, !name.isEmpty,
-                      !s.profiles.contains(where: { $0.name == name }) else { continue }
-                var title = f.count > 1 ? f[1] : ""
-                var auth = f.count > 2 ? f[2] : ""
-                var descr = f.count > 3 ? f[3] : ""
-                if f.count > 4,
-                   let i = (2..<f.count).first(where: { f[$0] == "password" })
-                        ?? (2..<f.count).first(where: { f[$0].isEmpty }) {
-                    title = f[1..<i].joined(separator: "|")
-                    auth = f[i]
-                    descr = f[(i + 1)...].joined(separator: "|")
-                }
-                // Парольная группа — только ровно password: всё прочее — sso.
-                s.profiles.append(ProfileEntry(name: name, title: title,
-                                               auth: auth == "password" ? "password" : "",
-                                               descr: descr))
-            case "profile_url":
-                // «имя|адрес» — отдельной строкой после profile_list.
-                guard let bar = value.firstIndex(of: "|") else { continue }
-                let name = String(value[..<bar])
-                if let i = s.profiles.firstIndex(where: { $0.name == name }) {
-                    s.profiles[i].url = String(value[value.index(after: bar)...])
-                }
-            default: break
-            }
+        s.paused = w.paused ?? false
+        s.needsLogin = w.needs_login ?? false
+        s.state = TunnelState(rawValue: w.state ?? "") ?? .down
+        s.profile = w.profile ?? ""
+        s.tundev = w.tundev ?? ""
+        s.ip = w.ip ?? ""
+        s.since = date(w.since)
+        s.gateway = w.gateway ?? ""
+        s.dns = w.dns ?? []
+        s.url = w.url ?? ""
+        s.mode = w.mode ?? ""
+        s.profileMode = (w.profile_mode?.isEmpty == false) ? w.profile_mode! : "tunnel"
+        s.proxyPort = w.proxy_port.map(String.init) ?? ""
+        s.systemProxy = w.system_proxy == "on"
+        s.socks = w.socks ?? ""
+        s.socksUp = w.socks_up ?? true
+        s.systemSocksOn = w.system_socks ?? []
+        s.systemSocksRefused = w.system_socks_refused ?? ""
+        s.wokeAfterConnect = date(w.woke_after_connect)
+        s.linkLostSince = date(w.link_lost)
+        s.foreign = w.foreign ?? false
+        s.supervisor = w.supervisor ?? false
+        s.iface = w.iface ?? ""
+        s.access = w.access ?? ""
+        s.accessAt = date(w.access_at)
+        s.defaultProfile = w.default ?? ""
+        s.routes = (w.routes ?? []).map { RouteEntry(net: $0.net, via: $0.via, enabled: $0.on) }
+        s.zones = (w.zones ?? []).map { ZoneEntry(zone: $0.zone, dns: $0.dns, applied: $0.applied, enabled: $0.on) }
+        s.profiles = (w.profiles ?? []).map {
+            // Парольная группа — только ровно password: всё прочее — sso.
+            ProfileEntry(name: $0.name, title: $0.title ?? "",
+                         auth: $0.auth == "password" ? "password" : "",
+                         descr: $0.descr ?? "", url: $0.url ?? "")
         }
         return s
     }
 
-    private static func unixDate(_ v: String) -> Date? {
-        guard let t = TimeInterval(v), t > 0 else { return nil }
-        return Date(timeIntervalSince1970: t)
+    static func parse(json text: String) -> Status? {
+        parse(json: Data(text.utf8))
     }
+
+    private static func date(_ seconds: Int?) -> Date? {
+        guard let seconds, seconds > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(seconds))
+    }
+
+    /// Как приходит JSON от клиента: все поля необязательные — состояние
+    /// без туннеля половины из них не содержит.
+    private struct Wire: Decodable {
+        var state: String?
+        var profile: String?
+        var paused: Bool?
+        var needs_login: Bool?
+        var tundev: String?
+        var ip: String?
+        var since: Int?
+        var gateway: String?
+        var dns: [String]?
+        var url: String?
+        var mode: String?
+        var profile_mode: String?
+        var proxy_port: Int?
+        var system_proxy: String?
+        var socks: String?
+        var socks_up: Bool?
+        var system_socks: [String]?
+        var system_socks_refused: String?
+        var woke_after_connect: Int?
+        var link_lost: Int?
+        var foreign: Bool?
+        var supervisor: Bool?
+        var iface: String?
+        var access: String?
+        var access_at: Int?
+        var `default`: String?
+        var routes: [RouteWire]?
+        var zones: [ZoneWire]?
+        var profiles: [ProfileWire]?
+
+        struct RouteWire: Decodable { var net: String; var via: String?; var on: Bool }
+        struct ZoneWire: Decodable { var zone: String; var dns: String; var applied: Bool; var on: Bool }
+        struct ProfileWire: Decodable {
+            var name: String
+            var title: String?
+            var auth: String?
+            var descr: String?
+            var url: String?
+        }
+    }
+
 }
 
 // "2ч 14м" — как в CLI и в песочнице.

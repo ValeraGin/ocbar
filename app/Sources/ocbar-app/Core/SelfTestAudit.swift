@@ -107,20 +107,18 @@ extension SelfTest {
     // --- разбор status ----------------------------------------------------
 
     static func auditStatus(_ t: Tally) {
-        let s = Status.parse("""
-        state=down
-        profile_list=main|Мой|офис||описание
-        profile_list=main|Дубль||
-        profile_list=pw|Пароль|password|
-        profile_list=odd|A|B|password|x
-        profile_url=pw|https://vpn.example.test/sms?x=1
-        route=10.0.0.0/8 - on
-        route=10.0.0.0/8 - on
-        """)
+        // JSON от `ocbar status --json`: поля приходят типами, «|» и прочие
+        // разделители больше не участвуют.
+        let s = Status.parse(json: """
+        {"state":"down",
+         "profiles":[{"name":"main","title":"Мой|офис","auth":"","descr":"описание","url":""},
+                     {"name":"pw","title":"Пароль","auth":"password","descr":"",
+                      "url":"https://vpn.example.test/sms?x=1"},
+                     {"name":"odd","title":"A|B","auth":"password","descr":"x","url":""}],
+         "routes":[{"net":"10.0.0.0/8","via":null,"on":true}]}
+        """) ?? Status()
         let main = s.profiles.first { $0.name == "main" }
-        t.check("состояние: повтор имени профиля — один профиль", s.profiles.filter { $0.name == "main" }.count == 1,
-                "\(s.profiles.filter { $0.name == "main" }.count)")
-        t.check("состояние: «|» в названии не сдвигает поля",
+        t.check("состояние: «|» в названии сохраняется как есть",
                 main?.title == "Мой|офис" && main?.isPassword == false, "\(main?.title ?? "—") / \(main?.auth ?? "—")")
         t.check("состояние: парольная группа распознана", s.profiles.first { $0.name == "pw" }?.isPassword == true)
         t.check("состояние: домен профиля — без схемы и группы",
@@ -129,11 +127,10 @@ extension SelfTest {
         t.check("состояние: адрес профиля — без схемы, с группой",
                 s.profiles.first { $0.name == "pw" }?.address == "vpn.example.test/sms?x=1",
                 s.profiles.first { $0.name == "pw" }?.address ?? "—")
-        let odd = s.profiles.first { $0.name == "odd" }
-        t.check("состояние: «|» в названии парольной группы", odd?.isPassword == true && odd?.title == "A|B",
-                "\(odd?.title ?? "—") / \(odd?.auth ?? "—")")
         t.check("состояние: id профилей уникальны", Set(s.profiles.map(\.id)).count == s.profiles.count)
-        t.check("состояние: id сетей уникальны", Set(s.routes.map(\.id)).count == s.routes.count)
+        t.check("состояние: битый JSON — не состояние, а nil", Status.parse(json: "{не json") == nil)
+        t.check("состояние: пустой JSON — состояние по умолчанию",
+                Status.parse(json: "{}")?.presentation == .down)
     }
 
     // --- уведомления ------------------------------------------------------
@@ -152,7 +149,7 @@ extension SelfTest {
                 MenuView.fix(for: "нет openconnect — brew install openconnect")?.command == "brew install openconnect")
         t.check("ошибка: обычная — без подсказки", MenuView.fix(for: "сеть 10.0.0.0/8 не включилась") == nil)
         // Доступ: состояние читается из status --short.
-        let acc = Status.parse("state=connected\naccess=fail\naccess_at=1700000000\n")
+        let acc = Status.parse(json: #"{"state":"connected","access":"fail","access_at":1700000000}"#) ?? Status()
         t.check("доступ: состояние и время разобраны", acc.access == "fail" && acc.accessAt != nil)
 
         t.check("уведомление: свой токен принят", Notifier.parse(good) != nil)

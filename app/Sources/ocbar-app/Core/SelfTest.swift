@@ -201,22 +201,15 @@ enum SelfTest {
         check("пустое уведомление отвергнуто", Notifier.parse(URL(string: "ocbar://notify?token=5e1f7e57")!) == nil)
 
         // --- разбор состояния ---
-        let status = Status.parse("""
-        paused=0
-        needs_login=0
-        state=connected
-        profile=main
-        tundev=utun5
-        ip=10.20.30.40
-        since=1788723116
-        dns=10.0.16.4 10.0.0.23
-        supervisor=1
-        route=10.0.0.0/8 utun5 on
-        route=11.0.0.0/8 - off
-        zone=example.com 10.0.0.1 applied on
-        profile_list=main|Основной||Любые устройства
-        default=main
-        """)
+        let status = Status.parse(json: """
+        {"state":"connected","profile":"main","paused":false,"needs_login":false,
+         "tundev":"utun5","ip":"10.20.30.40","since":1788723116,
+         "dns":["10.0.16.4","10.0.0.23"],"supervisor":true,"default":"main",
+         "routes":[{"net":"10.0.0.0/8","via":"utun5","on":true},
+                   {"net":"11.0.0.0/8","via":null,"on":false}],
+         "zones":[{"zone":"example.com","dns":"10.0.0.1","applied":true,"on":true}],
+         "profiles":[{"name":"main","title":"Основной","auth":"","descr":"Любые устройства","url":"vpn.example.test/g"}]}
+        """) ?? Status()
         check("состояние connected", status.presentation == .connected)
         check("маршрут включён", status.routes.first?.enabled == true)
         check("маршрут без интерфейса", status.routes.last?.via == nil)
@@ -225,25 +218,14 @@ enum SelfTest {
         check("название профиля из списка", status.profileTitle == "Основной")
         check("туннельная сессия — не прокси", !status.isProxySession)
 
-        let px = Status.parse("""
-        paused=0
-        needs_login=0
-        woke_after_connect=1788723999
-        state=connected
-        profile=px
-        tundev=
-        ip=10.9.8.7
-        since=1788723116
-        mode=proxy
-        supervisor=1
-        socks=127.0.0.1:11080
-        socks_up=1
-        system_socks=Wi-Fi,Thunderbolt Bridge
-        system_socks_refused=на «Wi-Fi» уже включён чужой SOCKS
-        profile_mode=proxy
-        proxy_port=11080
-        system_proxy=on
-        """)
+        let px = Status.parse(json: """
+        {"state":"connected","profile":"px","paused":false,"needs_login":false,
+         "woke_after_connect":1788723999,"tundev":"","ip":"10.9.8.7","since":1788723116,
+         "mode":"proxy","supervisor":true,"socks":"127.0.0.1:11080","socks_up":true,
+         "system_socks":["Wi-Fi","Thunderbolt Bridge"],
+         "system_socks_refused":"на «Wi-Fi» уже включён чужой SOCKS",
+         "profile_mode":"proxy","proxy_port":11080,"system_proxy":"on"}
+        """) ?? Status()
         check("прокси-сессия распознаётся", px.isProxySession)
         check("адрес SOCKS", px.socks == "127.0.0.1:11080")
         check("SOCKS отвечает", px.socksUp)
@@ -261,8 +243,9 @@ enum SelfTest {
             try? doc.render().write(toFile: path, atomically: true, encoding: .utf8)
             let r = Shell.run(binary, ["profiles"], env: ["OCBAR_CONFIG_DIR": tmp], timeout: 20)
             check("ocbar видит записанный профиль", r.out.contains("sample"), r.out.trimmed + r.err.trimmed)
-            let s = Shell.run(binary, ["status", "--short"], env: ["OCBAR_CONFIG_DIR": tmp], timeout: 20)
-            let parsed = Status.parse(s.out)
+            let s = Shell.run(binary, ["status", "--json"], env: ["OCBAR_CONFIG_DIR": tmp], timeout: 20)
+            let parsed = Status.parse(json: s.out) ?? Status()
+            check("живой ocbar отдаёт разбираемый JSON", Status.parse(json: s.out) != nil, s.out.trimmed.prefix(120).description)
             check("сети профиля попали в status",
                   parsed.routes.map(\.net) == doc.routes, parsed.routes.map(\.net).joined(separator: " "))
             check("зоны профиля попали в status",

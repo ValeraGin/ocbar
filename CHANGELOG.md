@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.12.0 — 2026-09-20
+
+- `ocbar status --json` prints the whole state as typed JSON: lists as lists,
+  numbers as numbers. The menu bar app reads that instead of parsing
+  `key=value` lines, so a "|" in a profile name or a new field can no longer
+  shift columns. `--short` stays for scripts and the SwiftBar plugin.
+
 ## 0.11.1 — 2026-09-20
 
 - No more jumping when the menu changes height: the height is not animated any

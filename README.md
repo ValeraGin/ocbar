@@ -177,7 +177,7 @@ A full annotated example: [etc/example.ocbar](etc/example.ocbar).
 ocbar connect [profile] [--show] [--teach] [-v]   log in and bring the tunnel up
 ocbar disconnect
 ocbar logout                          disconnect and forget identity-provider sessions
-ocbar status [--short]
+ocbar status [--short|--json]
 ocbar profiles | import <file> | export <profile> [file] | order [name…]
 ocbar routes on|off|toggle <CIDR>     also: apply | clear | status
 ocbar dns on|off|toggle <zone>        also: apply | clear | status
