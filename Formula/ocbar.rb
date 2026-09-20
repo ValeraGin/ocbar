@@ -22,8 +22,13 @@ class Ocbar < Formula
     # Info.plist (LSUIElement) собирает make-app.sh.
     cd("app") { system "./make-app.sh", prefix }
     libexec.install "libexec/ocbar-helper"
-    # Преобразователь состояния в JSON: его зовёт `ocbar status --json`.
+    # Помощники клиента: состояние в JSON, общий журнал, маскировка отчёта,
+    # вход в парольную группу и сами проверки. Клиент ищет их в libexec.
     libexec.install "libexec/ocbar-status-json.py"
+    libexec.install "libexec/ocbar-logs.py"
+    libexec.install "libexec/ocbar-redact.py"
+    libexec.install "libexec/ocbar-pwauth.py"
+    libexec.install "libexec/ocbar-selftest.sh"
     bin.install "bin/ocbar"
     (pkgshare/"swiftbar").install "swiftbar/ocbar.5s.sh"
     # example.ocbar — образец основного формата (профиль одним файлом); маска

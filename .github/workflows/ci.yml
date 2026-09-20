@@ -22,13 +22,14 @@ jobs:
       - uses: actions/checkout@v5
       - name: Shell syntax
         run: |
-          for f in bin/ocbar libexec/ocbar-helper tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh; do
+          for f in bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh; do
             bash -n "$f"
           done
       - name: ShellCheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck >/dev/null
-          shellcheck -S error bin/ocbar libexec/ocbar-helper tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh
+          shellcheck -S error bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh swiftbar/ocbar.5s.sh app/make-app.sh
+          python3 -m compileall -q libexec/*.py
       - name: Formula syntax
         run: ruby -c Formula/ocbar.rb
       - name: Markdown links

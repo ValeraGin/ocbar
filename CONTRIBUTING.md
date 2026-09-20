@@ -34,10 +34,11 @@ breaks. Prove it: temporarily revert your fix and show the check failing.
 
 | Part | What it is | Contract not to break silently |
 |---|---|---|
-| `bin/ocbar` | CLI, bash, runs as the user | `ocbar status --short` is `key=value` lines read by the app; exit codes: 5 — a human must log in, 6 — network/gateway, other non-zero — failure |
+| `bin/ocbar` | CLI, bash, runs as the user | `ocbar status --json` is the machine-readable state the app reads; `--short` is `key=value` lines for scripts and SwiftBar; exit codes: 5 — a human must log in, 6 — network/gateway, other non-zero — failure |
+| `libexec/ocbar-*.py`, `ocbar-selftest.sh` | helpers the CLI runs: state as JSON, merged logs, report redaction, password-group login, the CLI self-test | found next to `ocbar` or in the Homebrew `libexec`; they are code, not strings inside the shell script |
 | `libexec/ocbar-helper` | everything that needs root | fixed subcommands, every argument validated, state only under `/var/db/ocbar`, touches only what it created |
 | `auth/` | `ocbar-auth`: login window, autofill, TOTP | fills only over HTTPS on hosts of the login chain; password twice, code once per login |
-| `app/` | SwiftUI menu bar app, no privileges | reads `status --short`, acts by calling `ocbar`; profile parsing must match the CLI (checked in `ocbar-app --selftest`) |
+| `app/` | SwiftUI menu bar app, no privileges | reads `status --json`, acts by calling `ocbar`; profile parsing must match the CLI (checked in `ocbar-app --selftest`) |
 
 Profile format: one `.ocbar` file per connection, sections `[Connection]`,
 `[Routes]`, `[DNS]`, `[Auth]`, `[Proxy]`, `[Health]`, `[Autofill]`. Adding a
