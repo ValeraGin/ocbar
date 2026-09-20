@@ -62,6 +62,14 @@ cp "$BIN/ocbar-app" "$APP/Contents/MacOS/ocbar-app"
 # swift внутри песочницы brew может не собрать её (кэш модулей), поэтому
 # готовая копия лежит в Resources/ и идёт в бандл, когда генерация не
 # удалась: у установленного через brew приложения иконка должна быть всегда.
+# Переводы: .lproj кладём прямо в Resources бандла, чтобы их находил
+# Bundle.main — ресурсы SwiftPM лежат в своём бандле, а UI спрашивает
+# главный.
+for lproj in Resources/*.lproj; do
+    [ -d "$lproj" ] || continue
+    cp -R "$lproj" "$APP/Contents/Resources/"
+done
+
 ICON_OK=0
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 if swift "$HERE/make-icon.swift" "$ICONSET" >/dev/null 2>&1 \
@@ -96,6 +104,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         <key>CFBundleURLSchemes</key><array><string>ocbar</string></array>
     </dict></array>
 $([ "$ICON_OK" = 1 ] && printf '    <key>CFBundleIconFile</key><string>AppIcon</string>\n    <key>CFBundleIconName</key><string>AppIcon</string>')
+    <key>CFBundleDevelopmentRegion</key><string>ru</string>
+    <key>CFBundleLocalizations</key><array><string>ru</string><string>en</string></array>
     <key>NSHumanReadableCopyright</key><string>© 2026 ValeraGin (Ignatkovich Valery). MIT</string>
 </dict>
 </plist>

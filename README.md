@@ -71,6 +71,8 @@ directories, and it only touches what it created itself. See
   never opens a login window on its own; caps logins per hour.
 - **Proxy mode**: `openconnect --script-tun` + `ocproxy` gives a local SOCKS
   proxy with no routes, no DNS changes and no root at all.
+- **English and Russian**: the app follows the system language; the CLI speaks
+  Russian for now.
 - **Menu bar app**: a status card with the profile, its address and one action
   button (Connect, Disconnect, Sign in, Resume), traffic, network and zone
   toggles on a second page; profiles are chosen and switched in Settings, profile editor, diagnostics, logs, notification settings, and a

@@ -8,10 +8,10 @@ struct SettingsWindow: View {
         var id: Int { rawValue }
         var title: String {
             switch self {
-            case .profiles: return "Профили"
-            case .notifications: return "Уведомления"
-            case .general: return "Общие"
-            case .about: return "О программе"
+            case .profiles: return L("Профили")
+            case .notifications: return L("Уведомления")
+            case .general: return L("Общие")
+            case .about: return L("О программе")
             }
         }
         var symbol: String {

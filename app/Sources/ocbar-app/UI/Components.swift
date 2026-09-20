@@ -178,7 +178,7 @@ struct CopyButton: View {
         }
         .buttonStyle(.borderless)
         .disabled(text.isEmpty)
-        .help("Скопировать")
+        .help(L("Скопировать"))
     }
 }
 
@@ -284,7 +284,7 @@ struct Banner: View {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(fix.command, forType: .string)
                         }
-                        .help("Скопировать: " + fix.command)
+                        .help(L("Скопировать: ") + fix.command)
                     }
                     if let link { Button(link.0, action: link.1) }
                 }
@@ -296,7 +296,7 @@ struct Banner: View {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 11))
                 }
                 .buttonStyle(.borderless).foregroundStyle(Palette.tertiary)
-                .accessibilityLabel("Скрыть")
+                .accessibilityLabel(L("Скрыть"))
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 8)

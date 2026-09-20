@@ -15,43 +15,43 @@ struct GeneralView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Запускать при входе в систему", isOn: Binding(get: { autostart }, set: { set($0) }))
+                Toggle(L("Запускать при входе в систему"), isOn: Binding(get: { autostart }, set: { set($0) }))
                     .disabled(busy)
             } footer: {
-                footnote("Значок появится в строке меню сам; туннель при этом не поднимается.")
+                footnote(L("Значок появится в строке меню сам; туннель при этом не поднимается."))
             }
             Section {
-                Picker("Автоподключение", selection: Binding(get: { policy }, set: { setPolicy($0) })) {
-                    Text("Вручную").tag("manual")
-                    Text("Восстанавливать прошлое подключение").tag("resume")
+                Picker(L("Автоподключение"), selection: Binding(get: { policy }, set: { setPolicy($0) })) {
+                    Text(L("Вручную")).tag("manual")
+                    Text(L("Восстанавливать прошлое подключение")).tag("resume")
                     ForEach(store.status.profiles.filter { !$0.isPassword }) { p in
-                        Text("Всегда: \(p.display)").tag("always " + p.name)
+                        Text(L("Всегда: %@", p.display)).tag("always " + p.name)
                     }
                 }
                 .disabled(busy)
-                Toggle("Не подключаться автоматически в этой сети", isOn: Binding(get: { skipHere }, set: { setSkip($0) }))
+                Toggle(L("Не подключаться автоматически в этой сети"), isOn: Binding(get: { skipHere }, set: { setSkip($0) }))
                     .disabled(busy)
             } header: {
-                Text("Подключение")
+                Text(L("Подключение"))
             } footer: {
-                footnote("Сеть определяется по маршрутизатору, без геолокации. Если сессия истекла, автоподключение остановится и меню покажет «Нужен вход».")
+                footnote(L("Сеть определяется по маршрутизатору, без геолокации. Если сессия истекла, автоподключение остановится и меню покажет «Нужен вход»."))
             }
             Section {
-                Toggle("Режим разработчика", isOn: $developer)
+                Toggle(L("Режим разработчика"), isOn: $developer)
             } footer: {
-                footnote("Добавляет в меню «Выйти совсем (сброс входа)»: следующий вход пройдёт с формой.")
+                footnote(L("Добавляет в меню «Выйти совсем (сброс входа)»: следующий вход пройдёт с формой."))
             }
             if let note {
                 Section { Label(note, systemImage: "exclamationmark.triangle").foregroundStyle(Palette.warn) }
             }
             Section {
-                Label("Выход из приложения (⌘Q) не отключает VPN: туннелем управляет супервизор.",
+                Label(L("Выход из приложения (⌘Q) не отключает VPN: туннелем управляет супервизор."),
                       systemImage: "info.circle")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Общие")
+        .navigationTitle(L("Общие"))
         .onAppear { refresh() }
     }
 
@@ -75,7 +75,7 @@ struct GeneralView: View {
             DispatchQueue.main.async {
                 busy = false
                 skipHere = fresh
-                if case .failed(_, let why) = r { note = "не вышло: " + why }
+                if case .failed(_, let why) = r { note = L("не вышло: ") + why }
             }
         }
     }
@@ -89,7 +89,7 @@ struct GeneralView: View {
             DispatchQueue.main.async {
                 busy = false
                 policy = fresh
-                if case .failed(_, let why) = r { note = "не вышло: " + why }
+                if case .failed(_, let why) = r { note = L("не вышло: ") + why }
             }
         }
     }
@@ -103,7 +103,7 @@ struct GeneralView: View {
             DispatchQueue.main.async {
                 busy = false
                 autostart = fresh
-                if case .failed(_, let why) = r { note = "не вышло: " + why }
+                if case .failed(_, let why) = r { note = L("не вышло: ") + why }
             }
         }
     }

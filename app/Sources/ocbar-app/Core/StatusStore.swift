@@ -366,15 +366,16 @@ final class StatusStore: ObservableObject {
 // в русском интерфейсе.
 enum Size {
     static func rate(_ bytesPerSecond: Double) -> String {
-        bytes(bytesPerSecond) + "/с"
+        bytes(bytesPerSecond) + L("/с")
     }
     static func bytes(_ v: Double) -> String {
-        let units = ["Б", "КБ", "МБ", "ГБ", "ТБ"]
+        let units = [L("Б"), L("КБ"), L("МБ"), L("ГБ"), L("ТБ")]
         var value = v, i = 0
         while value >= 1024, i < units.count - 1 { value /= 1024; i += 1 }
         let digits = (value < 10 && i > 0) ? 1 : 0
-        return String(format: "%.\(digits)f %@", value, units[i])
-            .replacingOccurrences(of: ".", with: ",")
+        // Запятая как разделитель — русская привычка; в английском точка.
+        let out = String(format: "%.\(digits)f %@", value, units[i])
+        return L(",") == "," ? out.replacingOccurrences(of: ".", with: ",") : out
     }
     static func bytes(_ v: UInt64) -> String { bytes(Double(v)) }
 }

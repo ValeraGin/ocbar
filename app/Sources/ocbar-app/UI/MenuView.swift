@@ -172,7 +172,7 @@ struct MenuView: View {
                     // нужен вход), — цветом и весом: по виду карточка иначе
                     // почти не отличалась от рабочего подключения.
                     let alarm = [.lost, .paused, .needsLogin, .missing].contains(s.presentation)
-                    Text(look.showsTime ? "\(look.subtitle) · сессия \(humanSince(s.since))" : look.subtitle)
+                    Text(look.showsTime ? L("%@ · сессия %@", look.subtitle, humanSince(s.since)) : look.subtitle)
                         .font(.system(size: 12, weight: alarm ? .semibold : .regular))
                         .foregroundStyle(alarm ? look.color : Palette.secondary)
                         .lineLimit(1).truncationMode(.tail)
@@ -186,7 +186,7 @@ struct MenuView: View {
             }
             actionButtons
             if s.profiles.count > 1 {
-                Button("Другой профиль…") { open(WindowID.settings) }
+                Button(L("Другой профиль…")) { open(WindowID.settings) }
                     .buttonStyle(.link).font(.system(size: 11))
             }
             if let note = look.note {
@@ -225,44 +225,44 @@ struct MenuView: View {
             }
             switch s.presentation {
             case .connected, .lost:
-                WideButton(title: "Отключить", kind: .destructive) { store.disconnect() }
+                WideButton(title: L("Отключить"), kind: .destructive) { store.disconnect() }
                 // В прокси-режиме паузы нет: снаружи туннеля ничего не
                 // изменено, снимать нечего — ocbar так и ответит.
                 if !s.isProxySession {
-                    WideButton(title: "Приостановить", systemImage: "pause.fill", kind: .neutral, compact: true,
+                    WideButton(title: L("Приостановить"), systemImage: "pause.fill", kind: .neutral, compact: true,
                                hint: GlobalHotkeys.shared.isRegistered("pause") ? "⌥⌘P" : nil,
                                enabled: idle) { store.pause() }
                 }
             case .paused:
-                WideButton(title: "Возобновить", systemImage: "play.fill", kind: .primary,
+                WideButton(title: L("Возобновить"), systemImage: "play.fill", kind: .primary,
                            hint: GlobalHotkeys.shared.isRegistered("pause") ? "⌥⌘P" : nil,
                            enabled: idle) { store.resume() }
-                WideButton(title: "Отключить", kind: .neutral, compact: true) { store.disconnect() }
+                WideButton(title: L("Отключить"), kind: .neutral, compact: true) { store.disconnect() }
             case .starting:
-                WideButton(title: "Отменить", kind: .neutral) { store.disconnect() }
+                WideButton(title: L("Отменить"), kind: .neutral) { store.disconnect() }
             case .needsLogin:
                 // Человек нажал сам — окно входа должно появиться сразу, а не
                 // после двухсекундной пробы молчаливого прохода.
-                WideButton(title: "Войти", kind: .primary, enabled: idle) {
+                WideButton(title: L("Войти"), kind: .primary, enabled: idle) {
                     store.connect(profile: s.profile.isEmpty ? nil : s.profile, show: true)
                 }
                 HStack {
-                    Button("Войти и запомнить вход…") {
+                    Button(L("Войти и запомнить вход…")) {
                         store.connect(profile: s.profile.isEmpty ? nil : s.profile, teach: true)
                     }
                     .disabled(!idle)
                     Spacer()
-                    Button("Не подключаться") { store.disconnect() }
+                    Button(L("Не подключаться")) { store.disconnect() }
                 }
                 .buttonStyle(.link).font(.system(size: 11))
             case .down, .foreign:
                 WideButton(title: s.presentation == .foreign
-                               ? "Подключить · " + StateLook.profileName(s) : "Подключить",
+                               ? L("Подключить · %@", StateLook.profileName(s)) : L("Подключить"),
                            kind: .primary, enabled: canConnect) { store.connect(profile: target) }
                 // Первый вход: человек входит руками, ocbar запоминает форму и
                 // предлагает сохранить пароль и источник кода.
                 HStack {
-                    Button("Подключить и запомнить вход…") { store.connect(profile: target, teach: true) }
+                    Button(L("Подключить и запомнить вход…")) { store.connect(profile: target, teach: true) }
                         .disabled(!canConnect)
                     Spacer()
                 }
@@ -279,16 +279,17 @@ struct MenuView: View {
     private var banners: some View {
         if let woke = s.wokeAfterConnect, s.state == .connected {
             Banner(color: Palette.warn, symbol: "moon.zzz",
-                   text: "Мак просыпался после подключения (\(Self.clock.string(from: woke))) — "
-                       + (s.supervisor ? "супервизор проверит туннель сам." : "супервизор не работает, проверьте доступ."))
+                   text: L("Мак просыпался после подключения (%@) — %@", Self.clock.string(from: woke),
+                           s.supervisor ? L("супервизор проверит туннель сам.")
+                                        : L("супервизор не работает, проверьте доступ.")))
         }
         if s.isProxySession, !s.systemSocksRefused.isEmpty {
             Banner(color: Palette.warn, symbol: "exclamationmark.triangle",
-                   text: "Системный SOCKS не включён: \(s.systemSocksRefused)", selectable: true)
+                   text: L("Системный SOCKS не включён: %@", s.systemSocksRefused), selectable: true)
         }
         if s.access == "fail", s.presentation == .connected {
             Banner(color: Palette.warn, symbol: "exclamationmark.triangle",
-                   text: "Туннель поднят, но проверка доступа не проходит: шлюз может не пускать к этому ресурсу или не хватает сети в профиле.")
+                   text: L("Туннель поднят, но проверка доступа не проходит: шлюз может не пускать к этому ресурсу или не хватает сети в профиле."))
         }
         if let warning = store.helperWarning {
             Banner(color: Palette.warn, symbol: "wrench.and.screwdriver", text: warning, selectable: true,
@@ -296,11 +297,11 @@ struct MenuView: View {
         }
         if s.available, !s.supervisor {
             Banner(color: Palette.warn, symbol: "exclamationmark.triangle",
-                   text: "Супервизор не запущен — автоподключения не будет.")
+                   text: L("Супервизор не запущен — автоподключения не будет."))
         }
         if !notify.allowed {
-            Banner(color: Palette.warn, symbol: "bell.slash", text: "Уведомления выключены",
-                   link: ("Разрешить", { Notifier.openSettings() }))
+            Banner(color: Palette.warn, symbol: "bell.slash", text: L("Уведомления выключены"),
+                   link: (L("Разрешить"), { Notifier.openSettings() }))
         }
         if let message = store.actionNote ?? (s.presentation == .missing ? nil : store.lastError) {
             let failed = store.actionFailed || store.actionNote == nil
@@ -311,14 +312,14 @@ struct MenuView: View {
             Banner(color: failed ? Palette.bad : Palette.secondary,
                    symbol: failed ? "xmark.octagon" : "info.circle",
                    text: Self.human(message), fix: fix,
-                   link: fix == nil && failed ? ("Журнал", { open(WindowID.logs) }) : nil,
+                   link: fix == nil && failed ? (L("Журнал"), { open(WindowID.logs) }) : nil,
                    dismiss: store.actionNote != nil ? { store.dismissNote() } : nil)
         }
     }
 
     private var trafficCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Скорость за минуту").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            Text(L("Скорость за минуту")).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             Sparkline(samples: store.samples, capacity: 30, active: look.graphActive, inset: 0)
             HStack {
                 Label(Size.rate(store.currentDown), systemImage: "arrow.down")
@@ -338,7 +339,7 @@ struct MenuView: View {
         VStack(spacing: 0) {
             MenuRow(enabled: s.available, action: { open(WindowID.setup) }) {
                 IconTile(symbol: "plus", color: Palette.accent)
-                Text("Настроить ocbar…")
+                Text(L("Настроить ocbar…"))
                 Spacer()
             }
         }
@@ -349,8 +350,9 @@ struct MenuView: View {
     // На паузе правила сохранены, но не действуют — числа «2/3» читались бы
     // как работающие сети.
     private var counts: String {
-        if s.paused { return "не применяются" }
-        return "сети \(s.routesOn.count)/\(s.routes.count) · DNS \(s.zones.filter { $0.enabled }.count)/\(s.zones.count)"
+        if s.paused { return L("не применяются") }
+        return L("сети %@/%@ · DNS %@/%@", "\(s.routesOn.count)", "\(s.routes.count)",
+                 "\(s.zones.filter { $0.enabled }.count)", "\(s.zones.count)")
     }
 
     private var networksLink: some View {
@@ -361,7 +363,7 @@ struct MenuView: View {
             store.refresh()
         }) {
             IconTile(symbol: s.isProxySession ? "arrow.left.arrow.right" : "globe", color: Palette.violet)
-            Text(s.isProxySession ? "Прокси SOCKS" : "Сети и DNS")
+            Text(s.isProxySession ? L("Прокси SOCKS") : L("Сети и DNS"))
             Spacer()
             if !s.isProxySession {
                 Text(counts).font(.system(size: 12)).opacity(0.6)
@@ -378,13 +380,13 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 0) {
             MenuRow(action: { open(WindowID.settings) }) {
                 FooterIcon(symbol: "gearshape")
-                Text("Настройки…")
+                Text(L("Настройки…"))
                 Spacer()
                 Text("⌘,").font(.system(size: 12)).opacity(0.5)
             }
             MenuRow(action: { open(WindowID.diagnostics) }) {
                 FooterIcon(symbol: "doc.text.magnifyingglass")
-                Text("Диагностика и журналы…")
+                Text(L("Диагностика и журналы…"))
                 Spacer()
             }
             // Только в режиме разработчика (ocbar app devmode on): войти с
@@ -392,7 +394,7 @@ struct MenuView: View {
             if UserDefaults.standard.bool(forKey: "DeveloperMode"), !CommandLine.arguments.contains("--stage") {
                 MenuRow(enabled: canConnect, action: { store.logout() }) {
                     FooterIcon(symbol: "person.crop.circle.badge.xmark")
-                    Text("Выйти совсем (сброс входа)")
+                    Text(L("Выйти совсем (сброс входа)"))
                     Spacer()
                     Text("dev").font(.system(size: 11)).opacity(0.5)
                 }
@@ -400,9 +402,9 @@ struct MenuView: View {
             MenuRow(action: { NSApplication.shared.terminate(nil) }) {
                 FooterIcon(symbol: "rectangle.portrait.and.arrow.right")
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Выйти из ocbar")
+                    Text(L("Выйти из ocbar"))
                     if hasDisconnect {
-                        Text("туннель останется").font(.system(size: 11)).opacity(0.6)
+                        Text(L("туннель останется")).font(.system(size: 11)).opacity(0.6)
                     }
                 }
                 Spacer()
@@ -424,18 +426,18 @@ struct MenuView: View {
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold))
-                        Text("Назад")
+                        Text(L("Назад"))
                     }
                     .foregroundStyle(Palette.accent)
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
                 Spacer()
-                Text(s.isProxySession ? "Прокси SOCKS" : "Сети и DNS")
+                Text(s.isProxySession ? L("Прокси SOCKS") : L("Сети и DNS"))
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 // Противовес «Назад», чтобы заголовок стоял по центру.
-                Text("Назад").hidden().padding(.leading, 15)
+                Text(L("Назад")).hidden().padding(.leading, 15)
             }
             .padding(.horizontal, 4).padding(.vertical, 2)
             HStack(spacing: 8) {
@@ -456,9 +458,9 @@ struct MenuView: View {
     private var networkGroups: some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
-                GroupHead(title: "Сети в туннеле", trailing: "\(s.routesOn.count)/\(s.routes.count)")
+                GroupHead(title: L("Сети в туннеле"), trailing: "\(s.routesOn.count)/\(s.routes.count)")
                 if s.routes.isEmpty {
-                    Text("в профиле нет ни одной сети")
+                    Text(L("в профиле нет ни одной сети"))
                         .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                         .padding(.horizontal, 12).padding(.bottom, 8)
                 }
@@ -472,7 +474,7 @@ struct MenuView: View {
             .padding(.bottom, 4)
             .groupBox()
             VStack(alignment: .leading, spacing: 0) {
-                GroupHead(title: "DNS-зоны", trailing: "\(s.zones.filter { $0.enabled }.count)/\(s.zones.count)")
+                GroupHead(title: L("DNS-зоны"), trailing: "\(s.zones.filter { $0.enabled }.count)/\(s.zones.count)")
                 CappedRows(count: s.zones.count) {
                     ForEach(Array(s.zones.enumerated()), id: \.element.id) { i, z in
                         if i > 0 { RowDivider() }
@@ -495,7 +497,7 @@ struct MenuView: View {
                     Image(systemName: showConnection ? "chevron.down" : "chevron.right")
                         .font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.secondary)
                         .frame(width: 12)
-                    Text("Сведения о соединении").font(.system(size: 13, weight: .medium))
+                    Text(L("Сведения о соединении")).font(.system(size: 13, weight: .medium))
                     Spacer()
                 }
                 .contentShape(Rectangle())
@@ -504,17 +506,18 @@ struct MenuView: View {
             .padding(.horizontal, 12).padding(.vertical, 9)
             if showConnection {
                 VStack(alignment: .leading, spacing: 0) {
-                    KVRow(label: "Адрес в туннеле", value: s.ip)
-                    KVRow(label: "Шлюз", value: s.gateway)
+                    KVRow(label: L("Адрес в туннеле"), value: s.ip)
+                    KVRow(label: L("Шлюз"), value: s.gateway)
                     if !s.isProxySession { KVRow(mono: false, label: "MTU", value: s.mtu) }
-                    KVRow(label: "Резолверы", value: s.dns.joined(separator: "\n"))
+                    KVRow(label: L("Резолверы"), value: s.dns.joined(separator: "\n"))
                     if !s.isProxySession {
-                        KVRow(mono: false, label: "Принято / отдано",
+                        KVRow(mono: false, label: L("Принято / отдано"),
                               value: "\(Size.bytes(store.totalRx)) / \(Size.bytes(store.totalTx))")
-                        KVRow(mono: false, label: "Задержка", value: store.latency ?? "—")
-                        KVRow(mono: false, label: "Доступ",
-                              value: s.access == "ok" ? "проверен\(s.accessAt.map { " в " + Self.clock.string(from: $0) } ?? "")"
-                                   : s.access == "fail" ? "не отвечает" : "не проверялся",
+                        KVRow(mono: false, label: L("Задержка"), value: store.latency ?? "—")
+                        KVRow(mono: false, label: L("Доступ"),
+                              value: s.access == "ok"
+                                  ? (s.accessAt.map { L("проверен в %@", Self.clock.string(from: $0)) } ?? L("проверен"))
+                                  : s.access == "fail" ? L("не отвечает") : L("не проверялся"),
                               color: s.access == "fail" ? Palette.bad : s.access == "ok" ? Palette.ok : Palette.text)
                     }
                 }
@@ -539,20 +542,20 @@ struct MenuView: View {
             }
             .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 4)
             if !s.socksUp {
-                Text("порт не отвечает — супервизор перезапустит прокси")
+                Text(L("порт не отвечает — супервизор перезапустит прокси"))
                     .font(.system(size: 11)).foregroundStyle(Palette.bad).padding(.horizontal, 12)
             }
-            KVRow(mono: false, label: "Системный SOCKS",
+            KVRow(mono: false, label: L("Системный SOCKS"),
                   value: s.systemSocksOn.isEmpty
-                      ? (s.systemProxy ? "не включён" : "выключен в профиле")
-                      : "включён на " + s.systemSocksOn.joined(separator: ", "),
+                      ? (s.systemProxy ? L("не включён") : L("выключен в профиле"))
+                      : L("включён на %@", s.systemSocksOn.joined(separator: ", ")),
                   color: s.systemSocksOn.isEmpty && s.systemProxy ? Palette.warn : Palette.text)
             RowDivider().padding(.vertical, 4)
-            Text("Как направить программу").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            Text(L("Как направить программу")).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                 .padding(.horizontal, 12)
             hintRow("curl --socks5-hostname \(s.socks) URL")
-            hintRow("ALL_PROXY=socks5h://\(s.socks) команда")
-            Text("Имена внутренних хостов резолвит ocproxy по DNS шлюза (socks5h), поэтому в системе ничего не меняется. Паузы в этом режиме нет: снимать нечего.")
+            hintRow(L("ALL_PROXY=socks5h://%@ команда", s.socks))
+            Text(L("Имена внутренних хостов резолвит ocproxy по DNS шлюза (socks5h), поэтому в системе ничего не меняется. Паузы в этом режиме нет: снимать нечего."))
                 .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 12).padding(.top, 3).padding(.bottom, 10)
@@ -581,16 +584,16 @@ struct MenuView: View {
                 Text(r.net).font(.ocMono)
                     .foregroundStyle(on ? Palette.text : Palette.secondary)
                 if settled, on, let via = r.via, via != s.tundev {
-                    Text("идёт мимо туннеля → \(via)").font(.system(size: 10.5)).foregroundStyle(Palette.warn)
+                    Text(L("идёт мимо туннеля → %@", via)).font(.system(size: 10.5)).foregroundStyle(Palette.warn)
                 } else if settled, on, r.via == nil, s.state == .connected {
-                    Text("нет маршрута").font(.system(size: 10.5)).foregroundStyle(Palette.warn)
+                    Text(L("нет маршрута")).font(.system(size: 10.5)).foregroundStyle(Palette.warn)
                 }
             }
             Spacer()
             Toggle("", isOn: Binding(get: { on }, set: { store.toggleRoute(r.net, to: $0) }))
                 .toggleStyle(.switch).controlSize(.small).labelsHidden()
                 .disabled(store.busy != nil || s.paused)
-                .accessibilityLabel("сеть \(r.net) в туннеле")
+                .accessibilityLabel(L("сеть %@ в туннеле", r.net))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
     }
@@ -608,7 +611,7 @@ struct MenuView: View {
             Toggle("", isOn: Binding(get: { on }, set: { store.toggleZone(z.zone, to: $0) }))
                 .toggleStyle(.switch).controlSize(.small).labelsHidden()
                 .disabled(store.busy != nil || s.paused)
-                .accessibilityLabel("зона \(z.zone) через \(z.dns)")
+                .accessibilityLabel(L("зона %@ через %@", z.zone, z.dns))
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
     }
@@ -622,11 +625,11 @@ extension MenuView {
     static func fix(for message: String) -> (title: String, command: String)? {
         let m = message.lowercased()
         if m.contains("sudo ocbar install") || m.contains("нужен root") {
-            return ("Скопировать команду", "sudo ocbar install")
+            return (L("Скопировать команду"), "sudo ocbar install")
         }
-        if m.contains("нет openconnect") { return ("Скопировать команду", "brew install openconnect") }
-        if m.contains("нет ocproxy") || m.contains("ocproxy —") { return ("Скопировать команду", "brew install ocproxy") }
-        if m.contains("--trust") { return ("Скопировать команду", "sudo ocbar install --trust") }
+        if m.contains("нет openconnect") { return (L("Скопировать команду"), "brew install openconnect") }
+        if m.contains("нет ocproxy") || m.contains("ocproxy —") { return (L("Скопировать команду"), "brew install ocproxy") }
+        if m.contains("--trust") { return (L("Скопировать команду"), "sudo ocbar install --trust") }
         return nil
     }
 
@@ -679,38 +682,38 @@ struct StateLook {
         let name = profileName(s)
         switch s.presentation {
         case .connected:
-            return .init(color: Palette.ok, title: name, subtitle: "Подключено", note: nil,
+            return .init(color: Palette.ok, title: name, subtitle: L("Подключено"), note: nil,
                          showsTime: true, graph: true, graphActive: true, pulsing: false, details: true)
         case .lost:
             let waited = s.linkLostSince.map { Int(Date().timeIntervalSince($0)) } ?? 0
             return .init(color: Palette.warn, title: name,
-                         subtitle: s.isProxySession ? "SOCKS не отвечает" : "Нет связи · восстанавливаю",
+                         subtitle: s.isProxySession ? L("SOCKS не отвечает") : L("Нет связи · восстанавливаю"),
                          note: s.isProxySession
-                             ? "SOCKS не отвечает \(waited) с — супервизор перезапустит прокси целиком."
-                             : "Связи нет \(waited) с — восстанавливаю сессию. Повторный вход не нужен.",
+                             ? L("SOCKS не отвечает %@ с — супервизор перезапустит прокси целиком.", "\(waited)")
+                             : L("Связи нет %@ с — восстанавливаю сессию. Повторный вход не нужен.", "\(waited)"),
                          showsTime: false, graph: true, graphActive: false, pulsing: true, details: true)
         case .paused:
-            return .init(color: Palette.warn, title: name, subtitle: "Приостановлено",
-                         note: "Сети и DNS временно сняты, сессия жива — возобновление без входа.",
+            return .init(color: Palette.warn, title: name, subtitle: L("Приостановлено"),
+                         note: L("Сети и DNS временно сняты, сессия жива — возобновление без входа."),
                          showsTime: true, graph: false, graphActive: false, pulsing: false, details: true)
         case .starting:
-            return .init(color: Palette.warn, title: name, subtitle: "Подключается…", note: nil,
+            return .init(color: Palette.warn, title: name, subtitle: L("Подключается…"), note: nil,
                          showsTime: false, graph: false, graphActive: false, pulsing: true, details: false)
         case .needsLogin:
-            return .init(color: Palette.bad, title: name, subtitle: "Нужен вход",
-                         note: "Сессия истекла, автоматически войти не удалось. Автоподключение ждёт вас.",
+            return .init(color: Palette.bad, title: name, subtitle: L("Нужен вход"),
+                         note: L("Сессия истекла, автоматически войти не удалось. Автоподключение ждёт вас."),
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .down:
-            return .init(color: Palette.line2, title: name, subtitle: "Отключено", note: nil,
+            return .init(color: Palette.line2, title: name, subtitle: L("Отключено"), note: nil,
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .foreign:
-            return .init(color: Palette.tertiary, title: "Чужой openconnect", subtitle: "поднят не через ocbar",
-                         note: "Это подключение ocbar не управляет и не трогает.",
+            return .init(color: Palette.tertiary, title: L("Чужой openconnect"), subtitle: L("поднят не через ocbar"),
+                         note: L("Это подключение ocbar не управляет и не трогает."),
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .missing:
-            return .init(color: Palette.bad, title: "Не найден клиент ocbar", subtitle: "подключение недоступно",
+            return .init(color: Palette.bad, title: L("Не найден клиент ocbar"), subtitle: L("подключение недоступно"),
                          note: OcbarClient.shared.lookupNote.isEmpty
-                             ? "Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN."
+                             ? L("Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN.")
                              : OcbarClient.shared.lookupNote,
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         }

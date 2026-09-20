@@ -217,11 +217,12 @@ struct Status {
 
 }
 
-// "2ч 14м" — как в CLI и в песочнице.
+// «2ч 14м» по-русски, «2h 14m» по-английски: буквы у единиц переводятся
+// отдельно от чисел.
 func humanSince(_ date: Date?, now: Date = Date()) -> String {
     guard let date else { return "—" }
     let s = max(0, Int(now.timeIntervalSince(date)))
-    if s >= 3600 { return "\(s / 3600)ч \((s % 3600) / 60)м" }
-    if s >= 60 { return "\(s / 60)м" }
-    return "\(s)с"
+    if s >= 3600 { return "\(s / 3600)\(L("ч")) \((s % 3600) / 60)\(L("м"))" }
+    if s >= 60 { return "\(s / 60)\(L("м"))" }
+    return "\(s)\(L("с "))"
 }

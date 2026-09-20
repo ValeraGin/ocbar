@@ -35,14 +35,14 @@ struct LogsView: View {
             .pickerStyle(.segmented).labelsHidden().frame(width: 520)
             .onChange(of: current) { _ in reload() }
 
-            TextField("фильтр по подстроке", text: $filter)
+            TextField(L("фильтр по подстроке"), text: $filter)
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: filter) { _ in reload() }
             if !filter.isEmpty {
                 Button { filter = ""; reload() } label: { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.borderless).foregroundStyle(Palette.tertiary)
             }
-            Toggle("следить", isOn: $follow).toggleStyle(.checkbox)
+            Toggle(L("следить"), isOn: $follow).toggleStyle(.checkbox)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
     }
@@ -81,9 +81,9 @@ struct LogsView: View {
                 .font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
                 .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
             Spacer()
-            Text("\(snapshot.lines.count) строк · \(Size.bytes(Double(snapshot.size)))")
+            Text(L("%@ строк · %@", snapshot.lines.count, Size.bytes(Double(snapshot.size))))
                 .font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
-            Button("Показать в Finder") {
+            Button(L("Показать в Finder")) {
                 guard let path = source?.path else { return }
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
@@ -113,16 +113,16 @@ struct LogsView: View {
     private static func sources(from v: [String: String]) -> [LogSource] {
         [
             // «Все» — общая лента по времени; путь у неё — каталог журналов.
-            LogSource(id: "all", title: "Все",
+            LogSource(id: "all", title: L("Все"),
                       path: ((v["supervisor_log"] ?? OcbarClient.shared.supervisorLog) as NSString).deletingLastPathComponent),
-            LogSource(id: "supervisor", title: "Супервизор",
+            LogSource(id: "supervisor", title: L("Супервизор"),
                       path: v["supervisor_log"] ?? OcbarClient.shared.supervisorLog),
             LogSource(id: "openconnect", title: "openconnect",
                       path: v["openconnect_log"] ?? OcbarClient.shared.openconnectLog),
-            LogSource(id: "proxy", title: "прокси",
+            LogSource(id: "proxy", title: L("прокси"),
                       path: v["proxy_log"] ?? OcbarClient.shared.proxyLog),
-            LogSource(id: "auth", title: "Вход", path: (AppLog.path as NSString).deletingLastPathComponent + "/auth.log"),
-            LogSource(id: "app", title: "Приложение", path: AppLog.path),
+            LogSource(id: "auth", title: L("Вход"), path: (AppLog.path as NSString).deletingLastPathComponent + "/auth.log"),
+            LogSource(id: "app", title: L("Приложение"), path: AppLog.path),
         ]
     }
 

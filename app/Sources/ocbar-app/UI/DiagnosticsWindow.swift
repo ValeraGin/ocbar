@@ -17,7 +17,7 @@ struct DiagnosticsView: View {
             toolbar
             Divider()
             ScrollView {
-                Text(text.isEmpty ? (running ? "проверяю…" : "—") : text)
+                Text(text.isEmpty ? (running ? L("проверяю…") : "—") : text)
                     .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(Palette.text)
                     .textSelection(.enabled)
@@ -40,27 +40,27 @@ struct DiagnosticsView: View {
     private var toolbar: some View {
         HStack(spacing: 10) {
             Text("ocbar doctor").font(.system(size: 13, weight: .medium))
-            Text("ничего не меняет — только проверяет")
+            Text(L("ничего не меняет — только проверяет"))
                 .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             // Сеть и супервизор раньше жили строкой в меню; здесь им место.
-            Text("· сеть \(store.status.iface.isEmpty ? "?" : store.status.iface) · "
-                 + (store.status.supervisor ? "супервизор работает" : "супервизор не запущен"))
+            Text(L("· сеть %@ · ", store.status.iface.isEmpty ? "?" : store.status.iface)
+                 + (store.status.supervisor ? L("супервизор работает") : L("супервизор не запущен")))
                 .font(.system(size: 11))
                 .foregroundStyle(store.status.supervisor ? Palette.tertiary : Palette.warn)
             Spacer()
             if let stamp {
                 Text(Self.clock.string(from: stamp)).font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
             }
-            Button("Сохранить отчёт…") { saveReport() }
+            Button(L("Сохранить отчёт…")) { saveReport() }
                 .disabled(reporting || store.busy != nil)
-            Button("Журналы…") {
+            Button(L("Журналы…")) {
                 openWindow(id: WindowID.logs)
                 NSApp.activate(ignoringOtherApps: true)
             }
             Button {
                 run()
             } label: {
-                Label("Повторить", systemImage: "arrow.clockwise")
+                Label(L("Повторить"), systemImage: "arrow.clockwise")
             }
             .disabled(running)
         }
@@ -72,7 +72,7 @@ struct DiagnosticsView: View {
     private func saveReport() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "ocbar-report-\(Self.stamp.string(from: Date())).txt"
-        panel.message = "Адреса, домены и логины в отчёте заменены метками. Перед отправкой посмотрите файл."
+        panel.message = L("Адреса, домены и логины в отчёте заменены метками. Перед отправкой посмотрите файл.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         reporting = true
         DispatchQueue.global(qos: .userInitiated).async {
@@ -80,7 +80,7 @@ struct DiagnosticsView: View {
             DispatchQueue.main.async {
                 reporting = false
                 if case .failed(_, let why) = r {
-                    text = "отчёт не сохранился: " + why + "\n\n" + text
+                    text = L("отчёт не сохранился: ") + why + "\n\n" + text
                 } else {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
@@ -95,10 +95,10 @@ struct DiagnosticsView: View {
     private var cleanupBar: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Уборка следов прошлой сессии").font(.system(size: 12, weight: .medium))
-                Text("Снимает то, что осталось после падения: наши зоны в /etc/resolver, наши маршруты, "
-                     + "системный SOCKS без живого прокси. Системный DNS не трогает — ocbar его не ставит. "
-                     + "Живой туннель и чужой openconnect не трогает. То же, что `ocbar cleanup`.")
+                Text(L("Уборка следов прошлой сессии")).font(.system(size: 12, weight: .medium))
+                Text(L("Снимает то, что осталось после падения: наши зоны в /etc/resolver, наши маршруты, ")
+                     + L("системный SOCKS без живого прокси. Системный DNS не трогает — ocbar его не ставит. ")
+                     + L("Живой туннель и чужой openconnect не трогает. То же, что `ocbar cleanup`."))
                     .font(.system(size: 11)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let note = store.actionNote {
@@ -107,7 +107,7 @@ struct DiagnosticsView: View {
                 }
             }
             Spacer()
-            Button("Убрать") {
+            Button(L("Убрать")) {
                 cleanupPending = true
                 store.cleanup()
             }
