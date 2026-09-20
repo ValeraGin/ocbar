@@ -373,9 +373,10 @@ enum Size {
         var value = v, i = 0
         while value >= 1024, i < units.count - 1 { value /= 1024; i += 1 }
         let digits = (value < 10 && i > 0) ? 1 : 0
-        // Запятая как разделитель — русская привычка; в английском точка.
+        // Разделитель дробной части — по языку интерфейса: «1,4 МБ» и «1.4 MB».
         let out = String(format: "%.\(digits)f %@", value, units[i])
-        return L(",") == "," ? out.replacingOccurrences(of: ".", with: ",") : out
+        let ru = Locale.preferredLanguages.first?.hasPrefix("ru") ?? false
+        return ru ? out.replacingOccurrences(of: ".", with: ",") : out
     }
     static func bytes(_ v: UInt64) -> String { bytes(Double(v)) }
 }
