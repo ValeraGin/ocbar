@@ -1023,6 +1023,12 @@ struct ProfileEditorView: View {
                 return
             }
         }
+        // Последнее слово — за клиентом: он читает профиль при подключении,
+        // и его отказ здесь дешевле, чем «не подключается» потом.
+        if let why = OcbarClient.shared.profileRejection(doc.render(), name: name) {
+            issues.append(Issue(level: .error, text: "клиент не принимает профиль: " + why))
+            return
+        }
         if let error = ProfileStore.save(doc) {
             issues.append(Issue(level: .error, text: "не удалось записать: \(error)"))
             return

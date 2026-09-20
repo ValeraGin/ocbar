@@ -3,6 +3,17 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.13.0 — 2026-09-20
+
+- The client has the final word on a profile: `ocbar profile-check <file>`
+  says whether it will load, and the editor (and the first-run wizard) refuse
+  to save when it will not, quoting the client's own reason.
+- The editor no longer lets you save a profile with an out-of-range `Mtu` or a
+  `Dtls` other than on/off — the client refuses to load those, so the profile
+  would simply not connect.
+- `ocbar-app --selftest` compares the editor's verdict with the client's on a
+  set of profiles, so the two rule sets cannot drift apart unnoticed.
+
 ## 0.12.1 — 2026-09-20
 
 - Internal: the CLI is 4431 → 3655 lines. The self-test and the Python parts
