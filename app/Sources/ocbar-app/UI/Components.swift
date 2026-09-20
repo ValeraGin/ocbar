@@ -106,21 +106,25 @@ struct SectionHead: View {
     }
 }
 
-// Содержимое по своей высоте, но не выше потолка: пока влезает — меню ровно
-// такой высоты, выше потолка — прокручивается. ViewThatFits выбирает первый
-// вариант, который помещается в предложенную высоту; потолок задаёт
-// предложение. Своё измерение высоты здесь не годится: внутри прокрутки
-// содержимое растягивается, и высота считалась то больше, то меньше нужной.
-struct CappedHeight<Content: View>: View {
-    let maxHeight: CGFloat
+// Список строк: пока строк немного — как есть, много — прокручивается внутри
+// своей группы. Потолок считается по числу строк и их высоте, а не измерением
+// содержимого: измерять высоту внутри прокрутки нельзя — прокрутка растягивает
+// содержимое, и высота выходит то больше, то меньше нужной.
+struct CappedRows<Content: View>: View {
+    let count: Int
+    var rowHeight: CGFloat = 34
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            content()
-            ScrollView(.vertical, showsIndicators: true) { content() }
+        let limit = MenuView.rowsBeforeScroll
+        if count <= limit {
+            VStack(alignment: .leading, spacing: 0) { content() }
+        } else {
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) { content() }
+            }
+            .frame(height: CGFloat(limit) * rowHeight)
         }
-        .frame(maxHeight: maxHeight)
     }
 }
 

@@ -3,6 +3,18 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.11.0 — 2026-09-20
+
+- The menu window now shrinks back. macOS grows the menu-bar window to fit the
+  content but never shrinks it, so after the Networks and DNS page the window
+  stayed tall and the content hung below the icon with empty space above.
+  ocbar measures its content and resizes the window itself, keeping the top
+  edge in place.
+- Checking this needs the real menu-bar window, so the app can now drive it:
+  `open "ocbar://debug-menu?token=<notify token>"` opens the menu, switches to
+  Networks and DNS and back, and writes the heights and a verdict to the app
+  log.
+
 ## 0.10.5 — 2026-09-20
 
 - The self-test now measures the menu itself: it switches to Networks and DNS
