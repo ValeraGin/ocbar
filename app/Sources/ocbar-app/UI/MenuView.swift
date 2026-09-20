@@ -9,6 +9,7 @@ struct MenuView: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var nav: MenuNav
     @State private var showConnection = true
+    @State private var contentHeight: CGFloat = 0
 
     enum Page { case main, networks }
 
@@ -16,6 +17,9 @@ struct MenuView: View {
     /// переключить его и измерить высоту (меню не должно ни расти без
     /// возврата, ни ужиматься).
     final class MenuNav: ObservableObject {
+        /// Тот же объект, что у живого меню: служебная проверка
+        /// (ocbar://debug-menu) переключает им экраны и меряет окно.
+        static let shared = MenuNav()
         @Published var page: Page
         init(page: Page = .main) { self.page = page }
     }
@@ -36,28 +40,35 @@ struct MenuView: View {
     private var look: StateLook { StateLook.of(s) }
 
     static let width: CGFloat = 340
-    /// Сколько меню может занять по высоте: видимая часть экрана минус строка
-    /// меню и шапка ocbar.
-    static var maxBodyHeight: CGFloat {
+    /// Сколько строк списка показывать без прокрутки: остальное прокручивается
+    /// внутри своей группы, чтобы длинный список сетей не выгонял меню за
+    /// пределы экрана.
+    static var rowsBeforeScroll: Int {
         let screen = NSScreen.main?.visibleFrame.height ?? 800
-        return max(360, screen - 90)
+        return max(5, min(14, Int((screen - 420) / 34)))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             appHeader
-            // Всё ниже шапки прокручивается: восемь профилей, вопрос о смене
-            // профиля и предупреждения вместе выше экрана 13", и низ меню
-            // («Выйти») обрезался.
-            CappedHeight(maxHeight: Self.maxBodyHeight) {
-                switch page {
-                case .main: mainPage
-                case .networks: networksPage
-                }
+            // Меню — ровно по содержимому: окно в строке меню система
+            // подгоняет под него сама. Прокрутка здесь только вредила: любая
+            // обёртка, меряющая высоту, то растягивала меню, то схлопывала его
+            // (проверено живым окном, см. MenuProbe).
+            switch page {
+            case .main: mainPage
+            case .networks: networksPage
             }
         }
         .padding(12)
         .frame(width: Self.width)
+        // Высота содержимого — и окно под неё: система сама умеет только
+        // увеличивать своё окно.
+        .background(GeometryReader { g in
+            Color.clear.preference(key: MenuHeightKey.self, value: g.size.height)
+        })
+        .onPreferenceChange(MenuHeightKey.self) { contentHeight = $0 }
+        .background(MenuWindowFit(height: contentHeight))
         .background(shortcuts)
         .onAppear {
             if !CommandLine.arguments.contains("--stage") { Notifier.refreshAllowed() }
@@ -445,18 +456,22 @@ struct MenuView: View {
                         .font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                         .padding(.horizontal, 12).padding(.bottom, 8)
                 }
-                ForEach(Array(s.routes.enumerated()), id: \.element.id) { i, r in
-                    if i > 0 { RowDivider() }
-                    routeRow(r)
+                CappedRows(count: s.routes.count) {
+                    ForEach(Array(s.routes.enumerated()), id: \.element.id) { i, r in
+                        if i > 0 { RowDivider() }
+                        routeRow(r)
+                    }
                 }
             }
             .padding(.bottom, 4)
             .groupBox()
             VStack(alignment: .leading, spacing: 0) {
                 GroupHead(title: "DNS-зоны", trailing: "\(s.zones.filter { $0.enabled }.count)/\(s.zones.count)")
-                ForEach(Array(s.zones.enumerated()), id: \.element.id) { i, z in
-                    if i > 0 { RowDivider() }
-                    zoneRow(z)
+                CappedRows(count: s.zones.count) {
+                    ForEach(Array(s.zones.enumerated()), id: \.element.id) { i, z in
+                        if i > 0 { RowDivider() }
+                        zoneRow(z)
+                    }
                 }
             }
             .padding(.bottom, 4)

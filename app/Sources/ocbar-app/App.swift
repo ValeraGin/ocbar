@@ -15,7 +15,7 @@ struct OcbarApp: App {
 
     var body: some Scene {
         MenuBarExtra(isInserted: $inMenuBar) {
-            MenuView().environmentObject(store)
+            MenuView(nav: MenuView.MenuNav.shared).environmentObject(store)
         } label: {
             Image(nsImage: MenuBarIcon.image(for: store.status))
         }
@@ -44,7 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             var code = SelfTest.run()
             code += SelfTest.audit()
             code += SelfTest.editorProbe()
-            code += SelfTest.menuHeightProbe()
             if CommandLine.arguments.contains("--live-actions") { code += SelfTest.liveActions() }
             // Итог по всем частям: строка «selftest: всё OK» выше — только
             // про разбор и правила, проба редактора идёт после неё.
@@ -92,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // Notifier). Без своего токена не показывается — Notifier пишет в журнал.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where !Notifier.handle(url) {
+            if MenuProbe.handle(url) { continue }
             AppLog.write("неизвестный URL: \(url.absoluteString)")
         }
     }
