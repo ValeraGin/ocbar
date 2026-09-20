@@ -14,6 +14,9 @@ LISTS = {"dns", "system_socks"}
 
 
 def main() -> int:
+    # --plain: снимок состояния, в нём списков сетей и профилей нет вовсе —
+    # пустые списки в выводе только мешали бы читать.
+    plain = "--plain" in sys.argv[1:]
     out: dict = {"routes": [], "zones": [], "profiles": []}
     urls: dict = {}
     for raw in sys.stdin.read().split("\n"):
@@ -55,6 +58,10 @@ def main() -> int:
     for p in out["profiles"]:
         p["url"] = urls.get(p["name"], "")
     out["profiles"] = [p for p in out["profiles"] if p["name"]]
+    if plain:
+        for key in ("routes", "zones", "profiles"):
+            if not out[key]:
+                del out[key]
     json.dump(out, sys.stdout, ensure_ascii=False, sort_keys=True)
     sys.stdout.write("\n")
     return 0

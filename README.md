@@ -185,6 +185,7 @@ ocbar autoconnect [manual|resume|always <profile>] who brings the tunnel up
 ocbar report [file] [--raw]           support report; hosts and logins masked
 ocbar logs [-f] [-n N] [source…]      all logs merged by time (supervisor, openconnect, auth, app)
 ocbar profile-check <file>            will the client accept this profile file (the editor asks before saving)
+ocbar state [--json]                  runtime state in one place: profile, auto-connect, access, flags
 ocbar pause | resume | toggle
 ocbar secret set-password|set-totp|status|code [profile]
 ocbar secret import-qr <image> [--list] [--select NAME] [profile]
