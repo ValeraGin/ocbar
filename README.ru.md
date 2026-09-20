@@ -307,7 +307,7 @@ ocbar connect [профиль] [--show] [--teach] [-v]
                                       --teach — войти руками и запомнить форму, пароль, код
 ocbar disconnect
 ocbar logout                          выйти совсем: отключиться и забыть сессии входа (проверки)
-ocbar status [--short]                --short — машинный вид для меню
+ocbar status [--short|--json]                --short — машинный вид для меню
 ocbar profiles | import <файл> | export <профиль> [файл]
 ocbar profiles order [имя…]           порядок профилей в меню; без имён — текущий
 ocbar routes on|off|toggle <CIDR>     сети на живом туннеле; apply | clear | status

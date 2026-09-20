@@ -78,13 +78,17 @@ final class OcbarClient: @unchecked Sendable {
             s.error = nil
             return s
         }
-        let r = Shell.run(binary, ["status", "--short"], timeout: 10)
+        let r = Shell.run(binary, ["status", "--json"], timeout: 10)
         guard r.code == 0 else {
             var s = Status()
             s.error = r.err.isEmpty ? "ocbar status вернул \(r.code)" : r.err.trimmed
             return s
         }
-        var s = Status.parse(r.out)
+        guard var s = Status.parse(json: r.out) else {
+            var bad = Status()
+            bad.error = "ocbar status --json вернул не JSON"
+            return bad
+        }
         // MTU в `status --short` нет, а показать его хочется: берём из той
         // же строки netstat, что и счётчики, лишнего процесса не заводим.
         if let t = Traffic.read(tundev: s.tundev) { s.mtu = t.mtu }
