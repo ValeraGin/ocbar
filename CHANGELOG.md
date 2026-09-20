@@ -3,6 +3,15 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.13.1 — 2026-09-20
+
+- State files are written whole (temp file, then rename), so a reader never
+  catches a half-written value.
+- `ocbar state [--json]` shows the runtime state in one place: profile,
+  auto-connect policy, access check, flags, disabled networks and zones.
+- The self-test fails if a state file is introduced inline instead of being
+  declared with the others at the top of the CLI.
+
 ## 0.13.0 — 2026-09-20
 
 - The client has the final word on a profile: `ocbar profile-check <file>`

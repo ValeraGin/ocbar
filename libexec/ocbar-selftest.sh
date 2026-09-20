@@ -111,6 +111,18 @@ PROFILE
     has "профиль в списке" "profile_list=t|Проба||" "$out"
     has "адрес профиля отдельной строкой" "profile_url=t|vpn.example.test/group" "$out"
 
+    # Файлы состояния заводятся объявлением наверху скрипта: иначе флаг
+    # появляется где-то в середине, и о нём не знают ни уборка, ни `ocbar
+    # state`, ни документация. Здесь — список тех, что объявлены иначе
+    # (их пишут не мы или пишут рядом с использованием).
+    local stray
+    stray=$(grep -v '^[A-Z_][A-Z_0-9]*="\$USER_STATE' "$SELF" \
+            | grep -o '"\$USER_STATE/[a-zA-Z._-]*"' \
+            | tr -d '"' | sed 's|\$USER_STATE/||' | sort -u \
+            | grep -v -x -e rules -e notify.token -e notify.allowed -e notify.last \
+                        -e proxy.env -e proxy.pid -e supervisor.logins || true)
+    is "состояние: файлы заводятся только объявлением наверху" "" "$stray"
+
     # Примет ли клиент файл профиля: этим редактор проверяет форму перед
     # сохранением.
     printf '[Connection]\nName = Проба\nUrl = vpn.example.test/g\nUser = t\n' > "$tmp/chk-ok.ocbar"

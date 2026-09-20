@@ -657,10 +657,50 @@ load_profile() {
     esac
 }
 
+# Состояние пишется целиком или никак: читатель (супервизор, меню) не должен
+# увидеть файл в момент между обрезанием и записью. Дописывание в списки
+# (сети без автоподключения, выключенные сети и зоны) идёт как раньше: там
+# каждая строка самостоятельна.
+state_write() { # файл строка…
+    local f="$1"; shift
+    mkdir -p "$(dirname "$f")"
+    local t="$f.tmp.$$"
+    printf '%s\n' "$*" > "$t" && mv -f "$t" "$f"
+}
+
 # Примет ли клиент этот файл профиля. Нужна редактору: он показывает свои
 # подсказки по ходу правки, но последнее слово — за клиентом, иначе форма
 # сохранит то, что потом не подключится. Проверка — той же загрузкой, в
 # подоболочке: отдельного набора правил не заводим, разойтись нечему.
+# Снимок рабочего состояния: что лежит в файлах состояния и что из этого
+# следует. Нужен при разборе: иначе приходится ходить по каталогу руками и
+# гадать, кто какой флаг оставил.
+cmd_state() { # [--json]
+    local lines
+    lines=$(printf 'profile=%s\nautoconnect=%s\naccess=%s\nneeds_login=%s\nconnecting=%s\nlink_lost=%s\nsupervisor_pid=%s\nroutes_off=%s\nzones_off=%s\nskip_networks=%s\nstate_dir=%s\n' \
+        "$(cat "$DESIRED" 2>/dev/null || true)" \
+        "$(autoconnect_policy)" \
+        "$(head -1 "$ACCESS" 2>/dev/null || true)" \
+        "$([ -f "$NEEDS_LOGIN" ] && echo 1 || echo 0)" \
+        "$(cat "$CONNECTING" 2>/dev/null || true)" \
+        "$(cat "$LINK_LOST" 2>/dev/null || true)" \
+        "$(cat "$SUP_PID" 2>/dev/null || true)" \
+        "$(tr '\n' ' ' < "$ROUTES_OFF" 2>/dev/null || true)" \
+        "$(tr '\n' ' ' < "$ZONES_OFF" 2>/dev/null || true)" \
+        "$(grep -c . "$SKIP_NETS" 2>/dev/null || echo 0)" \
+        "$USER_STATE")
+    if [ "${1:-}" = "--json" ]; then
+        local conv; conv=$(libexec_file ocbar-status-json.py) || die "не найден ocbar-status-json.py"
+        printf '%s\n' "$lines" | /usr/bin/python3 "$conv" --plain
+        return 0
+    fi
+    printf '%s\n' "$lines" | while IFS='=' read -r k v; do
+        [ -n "$k" ] || continue
+        printf '  %s %s\n' "$(pad "$k" 16)" "${v:-—}"
+    done
+    return 0
+}
+
 cmd_profile_check() { # файл
     local f="${1:-}"
     [ -n "$f" ] || die "profile-check <файл>"
@@ -1501,11 +1541,11 @@ cmd_autoconnect() { # [manual|resume|always <профиль>|skip-here|unskip-he
                 awk -v id="$id2" '$1 != id' "$SKIP_NETS" > "$SKIP_NETS.tmp" && mv "$SKIP_NETS.tmp" "$SKIP_NETS"
             fi
             ok "автоподключение" "в этой сети ($id2) снова подключаюсь" ;;
-        manual|resume) printf '%s\n' "$mode" > "$AUTOCONNECT"; ok "автоподключение" "$mode" ;;
+        manual|resume) state_write "$AUTOCONNECT" "$mode"; ok "автоподключение" "$mode" ;;
         always)
             [ -n "$prof" ] || die "autoconnect always <профиль>"
             profile_exists "$prof" || die "профиля [$prof] нет"
-            printf 'always %s\n' "$prof" > "$AUTOCONNECT"; ok "автоподключение" "always $prof" ;;
+            state_write "$AUTOCONNECT" "always $prof"; ok "автоподключение" "always $prof" ;;
         *) die "autoconnect [manual|resume|always <профиль>]" ;;
     esac
     return 0
@@ -1571,7 +1611,7 @@ do_connect() { # профиль уже загружен
     else info "Вход через SSO: $P_TITLE ($P_URL)…"; fi
     # Номер этой (под)оболочки, а не $$: супервизор подключает в подоболочке,
     # и $$ там — сам супервизор, живой всегда.
-    mkdir -p "$USER_STATE"; printf '%s\n' "$(exec sh -c 'echo $PPID')" > "$CONNECTING"
+    state_write "$CONNECTING" "$(exec sh -c 'echo $PPID')"
     local token hash post_url out rc=0
     TEACH_OUT=""
     [ -n "${P_FILE:-}" ] && TEACH_OUT=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach.XXXXXX")
@@ -1609,7 +1649,7 @@ do_connect() { # профиль уже загружен
     fi
     if [ "${P_KIND:-tunnel}" = proxy ]; then
         proxy_start "$connect_url" "$hash" "$token"
-        mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
+        state_write "$DESIRED" "$P_NAME"
         rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
         log "подключён (прокси): $P_NAME → SOCKS 127.0.0.1:$(proxy_port), адрес $(penv_get IP4)"
         notify_event "ocbar: подключено (прокси)" "$P_TITLE · SOCKS 127.0.0.1:$(proxy_port)"
@@ -1626,7 +1666,7 @@ do_connect() { # профиль уже загружен
     done
     [ "$(tun_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
-    mkdir -p "$USER_STATE"; printf '%s\n' "$P_NAME" > "$DESIRED"
+    state_write "$DESIRED" "$P_NAME"
     rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
     notify_event "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
     report_health || true
@@ -2005,15 +2045,15 @@ access_state() { head -1 "$ACCESS" 2>/dev/null | awk '{print $1}' || true; }
 access_check() { # профиль уже загружен
     local was; was=$(access_state)
     if [ -z "${P_HEALTH:-}" ]; then
-        mkdir -p "$USER_STATE"; printf 'unknown %s\n' "$(date +%s)" > "$ACCESS"
+        state_write "$ACCESS" "unknown $(date +%s)"
         return 0
     fi
     if healthcheck; then
-        mkdir -p "$USER_STATE"; printf 'ok %s\n' "$(date +%s)" > "$ACCESS"
+        state_write "$ACCESS" "ok $(date +%s)"
         [ "$was" = fail ] && log "доступ восстановлен: $P_HEALTH отвечает"
         return 0
     fi
-    mkdir -p "$USER_STATE"; printf 'fail %s\n' "$(date +%s)" > "$ACCESS"
+    state_write "$ACCESS" "fail $(date +%s)"
     if [ "$was" != fail ]; then
         log "туннель поднят, но $P_HEALTH не отвечает"
         notify "ocbar: доступа нет" "Туннель поднят, но $P_HEALTH не отвечает" problems
@@ -2838,7 +2878,7 @@ cmd_supervise() {
     case "$policy" in
         always\ *)
             if [ -z "$(cat "$DESIRED" 2>/dev/null || true)" ]; then
-                printf '%s\n' "${policy#always }" > "$DESIRED"
+                state_write "$DESIRED" "${policy#always }"
                 log "автоподключение: при входе в систему поднимаю профиль ${policy#always }"
             fi ;;
         manual) log "автоподключение: вручную — сам входить не буду" ;;
@@ -3619,6 +3659,7 @@ case "${1:-}" in
     status)     if [ "${2:-}" = "--json" ]; then cmd_status_json; else cmd_status "${2:-}"; fi ;;
     profiles)   shift; cmd_profiles "$@" ;;
     profile-check) shift; cmd_profile_check "$@" ;;
+    state)      shift; cmd_state "${1:-}" ;;
     routes)     shift; cmd_routes "$@" ;;
     dns)        shift; cmd_dns "$@" ;;
     secret)     shift; cmd_secret "$@" ;;

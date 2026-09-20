@@ -44,6 +44,16 @@ Profile format: one `.ocbar` file per connection, sections `[Connection]`,
 `[Routes]`, `[DNS]`, `[Auth]`, `[Proxy]`, `[Health]`, `[Autofill]`. Adding a
 key means: CLI parser, app parser, validation in both, example file, docs.
 
+Runtime state lives in small files under `~/Library/Application Support/ocbar`,
+one value each: `desired` (profile that should be up), `autoconnect`,
+`access`, `connecting`, `needs-login`, `link-lost`, `routes.disabled`,
+`zones.disabled`, `skip-networks`. They are declared as constants at the top
+of `bin/ocbar` — a new one belongs there, and `ocbar selftest` fails when a
+path appears inline instead. They are written whole (`state_write`: temp file,
+then rename), so a reader never sees a half-written file, and no locking is
+needed because each value is independent. `ocbar state [--json]` prints the
+whole picture at once.
+
 The CLI has the final word on whether a profile is valid: the editor asks
 `ocbar profile-check` before saving and refuses with the client's own words.
 The editor may be stricter than the client — its checks are hints while you
