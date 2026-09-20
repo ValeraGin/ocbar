@@ -42,6 +42,10 @@ enum MenuProbe {
     }
 
     private static var heights: [String: CGFloat] = [:]
+    /// Сколько раз окно меняло размер за шаг: одно нажатие должно давать одну
+    /// перестройку, иначе меню дёргается.
+    private static var resizes = 0
+    private static var resizeObserver: NSObjectProtocol?
 
     @discardableResult
     private static func log(_ step: String) -> CGFloat? {
@@ -54,11 +58,14 @@ enum MenuProbe {
 
     /// Итог: меню должно быть в полный рост, экран сетей — выше главного,
     /// возврат — той же высоты, что до перехода.
+    private static var jitter: [String] = []
+
     private static func verdict() {
         let main = heights["главный экран"] ?? 0
         let networks = heights["сети и DNS"] ?? 0
         let back = heights["возврат на главный"] ?? 0
         var bad: [String] = []
+        if !jitter.isEmpty { bad.append("окно дёргается — перестроений " + jitter.joined(separator: ", ")) }
         if main < 200 { bad.append("главный экран схлопнут (\(Int(main)))") }
         if networks <= main + 40 { bad.append("сети не выше главного (\(Int(networks)) против \(Int(main)))") }
         if abs(back - main) > 2 { bad.append("после возврата высота другая (\(Int(back)) против \(Int(main)))") }
@@ -71,6 +78,17 @@ enum MenuProbe {
 
     private static func run() {
         guard let button = statusButton() else { AppLog.write("проверка меню: значок не найден"); return }
+        heights = [:]
+        resizes = 0
+        jitter = []
+        if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
+        resizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification, object: nil, queue: nil) { note in
+            if let w = note.object as? NSWindow, abs(w.frame.width - MenuView.width) < 2 {
+                resizes += 1
+                AppLog.write(String(format: "проверка меню: перестройка → h=%.0f верх=%.0f", w.frame.height, w.frame.maxY))
+            }
+        }
         let nav = MenuView.MenuNav.shared
         var step = 0
         let steps: [(String, () -> Void)] = [
@@ -85,9 +103,15 @@ enum MenuProbe {
             guard step < steps.count else { return }
             let (name, action) = steps[step]
             step += 1
+            resizes = 0
             action()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                let count = resizes
                 log(name)
+                if ["сети и DNS", "возврат на главный"].contains(name) {
+                    AppLog.write("проверка меню: перестроений окна на шаге «\(name)»: \(count)")
+                    if count > 2 { jitter.append("\(name): \(count)") }
+                }
                 next()
             }
         }

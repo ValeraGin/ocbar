@@ -68,6 +68,10 @@ struct MenuView: View {
             Color.clear.preference(key: MenuHeightKey.self, value: g.size.height)
         })
         .onPreferenceChange(MenuHeightKey.self) { contentHeight = $0 }
+        // Высота корня — ровно измеренная: иначе система, подгоняя окно,
+        // берёт её с запасом (на 36 точек), а следом приходится уменьшать —
+        // и это видно как рывок.
+        .frame(height: contentHeight > 0 ? contentHeight : nil, alignment: .top)
         .background(MenuWindowFit(height: contentHeight))
         .background(shortcuts)
         .onAppear {
@@ -351,7 +355,8 @@ struct MenuView: View {
 
     private var networksLink: some View {
         MenuRow(action: {
-            withAnimation(.easeOut(duration: 0.15)) { page = .networks }
+            MenuWindowFit.freezeUntilFlush()
+            page = .networks
             store.detailsOpen = true
             store.refresh()
         }) {
@@ -413,7 +418,8 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { page = .main }
+                    MenuWindowFit.freezeUntilFlush()
+                    page = .main
                     store.detailsOpen = false
                 } label: {
                     HStack(spacing: 3) {
@@ -482,7 +488,8 @@ struct MenuView: View {
     private var connectionDetails: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeOut(duration: 0.12)) { showConnection.toggle() }
+                MenuWindowFit.freezeUntilFlush()
+                showConnection.toggle()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: showConnection ? "chevron.down" : "chevron.right")

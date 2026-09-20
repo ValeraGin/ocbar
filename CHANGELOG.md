@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.11.1 — 2026-09-20
+
+- No more jumping when the menu changes height: the height is not animated any
+  more, the window is resized once, and intermediate frames are held back until
+  the redraw is done (SwiftUI lays the new page out 22 points too tall for a
+  moment). Verified frame by frame on the real menu: 523 → 649 → 523 with no
+  intermediate height.
+
 ## 0.11.0 — 2026-09-20
 
 - The menu window now shrinks back. macOS grows the menu-bar window to fit the
