@@ -508,6 +508,16 @@ enum ProfileCheck {
         if d.mode != "tunnel" && d.mode != "proxy" {
             err("режим «\(d.mode)» — бывает tunnel или proxy")
         }
+        // MTU и DTLS: клиент такой профиль не загрузит, поэтому редактор
+        // не должен давать его сохранить.
+        let mtu = d.extras.first { $0.section == "Connection" && $0.key.lowercased() == "mtu" }?.value.trimmed ?? ""
+        if !mtu.isEmpty, Int(mtu).map({ $0 < 576 || $0 > 9000 }) ?? true {
+            err("Mtu «\(mtu)» — число от 576 до 9000")
+        }
+        let dtls = d.extras.first { $0.section == "Connection" && $0.key.lowercased() == "dtls" }?.value.trimmed.lowercased() ?? ""
+        if !dtls.isEmpty, !["on", "off"].contains(dtls) {
+            err("Dtls «\(dtls)» — on или off")
+        }
         if d.mode == "proxy" {
             warn("прокси-режим: нужен ocproxy (brew install ocproxy); маршруты и зоны из профиля не применяются, ходят только программы, которым указан SOCKS")
         }

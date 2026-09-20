@@ -22,6 +22,7 @@ extension SelfTest {
         auditProfileParsing(t)
         auditProfileChecks(t)
         auditStatus(t)
+        auditProfileVerdicts(t)
         auditNotify(t)
         auditTimeouts(t)
         auditCliParity(t)
@@ -131,6 +132,51 @@ extension SelfTest {
         t.check("состояние: битый JSON — не состояние, а nil", Status.parse(json: "{не json") == nil)
         t.check("состояние: пустой JSON — состояние по умолчанию",
                 Status.parse(json: "{}")?.presentation == .down)
+    }
+
+    // --- согласие редактора и клиента --------------------------------------
+
+    /// Редактор и клиент должны одинаково отвечать на вопрос «этот профиль
+    /// годится?». Разойтись им легко: правила живут в двух местах — подсказки
+    /// формы на Swift, разбор при подключении в bash. Здесь это ловится.
+    static func auditProfileVerdicts(_ t: Tally) {
+        guard OcbarClient.shared.binary != nil else {
+            print("  [ -- ] согласие с клиентом: живой ocbar не найден, пропущено")
+            return
+        }
+        let base = """
+        [Connection]
+        Name = Проба
+        Url  = vpn.example.test/group
+        User = tester
+        """
+        let cases: [(String, String)] = [
+            ("обычный профиль", base),
+            ("MTU вне диапазона", base + "\nMtu = 99"),
+            ("DTLS не on/off", base + "\nDtls = maybe"),
+            ("режим не tunnel/proxy", base + "\nMode = magic"),
+            ("порт прокси занят системой", base + "\n\n[Proxy]\nPort = 80"),
+            ("цифр в коде — 9", base + "\n\n[Auth]\nTotp = keychain\nTotpDigits = 9"),
+            ("алгоритм кода — SHA7", base + "\n\n[Auth]\nTotp = keychain\nTotpAlgorithm = SHA7"),
+            ("период кода — 5 с", base + "\n\n[Auth]\nTotp = keychain\nTotpPeriod = 5"),
+            ("источник пароля выдуман", base + "\n\n[Auth]\nPassword = magic"),
+            ("сеть не CIDR", base + "\n\n[Routes]\n10.0.0/8"),
+            ("зона без резолвера", base + "\n\n[DNS]\nexample.test ="),
+        ]
+        for (name, text) in cases {
+            let doc = ProfileDoc.parse(text, fileName: "probe")
+            let mine = ProfileCheck.check(doc).contains { $0.level == .error }
+            let theirs = OcbarClient.shared.profileRejection(doc.render(), name: "probe") != nil
+            // Редактор может быть строже клиента — это подсказка формы. Ошибка
+            // в другую сторону: редактор разрешил то, что клиент не загрузит.
+            t.check("согласие с клиентом: \(name)", theirs ? true : !mine || !theirs,
+                    "редактор: \(mine ? "не принимает" : "принимает"), клиент: \(theirs ? "не принимает" : "принимает")")
+            if theirs && !mine {
+                t.check("согласие с клиентом: \(name) — редактор разрешает то, что клиент не примет", false,
+                        "редактор принимает, клиент отвергает")
+            }
+            if mine && !theirs { print("  [ -- ] согласие с клиентом: \(name) — редактор строже клиента") }
+        }
     }
 
     // --- уведомления ------------------------------------------------------

@@ -657,6 +657,24 @@ load_profile() {
     esac
 }
 
+# Примет ли клиент этот файл профиля. Нужна редактору: он показывает свои
+# подсказки по ходу правки, но последнее слово — за клиентом, иначе форма
+# сохранит то, что потом не подключится. Проверка — той же загрузкой, в
+# подоболочке: отдельного набора правил не заводим, разойтись нечему.
+cmd_profile_check() { # файл
+    local f="${1:-}"
+    [ -n "$f" ] || die "profile-check <файл>"
+    [ -f "$f" ] || die "нет файла: $f"
+    local err rc=0
+    local name; name=$(basename "${f%.ocbar}")
+    err=$( ( load_profile_file "$f" "$name" ) 2>&1 >/dev/null ) || rc=$?
+    if [ "$rc" = 0 ]; then info "профиль принимается"; return 0; fi
+    # Первая строка — причина отказа; префикс клиента и путь к файлу редактору
+    # не нужны: он и так знает, какой профиль правит.
+    printf '%s\n' "$(printf '%s' "$err" | head -1 | sed -e 's/^ocbar: //' -e "s|\[$f\]|[$name]|")" >&2
+    return 1
+}
+
 # Загрузить выбранный профиль молча — для команд, которым нужны его сети и
 # зоны. Отсутствие профиля не повод рушить команду: показ состояния и
 # переключатели должны работать и без него.
@@ -3600,6 +3618,7 @@ case "${1:-}" in
     logs)       shift; cmd_logs "$@" ;;
     status)     if [ "${2:-}" = "--json" ]; then cmd_status_json; else cmd_status "${2:-}"; fi ;;
     profiles)   shift; cmd_profiles "$@" ;;
+    profile-check) shift; cmd_profile_check "$@" ;;
     routes)     shift; cmd_routes "$@" ;;
     dns)        shift; cmd_dns "$@" ;;
     secret)     shift; cmd_secret "$@" ;;

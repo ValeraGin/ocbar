@@ -111,6 +111,19 @@ PROFILE
     has "профиль в списке" "profile_list=t|Проба||" "$out"
     has "адрес профиля отдельной строкой" "profile_url=t|vpn.example.test/group" "$out"
 
+    # Примет ли клиент файл профиля: этим редактор проверяет форму перед
+    # сохранением.
+    printf '[Connection]\nName = Проба\nUrl = vpn.example.test/g\nUser = t\n' > "$tmp/chk-ok.ocbar"
+    printf '[Connection]\nName = Плохой\nUrl = vpn.example.test/g\nUser = t\nMtu = 99\n' > "$tmp/chk-bad.ocbar"
+    local chk
+    chk=$(run profile-check "$tmp/chk-ok.ocbar"; echo "rc=$?")
+    has "profile-check: годный профиль принят" "rc=0" "$chk"
+    chk=$(run profile-check "$tmp/chk-bad.ocbar"; echo "rc=$?")
+    has "profile-check: негодный профиль отвергнут" "rc=1" "$chk"
+    has "profile-check: сказана причина" "Mtu вне 576–9000" "$chk"
+    hasnt "profile-check: в причине нет пути к файлу" "$tmp" "$chk"
+    rm -f "$tmp/chk-ok.ocbar" "$tmp/chk-bad.ocbar"
+
     # Машинное состояние: приложение читает его целиком, поэтому проверяем
     # не текст, а разобранный JSON.
     # run() подмешивает поток ошибок — берём только строку JSON.

@@ -95,6 +95,22 @@ final class OcbarClient: @unchecked Sendable {
         return s
     }
 
+    /// Примет ли клиент такой профиль. Редактор показывает свои подсказки по
+    /// ходу правки, но сохранять то, что клиент отвергнет, нельзя: файл потом
+    /// не подключится. nil — принимает, иначе причина отказа словами клиента.
+    func profileRejection(_ text: String, name: String) -> String? {
+        guard let binary else { return nil }
+        let dir = NSTemporaryDirectory() + "ocbar-check-\(getpid())"
+        let path = dir + "/" + (name.isEmpty ? "профиль" : name) + ".ocbar"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        guard (try? text.write(toFile: path, atomically: true, encoding: .utf8)) != nil else { return nil }
+        let r = Shell.run(binary, ["profile-check", path], timeout: 15)
+        guard r.code != 0 else { return nil }
+        let why = (r.err.isEmpty ? r.out : r.err).trimmed
+        return why.isEmpty ? "клиент не принял профиль (код \(r.code))" : why
+    }
+
     // --- действия --------------------------------------------------------
 
     enum ActionResult {

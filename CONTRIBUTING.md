@@ -44,6 +44,13 @@ Profile format: one `.ocbar` file per connection, sections `[Connection]`,
 `[Routes]`, `[DNS]`, `[Auth]`, `[Proxy]`, `[Health]`, `[Autofill]`. Adding a
 key means: CLI parser, app parser, validation in both, example file, docs.
 
+The CLI has the final word on whether a profile is valid: the editor asks
+`ocbar profile-check` before saving and refuses with the client's own words.
+The editor may be stricter than the client — its checks are hints while you
+type — but never more permissive. `ocbar-app --selftest` compares both
+verdicts on a set of profiles and fails when the editor would save something
+the client will not load.
+
 ## Style
 
 - Comments and commit messages explain **why**, not what. Russian is fine.

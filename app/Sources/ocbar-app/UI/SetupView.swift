@@ -275,6 +275,10 @@ struct SetupView: View {
         doc.fileName = ProfileEditorView.slug(name.trimmed)
         let issues = ProfileCheck.check(doc).filter { $0.level == .error }
         guard issues.isEmpty else { note = issues.map(\.text).joined(separator: "; "); return }
+        if let why = OcbarClient.shared.profileRejection(doc.render(), name: doc.fileName) {
+            note = "клиент не принимает профиль: " + why
+            return
+        }
         busy = true; note = nil
         let file = doc.fileName
         DispatchQueue.global(qos: .userInitiated).async {
