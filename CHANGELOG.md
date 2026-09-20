@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.12.1 — 2026-09-20
+
+- Internal: the CLI is 4431 → 3655 lines. The self-test and the Python parts
+  (merged logs, report redaction, password-group login) moved out of
+  `bin/ocbar` into `libexec/`, where the linter and the tests can see them.
+  Behaviour is unchanged.
+
 ## 0.12.0 — 2026-09-20
 
 - `ocbar status --json` prints the whole state as typed JSON: lists as lists,
