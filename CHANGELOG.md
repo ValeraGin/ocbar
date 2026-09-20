@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.10.4 — 2026-09-20
+
+- The menu takes the height of its content and scrolls only when the content
+  is taller than the screen (ViewThatFits instead of measuring inside the
+  scroll view). Measuring inside the scroll made the height grow-only, and
+  then the Networks and DNS page came out cramped.
+
 ## 0.10.3 — 2026-09-20
 
 - The menu shrinks back after the Networks and DNS page: its height was

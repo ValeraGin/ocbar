@@ -35,15 +35,12 @@ struct MenuView: View {
             // Всё ниже шапки прокручивается: восемь профилей, вопрос о смене
             // профиля и предупреждения вместе выше экрана 13", и низ меню
             // («Выйти») обрезался.
-            BoundedScroll(maxHeight: Self.maxBodyHeight) {
+            CappedHeight(maxHeight: Self.maxBodyHeight) {
                 switch page {
                 case .main: mainPage
                 case .networks: networksPage
                 }
             }
-            // Своя обёртка на каждый экран: высота меряется заново, а не
-            // остаётся от прошлого, более высокого.
-            .id(page)
         }
         .padding(12)
         .frame(width: Self.width)

@@ -158,6 +158,7 @@ struct LiveStageView: View {
                 Text("живое состояние").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                 MenuView()
                     .environmentObject(store)
+                    .fixedSize(horizontal: false, vertical: true)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
             }
@@ -165,6 +166,7 @@ struct LiveStageView: View {
                 Text("живое состояние · подробности").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                 MenuView(expandDetails: true, expandProfiles: true)
                     .environmentObject(store)
+                    .fixedSize(horizontal: false, vertical: true)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
             }
@@ -267,6 +269,7 @@ struct StageView: View {
                     preview: status,
                     samples: Fixture.samples(active: active),
                     latency: "41 мс", busy: busy, actionNote: note))
+                .fixedSize(horizontal: false, vertical: true)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
         }
@@ -303,6 +306,7 @@ struct ScreenshotMenuView: View {
             .environmentObject(StatusStore(preview: Fixture.status(.connected),
                                            samples: Fixture.samples(active: true),
                                            latency: "41 мс", busy: nil, actionNote: nil))
+            .fixedSize(horizontal: false, vertical: true)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
     }
