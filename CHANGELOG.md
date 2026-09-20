@@ -3,6 +3,15 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.10.5 — 2026-09-20
+
+- The self-test now measures the menu itself: it switches to Networks and DNS
+  and back and checks that the page is taller, that going back restores the
+  height, and that the menu never exceeds the screen. Both earlier regressions
+  fail this check.
+- Removed the menu-window top anchor and its logging: the log showed macOS
+  keeps the top itself, and the real cause was the height measurement.
+
 ## 0.10.4 — 2026-09-20
 
 - The menu takes the height of its content and scrolls only when the content

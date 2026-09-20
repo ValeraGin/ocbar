@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             var code = SelfTest.run()
             code += SelfTest.audit()
             code += SelfTest.editorProbe()
+            code += SelfTest.menuHeightProbe()
             if CommandLine.arguments.contains("--live-actions") { code += SelfTest.liveActions() }
             // Итог по всем частям: строка «selftest: всё OK» выше — только
             // про разбор и правила, проба редактора идёт после неё.

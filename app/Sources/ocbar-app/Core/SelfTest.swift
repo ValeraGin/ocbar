@@ -21,26 +21,6 @@ enum SelfTest {
 
         print("ocbar-app selftest")
 
-        // --- окно меню держит верх, когда меняется высота ---
-        do {
-            let w = NSWindow(contentRect: NSRect(x: -20000, y: 500, width: 340, height: 300),
-                             styleMask: [.borderless], backing: .buffered, defer: false)
-            // Привязка включается на показанном окне: у скрытого верх ещё
-            // ставит система.
-            w.orderFrontRegardless()
-            let anchor = TopAnchor()
-            anchor.attach(w)
-            let top = w.frame.maxY
-            // Как делает AppKit: размер меняется, нижний левый угол на месте.
-            w.setFrame(NSRect(x: w.frame.minX, y: w.frame.minY, width: 340, height: 180), display: false)
-            check("меню: стало ниже — верх остался под значком", abs(w.frame.maxY - top) < 0.5,
-                  "верх \(w.frame.maxY), ждали \(top)")
-            w.setFrame(NSRect(x: w.frame.minX, y: w.frame.minY, width: 340, height: 420), display: false)
-            check("меню: стало выше — верх остался под значком", abs(w.frame.maxY - top) < 0.5,
-                  "верх \(w.frame.maxY), ждали \(top)")
-            anchor.detach()
-        }
-
         // --- разбор профиля ---
         let sample = """
         # комментарий
@@ -436,6 +416,45 @@ extension SelfTest {
         } else {
             check("редактор: список профилей найден", false)
         }
+        return failures
+    }
+}
+
+// Высота меню: экран «Сети и DNS» выше главного, возврат возвращает прежнюю
+// высоту. Обе прошлые ошибки были здесь: высота, измеренная внутри прокрутки,
+// то росла без возврата (меню казалось съехавшим от значка), то не доходила
+// до окна (экран сетей выходил ужатым).
+extension SelfTest {
+    @MainActor
+    static func menuHeightProbe() -> Int32 {
+        var failures: Int32 = 0
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") {
+            if ok { print("  [ OK ] \(name)") }
+            else { failures += 1; print("  [FAIL] \(name)\(detail.isEmpty ? "" : " — " + detail)") }
+        }
+
+        let nav = MenuView.MenuNav()
+        let store = StatusStore(preview: Fixture.status(.connected),
+                                samples: Fixture.samples(active: true), latency: "41 мс")
+        let host = NSHostingView(rootView: MenuView(nav: nav).environmentObject(store))
+        host.frame = NSRect(x: 0, y: 0, width: MenuView.width, height: 400)
+        func height() -> CGFloat {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            return host.fittingSize.height
+        }
+        let main = height()
+        nav.page = .networks
+        let networks = height()
+        nav.page = .main
+        let back = height()
+        check("меню: экран «Сети и DNS» выше главного", networks > main + 40,
+              "главный \(Int(main)), сети \(Int(networks))")
+        check("меню: возврат на главный возвращает высоту", abs(back - main) < 2,
+              "было \(Int(main)), стало \(Int(back))")
+        check("меню: высота не выше экрана", networks <= MenuView.maxBodyHeight + 60,
+              "\(Int(networks)) при потолке \(Int(MenuView.maxBodyHeight))")
+        
         return failures
     }
 }

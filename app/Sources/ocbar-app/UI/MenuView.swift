@@ -7,15 +7,29 @@ struct MenuView: View {
     @EnvironmentObject var store: StatusStore
     @ObservedObject private var notify = NotifyState.shared
     @Environment(\.openWindow) private var openWindow
-    @State private var page: Page
+    @ObservedObject private var nav: MenuNav
     @State private var showConnection = true
 
     enum Page { case main, networks }
 
+    /// Текущий экран меню держится снаружи: так самопроверка может
+    /// переключить его и измерить высоту (меню не должно ни расти без
+    /// возврата, ни ужиматься).
+    final class MenuNav: ObservableObject {
+        @Published var page: Page
+        init(page: Page = .main) { self.page = page }
+    }
+
+    private var page: Page {
+        get { nav.page }
+        nonmutating set { nav.page = newValue }
+    }
+
     /// expandProfiles и switchTo остались от меню со списком профилей: выбор
     /// профиля теперь в настройках, флаги ничего не меняют.
-    init(expandDetails: Bool = false, expandProfiles: Bool = false, switchTo: ProfileEntry? = nil) {
-        _page = State(initialValue: expandDetails ? .networks : .main)
+    init(expandDetails: Bool = false, expandProfiles: Bool = false, switchTo: ProfileEntry? = nil,
+         nav: MenuNav? = nil) {
+        self.nav = nav ?? MenuNav(page: expandDetails ? .networks : .main)
     }
 
     private var s: Status { store.status }
@@ -45,8 +59,6 @@ struct MenuView: View {
         .padding(12)
         .frame(width: Self.width)
         .background(shortcuts)
-        // Верх меню — под значком, как бы ни менялась высота содержимого.
-        .background(KeepTopAnchored())
         .onAppear {
             if !CommandLine.arguments.contains("--stage") { Notifier.refreshAllowed() }
             store.menuOpen = true
