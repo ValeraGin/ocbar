@@ -290,6 +290,7 @@ if args.totpNow {
 }
 
 if args.selfTest {
+    Lang.current = "ru"             // проверки сверяют русский текст
     var failed = 0
     out("TOTP, RFC 6238 приложение B (HMAC-SHA1):")
     for v in TOTP.selfTest() {
@@ -558,6 +559,7 @@ if args.probe {
 
 // Проверка разметки без человека: селекторы по странице-образцу.
 if args.learnSelfTest {
+    Lang.current = "ru"             // проверки сверяют русский текст
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
     out("ocbar-auth learn-selftest")

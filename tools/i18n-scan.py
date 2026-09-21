@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Строки интерфейса приложения: сбор и сверка с переводом.
+"""Строки интерфейса приложения и окон ocbar-auth: сбор и сверка с переводом.
 
 SwiftUI берёт русский текст как ключ и ищет перевод в Localizable.strings.
 Здесь мы собираем ключи по местам вызова (Text, Button, Toggle…), а не по
@@ -9,6 +9,10 @@ SwiftUI берёт русский текст как ключ и ищет пер�
     tools/i18n-scan.py --list            все ключи
     tools/i18n-scan.py --check           чего не хватает в en.lproj (код 1)
     tools/i18n-scan.py --update          дописать недостающие с пометкой TODO
+
+ocbar-auth — голый файл без бандла: перевод у него в коде, словарём
+auth/Sources/ocbar-auth/Translations.swift; --check сверяет и его (--update
+туда не пишет — пары добавляются руками).
 """
 import re
 import sys
@@ -87,5 +91,50 @@ def main() -> int:
     return 1 if missing or todo or extra else 0
 
 
+# --- ocbar-auth ------------------------------------------------------------
+AUTH = ROOT / "auth/Sources/ocbar-auth"
+AUTH_TABLE = AUTH / "Translations.swift"
+AUTH_SKIP = {"SelfTest.swift", "LearnCheck.swift", "Translations.swift", "Localization.swift"}
+# Текст окна AppKit, который забыли обернуть: заголовки, подписи, подсказки.
+AUTH_UNWRAPPED = re.compile(
+    r'(?:title|labelWithString|checkboxWithTitle|withTitle|messageText|informativeText|'
+    r'placeholderString|toolTip|stringValue|message)\s*[:=]\s*"((?:[^"\\]|\\.)*)"')
+
+
+def auth_check() -> int:
+    found: dict[str, None] = {}
+    unwrapped: list[str] = []
+    for path in sorted(AUTH.glob("*.swift")):
+        if path.name in AUTH_SKIP:
+            continue
+        for line in path.read_text(encoding="utf-8").split("\n"):
+            if line.lstrip().startswith("//"):
+                continue
+            for raw in KEY_RE.findall(line):
+                if CYRILLIC.search(raw):
+                    found.setdefault(raw.replace('\\"', '"'), None)
+            for raw in AUTH_UNWRAPPED.findall(line):
+                if CYRILLIC.search(raw):
+                    unwrapped.append(f"{path.name}: {raw}")
+    table: dict[str, str] = {}
+    for line in AUTH_TABLE.read_text(encoding="utf-8").split("\n"):
+        m = re.match(r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*$', line)
+        if m:
+            table[m.group(1).replace('\\"', '"')] = m.group(2)
+    missing = [k for k in found if k not in table]
+    extra = [k for k in table if k not in found]
+    for u in unwrapped:
+        print("ocbar-auth: без перевода в коде: " + u)
+    for k in missing:
+        print(f"ocbar-auth: нет перевода: {k}")
+    for k in extra:
+        print(f"ocbar-auth: лишний перевод (строки в коде нет): {k}")
+    print(f"строк окон ocbar-auth: {len(found)}, переведено: {len(found) - len(missing)}")
+    return 1 if missing or extra or unwrapped else 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    rc = main()
+    if (sys.argv[1] if len(sys.argv) > 1 else "--check") == "--check":
+        rc = max(rc, auth_check())
+    sys.exit(rc)

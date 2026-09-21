@@ -83,14 +83,14 @@ final class TeachRecorder: NSObject, WKScriptMessageHandler {
     }
 
     static func title(_ kind: String) -> String {
-        ["username": "логин", "password": "пароль", "totp": "код", "manual": "поле, которое вводите вы"][kind] ?? kind
+        ["username": L("логин"), "password": L("пароль"), "totp": L("код"), "manual": L("поле, которое вводите вы")][kind] ?? kind
     }
 
     func summary() -> String {
         steps.enumerated().map { i, s in
             var parts = s.fields.map { Self.title($0.kind) }
-            if s.button != nil { parts.append(s.fields.isEmpty ? "кнопка «всегда»" : "кнопка") }
-            return "окно \(i + 1): " + parts.joined(separator: ", ")
+            if s.button != nil { parts.append(s.fields.isEmpty ? L("кнопка «всегда»") : L("кнопка")) }
+            return L("окно %@: ", i + 1) + parts.joined(separator: ", ")
         }.joined(separator: " · ")
     }
 
@@ -410,22 +410,22 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
     private func build() {
         alert = NSAlert()
         alert.icon = TeachDialog.brandIcon()
-        alert.messageText = "Запомнить для следующего входа?"
-        alert.informativeText = "Вход прошёл. Выберите, что сохранить в профиль «\(input.profile)». Без вашего выбора ничего не сохраняется."
-        alert.addButton(withTitle: "Сохранить")
-        alert.addButton(withTitle: "Не сохранять")
+        alert.messageText = L("Запомнить для следующего входа?")
+        alert.informativeText = L("Вход прошёл. Выберите, что сохранить в профиль «%@». Без вашего выбора ничего не сохраняется.", input.profile)
+        alert.addButton(withTitle: L("Сохранить"))
+        alert.addButton(withTitle: L("Не сохранять"))
 
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
 
-        rulesBox = NSButton(checkboxWithTitle: "Правила формы входа", target: nil, action: nil)
+        rulesBox = NSButton(checkboxWithTitle: L("Правила формы входа"), target: nil, action: nil)
         rulesBox.state = .on
         stack.addArrangedSubview(rulesBox)
         stack.addArrangedSubview(label(input.summary))
         if input.manualCount > 0 {
-            stack.addArrangedSubview(label("Полей, которые вводите только вы: \(input.manualCount). На них ocbar остановится и подождёт вас — пустыми они не уйдут.", color: .systemOrange))
+            stack.addArrangedSubview(label(L("Полей, которые вводите только вы: %@. На них ocbar остановится и подождёт вас — пустыми они не уйдут.", input.manualCount), color: .systemOrange))
         }
 
         switch input.passwordOffer {
@@ -433,10 +433,10 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         case .save, .update, .askToKeychain:
             // Заголовок галочки — в одну строку, пояснение — отдельной подписью:
             // длинный заголовок обрезался.
-            var title = "Сохранить пароль в связке ключей", note: String?
+            var title = L("Сохранить пароль в связке ключей"), note: String?
             switch input.passwordOffer {
-            case .update: title = "Обновить пароль в связке ключей"; note = "Введённый пароль отличается от сохранённого."
-            case .askToKeychain: note = "Сейчас пароль вводите вы — ocbar будет подставлять его сам."
+            case .update: title = L("Обновить пароль в связке ключей"); note = L("Введённый пароль отличается от сохранённого.")
+            case .askToKeychain: note = L("Сейчас пароль вводите вы — ocbar будет подставлять его сам.")
             default: break
             }
             let box = NSButton(checkboxWithTitle: title, target: nil, action: nil)
@@ -445,30 +445,30 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             if let note { stack.addArrangedSubview(label(note)) }
             passwordBox = box
         case .elsewhere(let src):
-            stack.addArrangedSubview(label("Пароль берётся из \(src) — ocbar его не сохраняет."))
+            stack.addArrangedSubview(label(L("Пароль берётся из %@ — ocbar его не сохраняет.", src)))
         }
 
         if input.offerCode {
-            stack.addArrangedSubview(label("Одноразовый код вы ввели сами. Откуда он?", size: 12, color: .labelColor))
+            stack.addArrangedSubview(label(L("Одноразовый код вы ввели сами. Откуда он?"), size: 12, color: .labelColor))
             let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-            popup.addItems(withTitles: ["Не менять", "Из приложения-аутентификатора — завести здесь",
-                                        "Приходит по SMS — вводить каждый раз"])
+            popup.addItems(withTitles: [L("Не менять"), L("Из приложения-аутентификатора — завести здесь"),
+                                        L("Приходит по SMS — вводить каждый раз")])
             popup.target = self
             popup.action = #selector(codeModeChanged)
             stack.addArrangedSubview(popup)
             codePopup = popup
 
             let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 22))
-            field.placeholderString = "секрет base32"
+            field.placeholderString = L("секрет base32")
             field.delegate = self
             field.widthAnchor.constraint(equalToConstant: 200).isActive = true
-            let qr = NSButton(title: "Файл QR…", target: self, action: #selector(pickQR))
+            let qr = NSButton(title: L("Файл QR…"), target: self, action: #selector(pickQR))
             qr.bezelStyle = .rounded
             // Экспорт Google Authenticator показывается на экране телефона, а
             // снимок экрана телефон часто запрещает, — читаем камерой Mac.
-            let cam = NSButton(title: "Камерой…", target: self, action: #selector(scanCamera))
+            let cam = NSButton(title: L("Камерой…"), target: self, action: #selector(scanCamera))
             cam.bezelStyle = .rounded
-            cam.toolTip = "Прочитать QR экспорта Google Authenticator с экрана телефона камерой Mac. Кадры не сохраняются."
+            cam.toolTip = L("Прочитать QR экспорта Google Authenticator с экрана телефона камерой Mac. Кадры не сохраняются.")
             cameraButton = cam
             // Строка видна всегда, доступна — только при «из приложения»: окно
             // не растёт после показа, и появившаяся позже строка обрезалась бы.
@@ -479,7 +479,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             secretField = field
             secretRow = row
             qrButton = qr
-            let v = label("Секрет примется, только если даёт тот код, который вы только что ввели.")
+            let v = label(L("Секрет примется, только если даёт тот код, который вы только что ввели."))
             stack.addArrangedSubview(v)
             verifyLabel = v
             setSecretEnabled(false)
@@ -494,8 +494,12 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
     /// Снимок окна сохранения без показа — чтобы вид проверялся без человека,
     /// как витрина приложения (ocbar-auth --teach-dialog-shot файл.png).
     static func shot(to path: String) -> Bool {
-        let d = TeachDialog(.init(profile: "Основной",
-                                  summary: "окно 1: логин, пароль, кнопка · окно 2: код, поле, которое вводите вы, кнопка · окно 3: кнопка «всегда»",
+        // Демо-данные — из тех же переведённых частей, что настоящая сводка.
+        let summary = [L("окно %@: ", 1) + [L("логин"), L("пароль"), L("кнопка")].joined(separator: ", "),
+                       L("окно %@: ", 2) + [L("код"), L("поле, которое вводите вы"), L("кнопка")].joined(separator: ", "),
+                       L("окно %@: ", 3) + L("кнопка «всегда»")].joined(separator: " · ")
+        let d = TeachDialog(.init(profile: L("Основной"),
+                                  summary: summary,
                                   manualCount: 1, passwordOffer: .update, offerCode: true,
                                   code: "123456", codeAt: Date()))
         d.build()
@@ -559,11 +563,11 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         // Ссылка otpauth:// несёт параметры сама.
         if raw.lowercased().hasPrefix("otpauth://"), let e = (try? QRImport.parse(raw))?.first {
             if TeachDialog.entryMatches(e, code: code, at: at) {
-                accept(e, source: "из ссылки")
+                accept(e, source: L("из ссылки"))
             } else {
                 verified = false
-                verifyLabel?.stringValue = e.isTOTP ? "✗ секрет из ссылки не даёт введённый вами код"
-                                                    : "✗ это код по счётчику (HOTP) — ocbar его не ведёт"
+                verifyLabel?.stringValue = e.isTOTP ? L("✗ секрет из ссылки не даёт введённый вами код")
+                                                    : L("✗ это код по счётчику (HOTP) — ocbar его не ведёт")
             }
             refresh()
             return
@@ -572,13 +576,13 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             secret = TeachDialog.normalize(raw)
             params = p
             verified = true
-            verifyLabel?.stringValue = "✓ секрет даёт введённый вами код" + (p.isDefault ? "" : " (\(p.label))")
+            verifyLabel?.stringValue = L("✓ секрет даёт введённый вами код") + (p.isDefault ? "" : " (\(p.label))")
         } else {
             secret = nil
             verified = false
             verifyLabel?.stringValue = raw.isEmpty
-                ? "Секрет примется, только если даёт тот код, который вы только что ввели."
-                : "✗ секрет не даёт введённый вами код — проверьте"
+                ? L("Секрет примется, только если даёт тот код, который вы только что ввели.")
+                : L("✗ секрет не даёт введённый вами код — проверьте")
         }
         refresh()
     }
@@ -588,7 +592,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
-        panel.message = "Снимок QR второго фактора (подойдёт и экспорт Google Authenticator)"
+        panel.message = L("Снимок QR второго фактора (подойдёт и экспорт Google Authenticator)")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let entries = try QRImport.decode(file: url.path).flatMap { try QRImport.parse($0) }
@@ -596,11 +600,11 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             // который человек только что ввёл.
             let fit = entries.filter { TeachDialog.entryMatches($0, code: code, at: at) }
             if let e = fit.first {
-                accept(e, source: "из QR")
+                accept(e, source: L("из QR"))
             } else {
                 verified = false
-                verifyLabel?.stringValue = entries.isEmpty ? "в QR нет записей TOTP"
-                    : "ни одна из записей в QR (\(entries.count)) не даёт введённый вами код"
+                verifyLabel?.stringValue = entries.isEmpty ? L("в QR нет записей TOTP")
+                    : L("ни одна из записей в QR (%@) не даёт введённый вами код", entries.count)
             }
         } catch {
             verified = false
@@ -615,7 +619,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         verified = true
         secretField?.stringValue = ""
         let who = [e.issuer, e.name].filter { !$0.isEmpty }.joined(separator: " · ")
-        verifyLabel?.stringValue = "✓ \(source): \(who.isEmpty ? "запись" : who) — даёт введённый вами код"
+        verifyLabel?.stringValue = L("✓ %@: %@ — даёт введённый вами код", source, who.isEmpty ? L("запись") : who)
             + (e.params.isDefault ? "" : " (\(e.params.label))")
     }
 
@@ -625,7 +629,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         let r = QRCameraWindow(code: code, at: at).run()
         cameraActive = false
         if let e = r.entry {
-            accept(e, source: "с камеры")
+            accept(e, source: L("с камеры"))
         } else {
             verifyLabel?.stringValue = r.note
         }
@@ -655,7 +659,7 @@ enum TeachFlow {
         guard let pw = recorded, !pw.isEmpty else { return .none }
         switch source {
         case "keepassxc": return .elsewhere("KeePassXC")
-        case "command": return .elsewhere("команды PasswordCommand")
+        case "command": return .elsewhere(L("команды PasswordCommand"))
         default: break
         }
         if looksLikeCode(pw) { return .none }

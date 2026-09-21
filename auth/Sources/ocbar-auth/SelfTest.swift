@@ -25,7 +25,23 @@ enum AuthSelfTest {
         scope()
         gatewayOnly()
         teachOffer()
+        language()
         return failures
+    }
+
+    // MARK: - язык окон
+
+    static func language() {
+        out("Язык окон:")
+        let was = Lang.current
+        defer { Lang.current = was }
+        Lang.current = "en"
+        ok("английский: перевод из словаря", L("Отмена") == "Cancel", L("Отмена"))
+        ok("английский: подстановка на своём месте",
+           L("камера не включилась: %@", "busy") == "the camera did not start: busy", L("камера не включилась: %@", "busy"))
+        ok("английский: строки без перевода — по-русски, а не ключом", L("строка без перевода") == "строка без перевода")
+        Lang.current = "ru"
+        ok("русский: ключ как есть", L("Отмена") == "Отмена")
     }
 
     // MARK: - окно «Запомнить для следующего входа?» — пароль

@@ -25,7 +25,7 @@ final class PromptDialog {
 
     func build() {
         alert = NSAlert()
-        alert.messageText = secure ? "Пароль VPN" : "Код из SMS"
+        alert.messageText = secure ? L("Пароль VPN") : L("Код из SMS")
         // У ocbar-auth нет бандла и своей иконки — без этого NSAlert
         // показал бы папку.
         let cfg = NSImage.SymbolConfiguration(pointSize: 40, weight: .regular)
@@ -34,19 +34,20 @@ final class PromptDialog {
             .withSymbolConfiguration(cfg) { alert.icon = icon }
         // Подпись шлюза («Response:») в окно не выводим: человеку она ничего не
         // говорит; она есть в журнале входа.
-        let target = profile.isEmpty ? "" : " для профиля «\(profile)»"
-        let info = secure ? "Введите пароль VPN\(target). Чтобы не спрашивать каждый раз, сохраните его: ocbar secret set-password."
-                          : "Введите код из SMS\(target)."
+        let info = secure
+            ? (profile.isEmpty ? L("Введите пароль VPN.") : L("Введите пароль VPN для профиля «%@».", profile))
+                + " " + L("Чтобы не спрашивать каждый раз, сохраните его: настройки ocbar → Профили → Вход.")
+            : (profile.isEmpty ? L("Введите код из SMS.") : L("Введите код из SMS для профиля «%@».", profile))
         alert.informativeText = info
-        alert.addButton(withTitle: "Войти")
-        alert.addButton(withTitle: "Отмена")
+        alert.addButton(withTitle: L("Войти"))
+        alert.addButton(withTitle: L("Отмена"))
         if secure {
             field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
             field.contentType = .password
         } else {
             field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 28))
             field.font = .monospacedDigitSystemFont(ofSize: 17, weight: .regular)
-            field.placeholderString = "Код"
+            field.placeholderString = L("Код")
             field.alignment = .center
             // Код в SMS приходит и в подсказку над клавиатурой — поле называем
             // как одноразовый код, чтобы macOS её предложила.
@@ -71,7 +72,7 @@ final class PromptDialog {
     }
 
     static func shot(to path: String) -> Bool {
-        let d = PromptDialog(label: "Response:", profile: "Парольная группа")
+        let d = PromptDialog(label: "Response:", profile: L("Парольная группа"))
         d.build()
         d.alert.layout()
         // cacheDisplay не рисует фон окна: в тёмной теме белый текст лёг бы

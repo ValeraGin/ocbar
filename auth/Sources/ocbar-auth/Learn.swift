@@ -65,13 +65,13 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
 
     /// Что размечаем сейчас. Порядок кнопок — порядок обычной формы входа.
     private static let kinds: [(id: String, title: String, hint: String)] = [
-        ("auto",     "Авто",   "Щёлкайте по полям и кнопке — вид определится сам; щелчок по отмеченному снимает отметку."),
-        ("username", "Логин",  "Щёлкните по полю, куда вводится логин"),
-        ("password", "Пароль", "Щёлкните по полю пароля"),
-        ("totp",     "Код",    "Щёлкните по полю одноразового кода"),
-        ("click",    "Кнопка", "Щёлкните по кнопке, которая отправляет это окно формы; на окне без полей её будут жать всегда"),
-        ("click!",   "Всегда", "Щёлкните по кнопке, которую жать всегда: «Остаться в системе?», «Другой способ входа». Пока на странице пустое поле из правил, не жмётся и она"),
-        ("stop",     "Ошибка", "Щёлкните по строке, где показывается ошибка входа — увидев её, автозаполнение остановится"),
+        ("auto",     L("Авто"),   L("Щёлкайте по полям и кнопке — вид определится сам; щелчок по отмеченному снимает отметку.")),
+        ("username", L("Логин"),  L("Щёлкните по полю, куда вводится логин")),
+        ("password", L("Пароль"), L("Щёлкните по полю пароля")),
+        ("totp",     L("Код"),    L("Щёлкните по полю одноразового кода")),
+        ("click",    L("Кнопка"), L("Щёлкните по кнопке, которая отправляет это окно формы; на окне без полей её будут жать всегда")),
+        ("click!",   L("Всегда"), L("Щёлкните по кнопке, которую жать всегда: «Остаться в системе?», «Другой способ входа». Пока на странице пустое поле из правил, не жмётся и она")),
+        ("stop",     L("Ошибка"), L("Щёлкните по строке, где показывается ошибка входа — увидев её, автозаполнение остановится")),
     ]
 
     private let startURL: URL
@@ -135,10 +135,10 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         kindPicker.selectedSegment = 0
         kindPicker.frame = NSRect(x: 10, y: webHeight + 74, width: 500, height: 24)
 
-        modeButton = NSButton(checkboxWithTitle: "Отмечать элементы", target: self, action: #selector(modeChanged))
+        modeButton = NSButton(checkboxWithTitle: L("Отмечать элементы"), target: self, action: #selector(modeChanged))
         modeButton.state = .on
         modeButton.frame = NSRect(x: 520, y: webHeight + 76, width: 170, height: 20)
-        modeButton.toolTip = "Выключите, чтобы пользоваться страницей обычным образом: нажать «Далее», закрыть баннер, выбрать другой способ входа."
+        modeButton.toolTip = L("Выключите, чтобы пользоваться страницей обычным образом: нажать «Далее», закрыть баннер, выбрать другой способ входа.")
 
         status = NSTextField(labelWithString: Self.kinds[0].hint)
         status.font = .systemFont(ofSize: 11)
@@ -147,39 +147,39 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         status.frame = NSRect(x: 12, y: webHeight + 52, width: width - 24, height: 16)
         status.autoresizingMask = [.width]
 
-        collected = NSTextField(labelWithString: "отмечено: ничего")
+        collected = NSTextField(labelWithString: L("отмечено: ничего"))
         collected.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         collected.textColor = .tertiaryLabelColor
         collected.lineBreakMode = .byTruncatingTail
         collected.frame = NSRect(x: 12, y: webHeight + 32, width: width - 24, height: 14)
         collected.autoresizingMask = [.width]
 
-        stepLabel = NSTextField(labelWithString: "шаг 1")
+        stepLabel = NSTextField(labelWithString: L("шаг %@", 1))
         stepLabel.font = .systemFont(ofSize: 11, weight: .medium)
         stepLabel.frame = NSRect(x: 12, y: webHeight + 9, width: 150, height: 16)
-        stepLabel.toolTip = "Окно формы, которое размечается сейчас. Новая страница после отмеченного окна — следующий шаг."
+        stepLabel.toolTip = L("Окно формы, которое размечается сейчас. Новая страница после отмеченного окна — следующий шаг.")
 
-        passButton = NSButton(title: "Пройти шаг →", target: self, action: #selector(passStep))
+        passButton = NSButton(title: L("Пройти шаг →"), target: self, action: #selector(passStep))
         passButton.bezelStyle = .rounded
         passButton.font = .systemFont(ofSize: 11)
         passButton.frame = NSRect(x: width - 480, y: webHeight + 6, width: 130, height: 22)
         passButton.autoresizingMask = [.minXMargin]
-        passButton.toolTip = "Заполнить отмеченные на этом шаге поля вашими данными из профиля и нажать отмеченную кнопку — форма перейдёт к следующему окну"
+        passButton.toolTip = L("Заполнить отмеченные на этом шаге поля вашими данными из профиля и нажать отмеченную кнопку — форма перейдёт к следующему окну")
 
-        let verify = NSButton(title: "Проверить", target: self, action: #selector(checkRules))
+        let verify = NSButton(title: L("Проверить"), target: self, action: #selector(checkRules))
         verify.bezelStyle = .rounded
         verify.font = .systemFont(ofSize: 11)
         verify.frame = NSRect(x: width - 344, y: webHeight + 6, width: 86, height: 22)
         verify.autoresizingMask = [.minXMargin]
-        verify.toolTip = "Найти отметки этого шага на странице: правило без элемента не сработает"
+        verify.toolTip = L("Найти отметки этого шага на странице: правило без элемента не сработает")
 
-        let undo = NSButton(title: "Убрать последнее", target: self, action: #selector(undoLast))
+        let undo = NSButton(title: L("Убрать последнее"), target: self, action: #selector(undoLast))
         undo.bezelStyle = .rounded
         undo.font = .systemFont(ofSize: 11)
         undo.frame = NSRect(x: width - 252, y: webHeight + 6, width: 134, height: 22)
         undo.autoresizingMask = [.minXMargin]
 
-        let finish = NSButton(title: "Готово", target: self, action: #selector(finishAndSave))
+        let finish = NSButton(title: L("Готово"), target: self, action: #selector(finishAndSave))
         finish.bezelStyle = .rounded
         finish.keyEquivalent = "\r"
         finish.font = .systemFont(ofSize: 11)
@@ -194,7 +194,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         window = NSWindow(contentRect: content.frame,
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
-        window.title = "ocbar — разметка формы входа"
+        window.title = L("ocbar — разметка формы входа")
         window.contentView = content
         window.delegate = self
         window.center()
@@ -221,14 +221,14 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         marking = modeButton.state == .on
         status.stringValue = marking
             ? Self.kinds.first { $0.id == kind }?.hint ?? ""
-            : "Обычная работа: страница ведёт себя как всегда. Включите галочку, когда дойдёте до нужного поля."
+            : L("Обычная работа: страница ведёт себя как всегда. Включите галочку, когда дойдёте до нужного поля.")
         applyState()
     }
 
     @objc private func undoLast() {
         guard !marks.isEmpty else { return }
         let removed = marks.removeLast()
-        status.stringValue = "убрано: \(removed.selector)"
+        status.stringValue = L("убрано: %@", removed.selector)
         refreshCollected()
     }
 
@@ -240,13 +240,13 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let here = marks.filter { $0.step == step }
         guard !here.isEmpty else {
             status.stringValue = marks.isEmpty
-                ? "проверять нечего: ничего не отмечено"
-                : "на шаге \(displayNumber(step)) ещё ничего не отмечено (всего отметок: \(marks.count))"
+                ? L("проверять нечего: ничего не отмечено")
+                : L("на шаге %@ ещё ничего не отмечено (всего отметок: %@)", displayNumber(step), marks.count)
             return
         }
         Self.eval(webView, Self.checkScript(for: here.map { $0.selector })) { [weak self] value, _ in
             guard let self, let codes = value as? [Int], codes.count == here.count else {
-                self?.status.stringValue = "проверка не удалась"
+                self?.status.stringValue = L("проверка не удалась")
                 return
             }
             var parts: [String] = []
@@ -254,14 +254,14 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 let name = self.title(for: mark.kind)
                 switch code {
                 case 2: parts.append(name + " ✓")
-                case 1: parts.append(name + " есть, но скрыт")
+                case 1: parts.append(L("%@ есть, но скрыт", name))
                 case 0: parts.append(name + " ✗")
-                default: parts.append(name + ": селектор не разобрался")
+                default: parts.append(L("%@: селектор не разобрался", name))
                 }
             }
             let others = self.marks.count - here.count
-            self.status.stringValue = "шаг \(self.displayNumber(self.step)), на этой странице: " + parts.joined(separator: ", ")
-                + (others > 0 ? " · на других шагах ещё \(others)" : "")
+            self.status.stringValue = L("шаг %@, на этой странице: %@", self.displayNumber(self.step), parts.joined(separator: ", "))
+                + (others > 0 ? L(" · на других шагах ещё %@", others) : "")
         }
     }
 
@@ -272,12 +272,12 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         let here = marks.filter { $0.step == step }
         guard here.contains(where: { $0.kind == "click" || $0.kind == "click!" }) else {
             status.stringValue = here.isEmpty
-                ? "на этом шаге ничего не отмечено: отметьте поля и кнопку, которая ведёт дальше"
-                : "отметьте кнопку, которая отправляет это окно, — без неё идти дальше нечем"
+                ? L("на этом шаге ничего не отмечено: отметьте поля и кнопку, которая ведёт дальше")
+                : L("отметьте кнопку, которая отправляет это окно, — без неё идти дальше нечем")
             return
         }
         passButton.isEnabled = false
-        status.stringValue = "заполняю и нажимаю…"
+        status.stringValue = L("заполняю и нажимаю…")
         let needCode = here.contains { $0.kind == "totp" }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -308,8 +308,8 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             let dict = value as? [String: Any] ?? [:]
             if let missing = dict["missing"] as? [String], !missing.isEmpty {
                 self.applyState()
-                self.status.stringValue = "нечем заполнить: " + missing.map { self.title(for: $0) }.joined(separator: ", ")
-                    + " — введите в поле сами и нажмите «Пройти шаг» ещё раз"
+                self.status.stringValue = L("нечем заполнить: %@ — введите в поле сами и нажмите «Пройти шаг» ещё раз",
+                                              missing.map { self.title(for: $0) }.joined(separator: ", "))
                 return
             }
             if dict["clicked"] is String {
@@ -317,7 +317,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 self.step += 1
                 Log.info("разметка: шаг \(passed) пройден")
                 self.refreshCollected()
-                self.status.stringValue = "шаг \(passed) пройден — отмечайте поля и кнопку следующего окна. Всё? — «Готово»"
+                self.status.stringValue = L("шаг %@ пройден — отмечайте поля и кнопку следующего окна. Всё? — «Готово»", passed)
                 // Одностраничные формы меняют окно без перехода: включаем
                 // разметку обратно сами, не дожидаясь загрузки страницы.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.applyState() }
@@ -327,8 +327,8 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             }
             self.applyState()
             self.status.stringValue = dict["noButton"] != nil
-                ? "отмеченная кнопка на странице не видна — отметьте ту, что видна сейчас"
-                : "не получилось: " + (error.map { $0.localizedDescription } ?? "страница не ответила")
+                ? L("отмеченная кнопка на странице не видна — отметьте ту, что видна сейчас")
+                : L("не получилось: %@", error.map { $0.localizedDescription } ?? L("страница не ответила"))
         }
     }
 
@@ -399,13 +399,13 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         guard message.world == Self.world else { return }
         guard let body = message.body as? [String: Any],
               let selector = body["selector"] as? String, !selector.isEmpty else {
-            status.stringValue = "не удалось составить селектор — попробуйте щёлкнуть по самому полю"
+            status.stringValue = L("не удалось составить селектор — попробуйте щёлкнуть по самому полю")
             return
         }
         // Второй заслон для корня страницы: правило на html или body
         // срабатывало бы на любой странице.
         if ["html", "body"].contains(selector.lowercased()) {
-            status.stringValue = "щелчок мимо элементов — отметьте само поле или кнопку"
+            status.stringValue = L("щелчок мимо элементов — отметьте само поле или кнопку")
             return
         }
         let hint = (body["hint"] as? String) ?? ""
@@ -427,10 +427,10 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
                 if let j = marks.firstIndex(where: { $0.selector == selector && $0.step == step }) {
                     marks[j] = Mark(kind: kind, selector: selector, hint: hint, step: step)
                 }
-                status.stringValue = "теперь \(title(for: kind)): \(selector)"
+                status.stringValue = L("теперь %@: %@", title(for: kind), selector)
             } else {
                 marks.remove(at: i)
-                status.stringValue = "снято: \(title(for: old.kind)) \(selector)"
+                status.stringValue = L("снято: %@ %@", title(for: old.kind), selector)
             }
             refreshCollected()
             return
@@ -444,8 +444,8 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         marks.append(Mark(kind: what, selector: selector, hint: hint, step: step))
         if pages[step] == nil, let u = webView.url { pages[step] = Self.pageLabel(u) }
         status.stringValue = kind == "auto"
-            ? "распознано как \(title(for: what)): \(selector) — не то? выберите вид слева и щёлкните ещё раз"
-            : "отмечено \(title(for: what)): \(selector)"
+            ? L("распознано как %@: %@ — не то? выберите вид слева и щёлкните ещё раз", title(for: what), selector)
+            : L("отмечено %@: %@", title(for: what), selector)
         refreshCollected()
         if what == "username" || what == "password" || what == "totp" {
             // Поле сразу получает фокус: дальше человек просто печатает, не
@@ -465,15 +465,15 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     }
 
     private func refreshCollected() {
-        stepLabel?.stringValue = "шаг \(displayNumber(step))"
-        guard !marks.isEmpty else { collected.stringValue = "отмечено: ничего"; return }
-        let stops = marks.filter { $0.kind == "stop" }.map { "ошибка=\($0.selector)" }
+        stepLabel?.stringValue = L("шаг %@", displayNumber(step))
+        guard !marks.isEmpty else { collected.stringValue = L("отмечено: ничего"); return }
+        let stops = marks.filter { $0.kind == "stop" }.map { L("ошибка=%@", $0.selector) }
         let steps = Array(Set(marks.filter { $0.kind != "stop" }.map(\.step))).sorted()
         let groups = steps.map { s -> String in
             let items = marks.filter { $0.step == s && $0.kind != "stop" }
                 .map { "\(title(for: Self.effectiveKind($0, in: marks)))\($0.why == nil ? "" : "*")=\($0.selector)" }
                 .joined(separator: ", ")
-            return (steps.count > 1 ? "шаг \(displayNumber(s)): " : "") + items
+            return (steps.count > 1 ? L("шаг %@", displayNumber(s)) + ": " : "") + items
         }
         collected.stringValue = (stops + groups).joined(separator: " · ")
         showMarks()
@@ -509,8 +509,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
             if self.pages[self.step] == nil, let u = self.webView.url { self.pages[self.step] = Self.pageLabel(u) }
             Log.info("разметка: предзаполнено на шаге \(self.displayNumber(self.step)): " + added.joined(separator: ", "))
             self.refreshCollected()
-            self.status.stringValue = "предзаполнено*: " + added.joined(separator: ", ")
-                + " — проверьте; лишнее снимите щелчком по нему"
+            self.status.stringValue = L("предзаполнено*: %@ — проверьте; лишнее снимите щелчком по нему", added.joined(separator: ", "))
         }
     }
 
@@ -530,13 +529,13 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         applyState()
         if let host = webView.url?.host {
             lastHost = host
-            window.title = "ocbar — разметка формы входа · \(host)"
+            window.title = L("ocbar — разметка формы входа") + " · \(host)"
         }
         // Новая страница после отмеченного окна — следующее окно формы: так
         // шаги различаются и тогда, когда человек прошёл окно сам, руками.
         if marks.contains(where: { $0.step == step }) {
             step += 1
-            status.stringValue = "новое окно формы — шаг \(displayNumber(step)): отмечайте его поля и кнопку. Всё? — «Готово»"
+            status.stringValue = L("новое окно формы — шаг %@: отмечайте его поля и кнопку. Всё? — «Готово»", displayNumber(step))
         }
         refreshCollected()
         schedulePrefill()

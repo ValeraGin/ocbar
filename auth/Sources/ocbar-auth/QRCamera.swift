@@ -97,22 +97,22 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         if !code.isEmpty {
             if let e = entries.first(where: { fits($0, code: code, at: at) }) { return (e, "") }
             return (nil, entries.count > 1
-                ? "в этом QR записей: \(entries.count), ни одна не даёт ваш код — покажите следующий QR экспорта"
-                : "эта запись не даёт ваш код — выберите в экспорте учётку VPN")
+                ? L("в этом QR записей: %@, ни одна не даёт ваш код — покажите следующий QR экспорта", entries.count)
+                : L("эта запись не даёт ваш код — выберите в экспорте учётку VPN"))
         }
         var candidates = entries.filter(\.isTOTP)
         if candidates.isEmpty {
-            return (nil, "это HOTP (код по счётчику) — ocbar его не ведёт")
+            return (nil, L("это HOTP (код по счётчику) — ocbar его не ведёт"))
         }
         if let want = select?.lowercased(), !want.isEmpty {
             let all = candidates
             candidates = all.filter { $0.label.lowercased().contains(want) }
             if candidates.isEmpty {
-                return (nil, "в QR нет записи, похожей на «\(select!)». Есть: \(all.map(\.label).joined(separator: ", "))")
+                return (nil, L("в QR нет записи, похожей на «%@». Есть: %@", select!, all.map(\.label).joined(separator: ", ")))
             }
         }
         if candidates.count == 1 { return (candidates[0], "") }
-        return (nil, "в QR записей: \(candidates.count) (\(candidates.map(\.label).joined(separator: ", "))) — экспортируйте одну учётку VPN")
+        return (nil, L("в QR записей: %@ (%@) — экспортируйте одну учётку VPN", candidates.count, candidates.map(\.label).joined(separator: ", ")))
     }
 
     static func fits(_ e: QRImport.Entry, code: String, at: Date) -> Bool {
@@ -127,8 +127,8 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         let content = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
 
         let hint = NSTextField(wrappingLabelWithString: code.isEmpty
-            ? "Поднесите к камере QR второго фактора: тот, что показывает портал при настройке, или экспорт из Google Authenticator (⋮ → «Перенос аккаунтов» → «Экспорт») с одной учёткой VPN. Кадры никуда не сохраняются."
-            : "На телефоне: Google Authenticator → ⋮ → «Перенос аккаунтов» → «Экспорт», выберите учётку VPN и поднесите QR к камере. Подойдёт только запись, которая даёт код, введённый вами при входе. Кадры никуда не сохраняются.")
+            ? L("Поднесите к камере QR второго фактора: тот, что показывает портал при настройке, или экспорт из Google Authenticator (⋮ → «Перенос аккаунтов» → «Экспорт») с одной учёткой VPN. Кадры никуда не сохраняются.")
+            : L("На телефоне: Google Authenticator → ⋮ → «Перенос аккаунтов» → «Экспорт», выберите учётку VPN и поднесите QR к камере. Подойдёт только запись, которая даёт код, введённый вами при входе. Кадры никуда не сохраняются."))
         hint.font = .systemFont(ofSize: 12)
         hint.frame = NSRect(x: 16, y: h - 70, width: w - 32, height: 56)
         content.addSubview(hint)
@@ -150,7 +150,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         }
         content.addSubview(preview)
 
-        status = NSTextField(labelWithString: "ищу QR…")
+        status = NSTextField(labelWithString: L("ищу QR…"))
         status.font = .systemFont(ofSize: 12)
         status.textColor = .secondaryLabelColor
         status.lineBreakMode = .byTruncatingTail
@@ -158,13 +158,13 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         content.addSubview(status)
 
         picker = NSPopUpButton(frame: NSRect(x: 16, y: 14, width: 300, height: 26), pullsDown: false)
-        picker.addItems(withTitles: devices.isEmpty ? ["камера"] : devices.map(\.localizedName))
+        picker.addItems(withTitles: devices.isEmpty ? [L("камера")] : devices.map(\.localizedName))
         picker.target = self
         picker.action = #selector(cameraChanged)
         picker.isHidden = devices.count < 2
         content.addSubview(picker)
 
-        let cancel = NSButton(title: "Отмена", target: self, action: #selector(cancel))
+        let cancel = NSButton(title: L("Отмена"), target: self, action: #selector(cancel))
         cancel.bezelStyle = .rounded
         cancel.keyEquivalent = "\u{1b}"
         cancel.frame = NSRect(x: w - 116, y: 12, width: 100, height: 30)
@@ -172,7 +172,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
 
         window = NSWindow(contentRect: content.frame, styleMask: [.titled, .closable],
                           backing: .buffered, defer: false)
-        window.title = "ocbar — QR второго фактора с камеры"
+        window.title = L("ocbar — QR второго фактора с камеры")
         window.contentView = content
         window.delegate = self
         window.isReleasedWhenClosed = false
@@ -196,16 +196,16 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
             while granted == nil && Date() < deadline {
                 RunLoop.current.run(mode: .modalPanel, before: Date().addingTimeInterval(0.1))
             }
-            if granted != true { return (nil, "доступ к камере не дан — секрет можно вставить или выбрать файл QR") }
+            if granted != true { return (nil, L("доступ к камере не дан — секрет можно вставить или выбрать файл QR")) }
         default:
-            return (nil, "доступ к камере запрещён: Системные настройки → Конфиденциальность и безопасность → Камера — разрешите ocbar или терминалу, из которого входите")
+            return (nil, L("доступ к камере запрещён: Системные настройки → Конфиденциальность и безопасность → Камера — разрешите ocbar или терминалу, из которого входите"))
         }
         devices = QRCameraScanner.cameras()
-        guard let device = QRCameraScanner.preferred(devices) else { return (nil, "камера не найдена") }
+        guard let device = QRCameraScanner.preferred(devices) else { return (nil, L("камера не найдена")) }
         build(withPreview: true)
         if let i = devices.firstIndex(of: device) { picker.selectItem(at: i) }
         scanner.onPayloads = { [weak self] found in self?.handle(found) }
-        do { try scanner.start(device) } catch { return (nil, "камера не включилась: \(error.localizedDescription)") }
+        do { try scanner.start(device) } catch { return (nil, L("камера не включилась: %@", error.localizedDescription)) }
         running = true
         Log.info("камера: включена (\(device.localizedName)), ищу QR второго фактора")
         window.makeKeyAndOrderFront(nil)
@@ -218,7 +218,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         window.orderOut(nil)
         Log.info("камера: выключена" + (result == nil ? "" : ", запись найдена"))
         return (result, result != nil ? "" : lastStatus.isEmpty
-            ? "QR с камеры не прочитан — можно вставить секрет или выбрать файл QR" : lastStatus)
+            ? L("QR с камеры не прочитан — можно вставить секрет или выбрать файл QR") : lastStatus)
     }
 
     private func handle(_ payloads: [String]) {
@@ -235,7 +235,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         for p in payloads where !seen.contains(p) {
             seen.insert(p)
             guard let entries = try? QRImport.parse(p) else {
-                setStatus("это не QR второго фактора — покажите экспорт из аутентификатора")
+                setStatus(L("это не QR второго фактора — покажите экспорт из аутентификатора"))
                 continue
             }
             let d = Self.decide(entries, code: code, at: at, select: select)
@@ -256,7 +256,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
             let found = (try? QRImport.decode(file: f)) ?? []
             if let e = consider(found) { return (e, "") }
         }
-        return (nil, lastStatus.isEmpty ? "QR с камеры не прочитан — можно вставить секрет или выбрать файл QR" : lastStatus)
+        return (nil, lastStatus.isEmpty ? L("QR с камеры не прочитан — можно вставить секрет или выбрать файл QR") : lastStatus)
     }
 
     @objc private func cameraChanged() {
@@ -284,8 +284,8 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         w.build(withPreview: false)
         w.window.appearance = NSAppearance(named: .aqua)
         w.status.stringValue = adding
-            ? "в QR записей: 2 (Mail/someone, VPN/alice) — экспортируйте одну учётку VPN"
-            : "в этом QR записей: 3, ни одна не даёт ваш код — покажите следующий QR экспорта"
+            ? L("в QR записей: %@ (%@) — экспортируйте одну учётку VPN", 2, "Mail/someone, VPN/alice")
+            : L("в этом QR записей: %@, ни одна не даёт ваш код — покажите следующий QR экспорта", 3)
         guard let view = w.window.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
         view.cacheDisplay(in: view.bounds, to: rep)

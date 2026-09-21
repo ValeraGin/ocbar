@@ -188,7 +188,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             let r = TeachRecorder(username: opts.creds.username)
             r.enabled = opts.teachOn
             r.install(into: cfg.userContentController)
-            r.onChange = { [weak self] summary in self?.statusLabel?.stringValue = "запоминаю: " + summary }
+            r.onChange = { [weak self] summary in self?.statusLabel?.stringValue = L("запоминаю: %@", summary) }
             recorder = r
         }
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 520, height: 680), configuration: cfg)
@@ -196,7 +196,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         webView.uiDelegate = self
         webView.autoresizingMask = [.width, .height]
 
-        statusLabel = NSTextField(labelWithString: "Вход через SSO…")
+        statusLabel = NSTextField(labelWithString: L("Вход через SSO…"))
         statusLabel.font = NSFont.systemFont(ofSize: 11)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingMiddle
@@ -210,8 +210,8 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         // «Вставить пароль» и «Вставить код»: если автозаполнение не сработало
         // (форма не узналась, окно вне цепочки), человек подставляет данные
         // профиля сам — в поле, где стоит курсор. Значения в журнал не идут.
-        let pwButton = NSButton(title: "Вставить пароль", target: self, action: #selector(insertPassword))
-        let codeButton = NSButton(title: "Вставить код", target: self, action: #selector(insertCode))
+        let pwButton = NSButton(title: L("Вставить пароль"), target: self, action: #selector(insertPassword))
+        let codeButton = NSButton(title: L("Вставить код"), target: self, action: #selector(insertCode))
         var x: CGFloat = 6
         for b in [pwButton, codeButton] {
             b.bezelStyle = .inline
@@ -223,29 +223,29 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             content.addSubview(b)
         }
         pwButton.isEnabled = !(opts.creds.password ?? "").isEmpty
-        pwButton.toolTip = pwButton.isEnabled ? "Подставить пароль из источника профиля в поле, где стоит курсор"
-                                              : "Источник профиля пароля не дал"
+        pwButton.toolTip = pwButton.isEnabled ? L("Подставить пароль из источника профиля в поле, где стоит курсор")
+                                              : L("Источник профиля пароля не дал")
         codeButton.isEnabled = hasCodeSource
-        codeButton.toolTip = codeButton.isEnabled ? "Подставить свежий одноразовый код в поле, где стоит курсор"
-                                                  : "У профиля нет источника кода (Totp = off или sms)"
+        codeButton.toolTip = codeButton.isEnabled ? L("Подставить свежий одноразовый код в поле, где стоит курсор")
+                                                  : L("У профиля нет источника кода (Totp = off или sms)")
         statusLabel.frame = NSRect(x: x + 4, y: 3, width: 520 - x - 12, height: 16)
         if let r = recorder {
-            let box = NSButton(checkboxWithTitle: "Запомнить, как я вхожу", target: self, action: #selector(teachToggled))
+            let box = NSButton(checkboxWithTitle: L("Запомнить, как я вхожу"), target: self, action: #selector(teachToggled))
             box.state = r.enabled ? .on : .off
             box.font = .systemFont(ofSize: 11)
             box.frame = NSRect(x: 520 - 200, y: 2, width: 192, height: 18)
             box.autoresizingMask = [.minXMargin]
-            box.toolTip = "Входите как обычно — ocbar запомнит, как устроена форма, и после входа предложит сохранить правила, пароль и источник кода. Без вашего подтверждения ничего не сохраняется."
+            box.toolTip = L("Входите как обычно — ocbar запомнит, как устроена форма, и после входа предложит сохранить правила, пароль и источник кода. Без вашего подтверждения ничего не сохраняется.")
             content.addSubview(box)
             teachBox = box
             statusLabel.frame.size.width = max(60, 520 - statusLabel.frame.minX - 208)
-            if r.enabled { statusLabel.stringValue = "запоминаю: входите как обычно" }
+            if r.enabled { statusLabel.stringValue = L("запоминаю: входите как обычно") }
         }
 
         window = NSWindow(contentRect: content.frame,
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
-        window.title = "ocbar — вход в VPN"
+        window.title = L("ocbar — вход в VPN")
         window.contentView = content
         window.delegate = self
         window.center()
@@ -333,14 +333,14 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
 
     @objc private func insertPassword() {
         guard let pw = opts.creds.password, !pw.isEmpty else {
-            statusLabel.stringValue = "пароля нет: источник профиля его не дал"; return
+            statusLabel.stringValue = L("пароля нет: источник профиля его не дал"); return
         }
         insert(pw, kind: "password")
     }
 
     @objc private func insertCode() {
         guard let code = codeNow() else {
-            statusLabel.stringValue = "кода нет: источник профиля не ответил"; return
+            statusLabel.stringValue = L("кода нет: источник профиля не ответил"); return
         }
         insert(code, kind: "totp")
     }
@@ -369,17 +369,18 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
 
     private func insert(_ value: String, kind: String) {
         guard webView.url?.scheme?.lowercased() == "https" else {
-            statusLabel.stringValue = "страница не по https — не вставляю"; return
+            statusLabel.stringValue = L("страница не по https — не вставляю"); return
         }
         let what = kind == "password" ? "пароль" : "код"
         webView.callAsyncJavaScript(Self.insertScript, arguments: ["v": value, "kind": kind],
                                     in: nil, in: Self.world) { [weak self] res in
             guard let self = self else { return }
             if case .success(let r) = res, let field = r as? String, !field.isEmpty {
-                self.statusLabel.stringValue = "\(what) вставлен в \(field)"
+                self.statusLabel.stringValue = kind == "password" ? L("пароль вставлен в %@", field) : L("код вставлен в %@", field)
                 Log.info("человек вставил \(what) кнопкой: \(field) на \(self.webView.url?.host ?? "?")")
             } else {
-                self.statusLabel.stringValue = "некуда вставить \(what): щёлкните в поле и нажмите ещё раз"
+                self.statusLabel.stringValue = kind == "password" ? L("некуда вставить пароль: щёлкните в поле и нажмите ещё раз")
+                    : L("некуда вставить код: щёлкните в поле и нажмите ещё раз")
             }
         }
     }
@@ -388,7 +389,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         guard let r = recorder else { return }
         r.enabled = teachBox?.state == .on
         r.apply(to: webView)
-        statusLabel.stringValue = r.enabled ? "запоминаю: входите как обычно" : "запись входа выключена"
+        statusLabel.stringValue = r.enabled ? L("запоминаю: входите как обычно") : L("запись входа выключена")
     }
 
     /// Есть что предложить сохранить: запись была включена, окно видел
@@ -464,7 +465,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         let ns = error as NSError
         if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled { return }
         Log.info("провал загрузки: \(error.localizedDescription)")
-        statusLabel.stringValue = "Ошибка: \(error.localizedDescription)"
+        statusLabel.stringValue = L("Ошибка: %@", error.localizedDescription)
         // Молча — значит подключается супервизор: страница не загрузилась,
         // это сеть, а не истёкшая сессия. Иначе он остановил бы автопопытки
         // и ждал человека без нужды.
@@ -619,7 +620,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             break
         case .formError(let s):
             Log.info("правило stop: \(s)")
-            statusLabel.stringValue = "Форма сообщает: \(s)"
+            statusLabel.stringValue = L("Форма сообщает: %@", s)
             show()
         case .offHost(let h):
             offHost(h)
