@@ -107,20 +107,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // --screenshot menu|settings — кадр для README: только нужное, без подписей.
         let args = CommandLine.arguments
         let screenshot = args.firstIndex(of: "--screenshot").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
-        let size: NSSize = screenshot == "menu" ? NSSize(width: 780, height: 700)
+        // Меню снимается с запасом по высоте, пустое поле снизу срезается
+        // при съёмке: высота зависит от языка, замер SwiftUI её занижает.
+        let size: NSSize = screenshot == "menu" ? NSSize(width: 780, height: 1400)
             : screenshot == "settings" ? NSSize(width: 1048, height: 708)
             : screenshot == "setup" ? NSSize(width: 800, height: 660) : NSSize(width: 1500, height: 2400)
+        // Кадр README — в окне без рамки: окно с заголовком система подгоняет
+        // под экран, и за его краем кадр обрезался по высоте.
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 60, y: 60), size: size),
-                              styleMask: [.titled, .closable, .resizable],
+                              styleMask: screenshot != nil ? [.borderless] : [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "ocbar — витрина состояний"
         if CommandLine.arguments.contains("--light") {
             window.appearance = NSAppearance(named: .aqua)
         }
         if screenshot == "menu" {
-            window.contentView = NSHostingView(rootView: ScreenshotMenuView())
+            // Без зажатия окна по «идеальному» размеру SwiftUI: он меньше
+            // того, что меню занимает на деле, и кадр выходил обрезанным.
+            let host = NSHostingView(rootView: ScreenshotMenuView())
+            host.sizingOptions = []
+            window.contentView = host
         } else if screenshot == "settings" {
-            window.contentView = NSHostingView(rootView: ScreenshotSettingsView())
+            let host = NSHostingView(rootView: ScreenshotSettingsView())
+            host.sizingOptions = []
+            window.contentView = host
         } else if screenshot == "setup" {
             window.contentView = NSHostingView(rootView: SetupView()
                 .frame(width: 760, height: 620)
@@ -151,6 +161,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if CommandLine.arguments.contains("--stage") { NSApp.terminate(nil) }
     }
 
+    /// Срезать снизу поле цвета фона, оставив 24 точки — как сверху.
+    static func trimBottom(_ rep: NSBitmapImageRep) -> NSBitmapImageRep {
+        let w = rep.pixelsWide, h = rep.pixelsHigh
+        guard w > 0, h > 0, let bg = rep.colorAt(x: 0, y: h - 1) else { return rep }
+        func same(_ c: NSColor?) -> Bool {
+            guard let c else { return true }
+            return abs(c.redComponent - bg.redComponent) < 0.02 && abs(c.greenComponent - bg.greenComponent) < 0.02
+                && abs(c.blueComponent - bg.blueComponent) < 0.02
+        }
+        var last = h - 1
+        scan: while last > 0 {
+            for x in stride(from: 0, to: w, by: 2) where !same(rep.colorAt(x: x, y: last)) { break scan }
+            last -= 1
+        }
+        let scale = CGFloat(w) / rep.size.width
+        let keep = min(h, last + 1 + Int(24 * scale))
+        guard keep < h, let cg = rep.cgImage?.cropping(to: CGRect(x: 0, y: 0, width: w, height: keep)) else { return rep }
+        let out = NSBitmapImageRep(cgImage: cg)
+        out.size = NSSize(width: rep.size.width, height: CGFloat(keep) / scale)
+        return out
+    }
+
     private func shoot(to path: String) {
         if stageWindow == nil { openStage() }
         guard let view = stageWindow?.contentView else { exit(1) }
@@ -162,7 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         RunLoop.current.run(until: Date().addingTimeInterval(settle))
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
         view.cacheDisplay(in: view.bounds, to: rep)
-        guard let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
+        let out = CommandLine.arguments.contains("--screenshot") ? Self.trimBottom(rep) : rep
+        guard let png = out.representation(using: .png, properties: [:]) else { exit(1) }
         try? png.write(to: URL(fileURLWithPath: path))
         print("снимок: \(path)")
         exit(0)
