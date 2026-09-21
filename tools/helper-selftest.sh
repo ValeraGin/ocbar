@@ -10,8 +10,9 @@
 #
 #   tools/helper-selftest.sh [хелпер]    по умолчанию libexec/ocbar-helper рядом
 #
-# Проверки с номером пункта (1–13) ловят конкретный дефект хелпера до 0.8.0 и
-# на старом хелпере должны падать все. «Контроль» — обычное поведение,
+# Проверки с номером пункта ловят конкретный дефект хелпера (1–13 — найденные
+# до 0.8.0, 14 — лишние сессии openconnect, 0.17.1) и на хелпере без
+# исправления должны падать все. «Контроль» — обычное поведение,
 # которое должно работать в обеих версиях.
 #
 # Код выхода: 0 — всё прошло, 1 — есть падения, 2 — проверку не запустить.
@@ -377,6 +378,48 @@ check 12 "--dry-run под root — отказ" all rcbad 'has "под root"'
 fresh
 Hin $'cookie=x\n' tunnel-start vpn.example.com "$HASH" full user
 check 13 "режим full — отказ" rcbad
+
+# ----------------------------------------------------------------- 14 ----
+# Лишние сессии. Подставной openconnect — perl под именем openconnect с теми
+# же --pid-file, что даёт tunnel-start; «openconnect», зовущий vpnc, — bash
+# под этим именем. Отметка времени запуска — в том виде, как её писал
+# tunnel-start до исправления: ps дополняет lstart пробелами справа.
+fake_oc() { # pidfile → номер процесса
+    /usr/bin/perl -e 'exec { "/usr/bin/perl" } "openconnect", "-e", q($SIG{INT} = "DEFAULT"; sleep 300), "--", "--pid-file", $ARGV[0]' "$1" </dev/null >/dev/null 2>&1 &
+    printf '%s' "$!"
+}
+stamp() { printf '%s %s\n' "$1" "$(ps -p "$1" -o lstart= | tr -s ' ')" > "$ST/openconnect.started"; }
+as_oc() { # команда bash — выполняется процессом с именем openconnect
+    OUT=$(env OCBAR_STATE_DIR="$ST" H="$H" ST="$ST" reason="$reason" TUNDEV="$TUNDEV" \
+          /usr/bin/perl -e 'exec { "/bin/bash" } "openconnect", "-c", $ARGV[0]' "$1; exit \$?" 2>&1 </dev/null); RC=$?
+}
+fresh; A=$(fake_oc "$ST/openconnect.pid"); B=$(fake_oc "$ST/openconnect.pid"); C=$(fake_oc "$T/other.pid")
+BG="$BG $A $B $C"; sleep 0.3
+echo "$A" > "$ST/openconnect.pid"; stamp "$A"
+H_ tunnel-stop
+check 14 "tunnel-stop узнаёт свой openconnect по записанному времени запуска" has "kill -INT $A"
+check 14 "tunnel-stop гасит и лишнюю сессию с нашим pidfile" all 'has "kill -INT $B"' 'has "лишняя сессия openconnect: pid $B"'
+check контроль "tunnel-stop не трогает openconnect другой сессии" hasnt "kill -INT $C"
+fresh; echo "$A" > "$ST/openconnect.pid"; stamp "$A"
+H_ cleanup
+check 14 "cleanup находит и гасит лишнюю сессию, текущую оставляет" \
+    all 'has "лишняя сессия openconnect: pid $B"' 'has "kill -INT $B"' 'hasnt "kill -INT $A"' 'hasnt "kill -INT $C"'
+check 14 "cleanup: pidfile живой сессии на месте" fline "$ST/openconnect.pid" "$A"
+fresh; echo "$A" > "$ST/openconnect.pid"; stamp "$A"
+printf 'STATE=connected\nTUNDEV=utun5\n' > "$ST/tunnel.env"; echo "10.0.0.0/8 utun5" > "$ST/routes.state"
+reason=disconnect TUNDEV=utun7 as_oc '"$H" --dry-run vpnc'
+check 14 "vpnc disconnect от лишней сессии не снимает маршруты текущей" \
+    all rc0 'has "от лишней сессии"' 'hasnt "маршрут снят"' 'fline "$ST/tunnel.env" STATE=connected' 'fline "$ST/routes.state" "10.0.0.0/8 utun5"'
+fresh; echo "$A" > "$ST/openconnect.pid"; stamp "$A"; printf '10.1.0.0/16\n' > "$ST/routes.wanted"
+printf 'STATE=connected\nTUNDEV=utun5\n' > "$ST/tunnel.env"
+reason=reconnect TUNDEV=utun7 as_oc 'INTERNAL_IP4_ADDRESS=10.9.0.2 "$H" --dry-run vpnc'
+check 14 "vpnc reconnect от лишней сессии не уводит маршруты на свой utun" \
+    all rc0 'has "от лишней сессии"' 'hasnt "ifconfig utun7"' 'hasnt "маршрут: 10.1.0.0/16"' 'fline "$ST/tunnel.env" TUNDEV=utun5'
+fresh; printf 'STATE=connected\nTUNDEV=utun5\n' > "$ST/tunnel.env"; echo "10.0.0.0/8 utun5" > "$ST/routes.state"
+reason=disconnect TUNDEV=utun5 as_oc 'echo $$ > "$ST/openconnect.pid"; "$H" --dry-run vpnc'
+check контроль "vpnc disconnect от текущей сессии убирает её состояние" \
+    all rc0 'hasnt "от лишней сессии"' 'has "ifconfig utun5 down"' 'fline "$ST/tunnel.env" STATE=disconnected'
+kill $A $B $C 2>/dev/null
 
 # ------------------------------------------------------------- контроль ----
 fresh

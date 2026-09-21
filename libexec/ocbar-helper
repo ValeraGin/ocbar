@@ -19,12 +19,13 @@
 # Подкоманды:
 #   tunnel-start <url> <servercert> split <user> [ua] [csd-name]
 #                        stdin: cookie=<token>, net <cidr>…, zone <зона> <dns|vpn> [порт]…
-#   tunnel-stop          SIGINT openconnect, уборка маршрутов и зон
+#   tunnel-stop          SIGINT openconnect (и лишним сессиям), уборка маршрутов и зон
 #   stats                попросить openconnect выписать статистику в лог
 #   reconnect-now        переподключиться по текущей сессии (без нового входа)
 #   suspend              снять маршруты и зоны, туннель оставить поднятым
 #   resume               вернуть маршруты и зоны из *.wanted
-#   vpnc                 вызывается openconnect как vpnc-script (env: reason, TUNDEV…)
+#   vpnc                 вызывается openconnect как vpnc-script (env: reason, TUNDEV…);
+#                        от лишней сессии (не из pidfile) — ничего не делает
 #   route-add <cidr>     маршрут через живой туннель (+ в routes.wanted)
 #   route-del <cidr>     снять свой маршрут (из routes.state), чужой не трогать
 #   dns-apply            stdin: "<зона> <dns> [порт]" — применить зоны, снять свои лишние
@@ -34,7 +35,7 @@
 #   socks-set <сервис> <порт>   системный SOCKS 127.0.0.1:<порт> на сетевом сервисе
 #                        (адрес не аргумент; чужой SOCKS не перезаписывается)
 #   socks-clear <сервис> снять системный SOCKS, если ставили мы (socks.state)
-#   cleanup              мусор от прошлых сессий
+#   cleanup              мусор от прошлых сессий, лишние сессии openconnect
 #   flush-dns
 #   trust                пересобрать манифест доверия к копии openconnect
 #   migrate-state        перенести состояние из /usr/local/var/ocbar (до 0.8.0)
@@ -256,13 +257,17 @@ tunnel_pid() { [ -f "$PIDFILE" ] && grep -E '^[0-9]+$' "$PIDFILE" 2>/dev/null | 
 # Запуск нашего openconnect: "<pid> <время старта>". Имени процесса мало:
 # номер мог достаться другому openconnect (второй VPN, чужой запуск).
 STARTED="$STATE_DIR/openconnect.started"
+# Время старта одной строкой без краевых пробелов. ps дополняет lstart
+# пробелами справа, а read их срезает: сравнение «как есть» не совпадало
+# никогда, и свой живой openconnect считался чужим — tunnel-stop его не
+# гасил, а стирал pidfile. Отсюда лишние сессии (2026-09-21).
+lstart_of() { ps -p "$1" -o lstart= 2>/dev/null | awk '{$1=$1; print}'; }
 is_openconnect() { # pid
     case "$(ps -p "$1" -o comm= 2>/dev/null)" in openconnect|*/openconnect) ;; *) return 1 ;; esac
     if [ -f "$STARTED" ]; then
-        local sp st now; read -r sp st < "$STARTED" 2>/dev/null || true
+        local sp st; read -r sp st < "$STARTED" 2>/dev/null || true
         if [ "$sp" = "$1" ] && [ -n "${st:-}" ]; then
-            now=$(ps -p "$1" -o lstart= 2>/dev/null | tr -s ' ')
-            [ "$now" = "$st" ] || return 1
+            [ "$(lstart_of "$1")" = "$(printf '%s' "$st" | awk '{$1=$1; print}')" ] || return 1
         fi
     fi
     return 0
@@ -280,6 +285,36 @@ live_pid() {
     return 0
 }
 tunnel_alive() { [ -n "$(live_pid)" ]; }
+# Лишние сессии: наши openconnect (--pid-file наш), кроме записанного в
+# pidfile. Появляются, когда прежний процесс не погашен; живут, пока шлюз
+# не закроет их по простою, и тогда их vpnc-script снимал маршруты и зоны
+# текущей сессии. Печатает номера по одному в строке.
+stray_pids() {
+    local live; live=$(live_pid)
+    ps -axo pid=,command= 2>/dev/null | while read -r p c; do
+        case " $c " in *" --pid-file $PIDFILE "*) ;; *) continue ;; esac
+        [ "$p" != "$live" ] || continue
+        case "$(ps -p "$p" -o comm= 2>/dev/null)" in openconnect|*/openconnect) printf '%s\n' "$p" ;; esac
+    done
+}
+stop_strays() {
+    local p i n=0
+    for p in $(stray_pids); do
+        say "лишняя сессия openconnect: pid $p, запущена $(lstart_of "$p") — останавливаю"
+        run kill -INT "$p"; n=$((n+1))
+        i=0; while [ "$DRY_RUN" = 0 ] && ps -p "$p" >/dev/null 2>&1 && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
+        [ "$DRY_RUN" = 1 ] || ! ps -p "$p" >/dev/null 2>&1 || { say "pid $p не вышел за 10 с — SIGKILL"; kill -KILL "$p" 2>/dev/null || true; }
+    done
+    return 0
+}
+# Какой openconnect позвал нас как vpnc-script: он сам или через sh -c.
+vpnc_caller() {
+    local p=$PPID i=0
+    while [ $i -lt 3 ] && [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
+        case "$(ps -p "$p" -o comm= 2>/dev/null)" in openconnect|*/openconnect) printf '%s' "$p"; return 0 ;; esac
+        p=$(ps -p "$p" -o ppid= 2>/dev/null | tr -d ' '); i=$((i+1))
+    done
+}
 tunnel_dev() { [ -f "$TUNNEL_ENV" ] && sed -n 's/^TUNDEV=//p' "$TUNNEL_ENV" | head -1 || true; }
 tunnel_state() { [ -f "$TUNNEL_ENV" ] && sed -n 's/^STATE=//p' "$TUNNEL_ENV" | head -1 || true; }
 
@@ -601,11 +636,14 @@ cmd_tunnel_start() {
         return "$rc"
     }
     local np; np=$(tunnel_pid)
-    [ -n "$np" ] && printf '%s %s\n' "$np" "$(ps -p "$np" -o lstart= 2>/dev/null | tr -s ' ')" > "$STARTED"
+    [ -n "$np" ] && printf '%s %s\n' "$np" "$(lstart_of "$np")" > "$STARTED"
     say "openconnect ушёл в фон, pid $np"
 }
 
 cmd_tunnel_stop() {
+    # Сначала лишние: пока текущий жив, их vpnc-script видит, что он не
+    # текущий, и общее состояние не трогает.
+    stop_strays
     local p; p=$(live_pid)
     if [ -n "$p" ]; then
         say "останавливаю openconnect (pid $p)"
@@ -750,6 +788,16 @@ vpnc_disconnect() {
 
 cmd_vpnc() {
     IN_VPNC=1
+    # Маршруты, зоны и tunnel.env общие, а принадлежат одной сессии — той, что
+    # в pidfile. Лишний openconnect, закрытый шлюзом по простою, снимал их у
+    # текущей, а при восстановлении связи уводил маршруты на свой utun.
+    case "${reason:-}" in connect|reconnect|disconnect)
+        local caller live; caller=$(vpnc_caller); live=$(live_pid)
+        if [ -n "$caller" ] && [ -n "$live" ] && [ "$caller" != "$live" ]; then
+            say "vpnc: $(clean "$reason") от лишней сессии (pid $caller, $(clean "${TUNDEV:-?}")), текущая — pid $live — состояние не трогаю"
+            return 0
+        fi ;;
+    esac
     case "${reason:-}" in
         pre-init) ;;
         connect|reconnect) vpnc_connect ;;
@@ -878,13 +926,14 @@ cmd_cleanup() {
         say "прошлая настройка не доведена до конца (STATE=applying) — убираю её следы"
     fi
     local did=0
+    if [ -n "$(stray_pids)" ]; then stop_strays; did=1; fi
     if ! tunnel_alive; then
         if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; did=1; fi
         if [ -s "$ROUTES_STATE" ]; then clear_state_routes; did=1; fi
         if [ -f "$GW_ROUTE" ]; then vpnc_disconnect; did=1; fi
-        # осиротевший openconnect не из нашего pidfile
+        # Наши лишние уже погашены выше; оставшийся openconnect — чужой.
         if pgrep -x openconnect >/dev/null 2>&1; then
-            say "найден openconnect без нашего pidfile — не трогаю (возможно, чужая сессия)"
+            say "найден openconnect не нашей сессии — не трогаю (другой VPN или прокси-режим)"
         fi
         rm -f "$PIDFILE" 2>/dev/null || true
     fi
