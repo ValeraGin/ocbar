@@ -2,6 +2,7 @@ import Foundation
 import Carbon.HIToolbox
 import AppKit
 import SwiftUI
+import CoreImage
 
 // `ocbar-app --selftest` — проверка того, что можно проверить без человека:
 // разбор и запись профиля, правила проверки, чтение состояния. Последний шаг
@@ -261,8 +262,103 @@ enum SelfTest {
             print("  [ -- ] живой ocbar не найден, проверка пропущена")
         }
 
+        secretsEndToEnd(check)
+
         print(failures == 0 ? "selftest: всё OK" : "selftest: провалов \(failures)")
         return failures == 0 ? 0 : 1
+    }
+}
+
+// Пароль и код из настроек — тем же вызовом, что кнопки редактора:
+// OcbarClient → ocbar → ocbar-auth → связка. Человека заменяют заглушки:
+// рамку на экране — готовый снимок, камеру — кадры из файлов, связку —
+// скрипт, который записывает, что до неё дошло. Настоящая связка не
+// трогается: у профиля свой сервис, и после проверки он вычищается.
+extension SelfTest {
+    static func secretsEndToEnd(_ check: (String, @autoclosure () -> Bool, String) -> Void) {
+        let client = OcbarClient.shared
+        guard client.binary != nil else { print("  [ -- ] живой ocbar не найден, проверка секретов пропущена"); return }
+        let fm = FileManager.default
+        let tmp = NSTemporaryDirectory() + "ocbar-secrets-\(getpid())"
+        let service = "ru.ocbar.selftest-\(getpid())"
+        try? fm.createDirectory(atPath: tmp + "/profiles", withIntermediateDirectories: true)
+        defer {
+            for k in ["OCBAR_CONFIG_DIR", "OCBAR_SELFTEST_SECURITY", "OCBAR_SELFTEST_SCREENCAPTURE",
+                      "OCBAR_STUB_SHOT", "OCBAR_SELFTEST_CAMERA_FRAMES", "OCBAR_SELFTEST_SCREEN_ACCESS"] { unsetenv(k) }
+            // Если ocbar шов не знает, он писал в настоящую связку — убрать.
+            for acct in ["tester", "totp/tester"] {
+                _ = Shell.run("/usr/bin/security", ["delete-generic-password", "-s", service, "-a", acct], timeout: 10)
+            }
+            try? fm.removeItem(atPath: tmp)
+        }
+        let profile = "[Connection]\nName = Секреты\nUrl = vpn.example.test/k\nUser = tester\n\n[Auth]\nTotp = keychain\nKeychainService = \(service)\n"
+        try? profile.write(toFile: tmp + "/profiles/k.ocbar", atomically: true, encoding: .utf8)
+        let stub = """
+        #!/bin/bash
+        d="\(tmp)"
+        printf '%s\\n' "$*" >> "$d/argv"
+        if [ "${1:-}" = -i ]; then
+            line=$(cat)
+            printf '%s' "$line" | sed -n 's/.* -w "\\(.*\\)"$/\\1/p' | sed -e 's/\\\\"/"/g' -e 's/\\\\\\\\/\\\\/g' > "$d/value"
+            exit 0
+        fi
+        case " $* " in *" -w "*) cat "$d/value" 2>/dev/null; exit 0 ;; esac
+        [ -s "$d/value" ]
+        """
+        let shooter = "#!/bin/bash\nfor a; do dst=\"$a\"; done\n[ -n \"${OCBAR_STUB_SHOT:-}\" ] && cp \"$OCBAR_STUB_SHOT\" \"$dst\"\nexit 0\n"
+        for (name, body) in [("security", stub), ("screencapture", shooter)] {
+            try? body.write(toFile: tmp + "/" + name, atomically: true, encoding: .utf8)
+            _ = chmod(tmp + "/" + name, 0o755)
+        }
+        let qr = tmp + "/qr.png"
+        writeQR("otpauth://totp/VPN:tester?secret=JBSWY3DPEHPK3PXP", to: qr)
+        setenv("OCBAR_CONFIG_DIR", tmp, 1)
+        setenv("OCBAR_SELFTEST_SECURITY", tmp + "/security", 1)
+        setenv("OCBAR_SELFTEST_SCREENCAPTURE", tmp + "/screencapture", 1)
+        setenv("OCBAR_STUB_SHOT", qr, 1)
+        setenv("OCBAR_SELFTEST_CAMERA_FRAMES", qr, 1)
+        setenv("OCBAR_SELFTEST_SCREEN_ACCESS", "granted", 1)
+        func stored() -> String { (try? String(contentsOfFile: tmp + "/value", encoding: .utf8)) ?? "" }
+        func reset() { try? "".write(toFile: tmp + "/value", atomically: true, encoding: .utf8) }
+        func added(_ r: OcbarClient.TOTPAdded) -> String? {
+            if case .success(let c) = r { return c }
+            if case .failure(let why) = r { print("        причина: \(why)") }
+            return nil
+        }
+        let isCode = { (c: String?) in c.map { $0.count == 6 && $0.allSatisfy(\.isNumber) } ?? false }
+
+        let pw = "pa\"ss\\wo rd"
+        let saved = client.savePassword(profile: "k", password: pw)
+        check("секреты: «Сохранить…» — пароль в связке как есть", saved == nil && stored() == pw, saved ?? "в связке «\(stored())»")
+        reset()
+        let screen = added(client.addTOTP(profile: "k", from: .screen))
+        check("секреты: «Снять QR с экрана…» — код сохранён, показан текущий", isCode(screen) && stored() == "JBSWY3DPEHPK3PXP", screen ?? "отказ")
+        reset()
+        let camera = added(client.addTOTP(profile: "k", from: .camera))
+        check("секреты: «Камерой…» — код сохранён", isCode(camera) && stored() == "JBSWY3DPEHPK3PXP", camera ?? "отказ")
+        reset()
+        let text = added(client.addTOTP(profile: "k", from: .text, text: "jbsw y3dp ehpk 3pxp"))
+        check("секреты: «Вставить ссылку или секрет…» — ключ настройки принят", isCode(text) && stored() == "JBSWY3DPEHPK3PXP", text ?? "отказ")
+        check("секреты: живой код для строки «Одноразовый код»", isCode(client.totpCode(profile: "k")), client.totpCode(profile: "k") ?? "nil")
+        let file = (try? String(contentsOfFile: tmp + "/profiles/k.ocbar", encoding: .utf8)) ?? ""
+        check("секреты: источник кода в профиле — связка", file.contains("Totp = keychain"), file)
+        let argv = (try? String(contentsOfFile: tmp + "/argv", encoding: .utf8)) ?? ""
+        check("секреты: до связки дошло через заглушку, а не мимо", !argv.isEmpty, "заглушку не звали — ocbar без шва OCBAR_SELFTEST_SECURITY?")
+        check("секреты: ни пароля, ни секрета в аргументах security", !argv.contains("pa\"ss") && !argv.contains("JBSW"), argv)
+        let real = Shell.run("/usr/bin/security", ["find-generic-password", "-s", service], timeout: 10)
+        check("секреты: настоящая связка не тронута", real.code != 0, "в связке есть запись сервиса \(service)")
+    }
+
+    /// QR в PNG — то, что человек выделил бы рамкой или показал камере.
+    private static func writeQR(_ payload: String, to path: String) {
+        guard let f = CIFilter(name: "CIQRCodeGenerator") else { return }
+        f.setValue(Data(payload.utf8), forKey: "inputMessage")
+        guard var q = f.outputImage else { return }
+        q = q.samplingNearest().transformed(by: CGAffineTransform(scaleX: 8, y: 8))
+        q = q.composited(over: CIImage(color: .white).cropped(to: q.extent.insetBy(dx: -32, dy: -32)))
+        q = q.transformed(by: CGAffineTransform(translationX: -q.extent.minX, y: -q.extent.minY))
+        try? CIContext().pngRepresentation(of: q, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())?
+            .write(to: URL(fileURLWithPath: path))
     }
 }
 
