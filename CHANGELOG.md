@@ -3,6 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.15.4 — 2026-09-21
+
+- `ocbar secret access` shows the Screen Recording and camera permissions as
+  the sign-in helper sees them, and `ocbar://debug-access` compares them with
+  what the app itself has — if they differ, the permission hint would be
+  wrong.
+- Releases and CI run the self-tests inside the same sandbox `brew test`
+  uses, so a check that depends on this machine's permissions fails before
+  a release instead of after it.
+
 ## 0.15.3 — 2026-09-21
 
 - The Screen Recording hint appears only when the capture has no QR code at
