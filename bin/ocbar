@@ -74,6 +74,7 @@ elif [ -d "$STATE_DIR_ROOT" ]; then STATE_DIR="$STATE_DIR_ROOT"
 else STATE_DIR="$STATE_DIR_OLD"; fi
 TUNNEL_ENV="$STATE_DIR/tunnel.env"
 PIDFILE="$STATE_DIR/openconnect.pid"
+TUN_STARTED="$STATE_DIR/openconnect.started"   # «pid время-запуска», пишет хелпер
 MANIFEST="$STATE_DIR/zones.state"
 PAUSED_FLAG="$STATE_DIR/paused"
 ROUTES_STATE="$STATE_DIR/routes.state"
@@ -914,7 +915,21 @@ active_networks() { read_networks | while read -r n;     do is_off "$n" "$ROUTES
 
 # ----------------------------------------------------------- состояние ----
 env_get() { [ -f "$TUNNEL_ENV" ] && sed -n "s/^$1=//p" "$TUNNEL_ENV" | head -1 || true; }
-tunnel_pid() { [ -f "$PIDFILE" ] && grep -E '^[0-9]+$' "$PIDFILE" 2>/dev/null || true; }
+# openconnect при выходе стирает свой --pid-file, а он у всех сессий хелпера
+# общий: лишняя, выходя, стирала номер текущей, и супервизор видел «туннель
+# не поднят» и входил заново. Тогда текущая — по отметке запуска, если номер
+# в ней — тот самый процесс (время запуска совпадает). Хелпер pidfile при
+# следующем вызове восстановит.
+tunnel_pid() {
+    local p=""; [ -f "$PIDFILE" ] && p=$(grep -E '^[0-9]+$' "$PIDFILE" 2>/dev/null | head -1 || true)
+    if [ -z "$p" ] && [ -f "$TUN_STARTED" ]; then
+        local sp st; read -r sp st < "$TUN_STARTED" 2>/dev/null || true
+        case "${sp:-}" in ''|*[!0-9]*) ;; *)
+            if [ -n "${st:-}" ] && [ "$(ps -p "$sp" -o lstart= 2>/dev/null | awk '{$1=$1; print}')" = "$(printf '%s' "$st" | awk '{$1=$1; print}')" ]; then p=$sp; fi ;;
+        esac
+    fi
+    [ -z "$p" ] || printf '%s\n' "$p"
+}
 # Номер процесса переживает перезагрузку и достаётся кому попало. Без сверки
 # имени супервизор считает живым чужой процесс, а хелпер шлёт ему сигнал от
 # root. Поэтому проверяем, что это действительно openconnect.

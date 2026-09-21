@@ -394,6 +394,16 @@ STUB
     out=$(run status --short || true)
     matches "лишние сессии: без текущей обе лишние" "^strays=($cur,$stray|$stray,$cur)\$" "$out"
     matches "лишние сессии: не «чужой туннель»" "^foreign=\$" "$out"
+    # openconnect при выходе стирает общий pidfile — текущая узнаётся по
+    # отметке запуска, которую пишет хелпер, и лишней не считается.
+    printf '%s %s\n' "$cur" "$(ps -p "$cur" -o lstart= | tr -s ' ')" > "$tmp/var/openconnect.started"
+    printf 'STATE=connected\nTUNDEV=utun9\n' > "$tmp/var/tunnel.env"
+    out=$(run status --short || true)
+    has "лишние сессии: pidfile стёрт — текущая по отметке запуска" "state=connected" "$out"
+    matches "лишние сессии: pidfile стёрт — лишняя только лишняя" "^strays=$stray\$" "$out"
+    printf '%s чужое время\n' "$cur" > "$tmp/var/openconnect.started"
+    has "лишние сессии: отметка не того процесса — туннель не поднят" "state=down" "$(run status --short || true)"
+    rm -f "$tmp/var/openconnect.started" "$tmp/var/tunnel.env"
     kill "$cur" "$stray" 2>/dev/null || true
     is "лишние сессии: нет процессов — нет и строки" "" "$(run status --short | grep '^strays=' || true)"
     has "порт занят не нами — прокси-профиль отказывает" "уже занят" "$(OCBAR_OCPROXY=/usr/bin/true run connect --dry-run px2)"

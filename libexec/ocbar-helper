@@ -274,9 +274,27 @@ is_openconnect() { # pid
 }
 # pid живого openconnect из pidfile. Номер занят другим процессом — туннель
 # считается мёртвым, pidfile убирается.
+# Номер из отметки запуска — если это тот самый openconnect (имя и время).
+started_pid() {
+    [ -f "$STARTED" ] || return 0
+    local sp st; read -r sp st < "$STARTED" 2>/dev/null || true
+    matches "${sp:-}" '^[0-9]+$' && [ -n "${st:-}" ] || return 0
+    if is_openconnect "$sp"; then printf '%s' "$sp"; fi
+    return 0
+}
 live_pid() {
     local p; p=$(tunnel_pid)
-    [ -n "$p" ] || return 0
+    if [ -z "$p" ]; then
+        # openconnect при выходе удаляет свой --pid-file, а он у всех наших
+        # сессий общий: лишняя, выходя, стирала номер текущей. Без него
+        # текущая считалась мёртвой — vpnc лишней снимал её маршруты, а
+        # супервизор входил заново (2026-09-21). Отметку запуска openconnect
+        # не трогает: по ней текущая узнаётся, и pidfile восстанавливается.
+        p=$(started_pid); [ -n "$p" ] || return 0
+        say "pidfile стёрт (так делает выходящий openconnect) — текущая сессия pid $p, восстанавливаю"
+        { printf '%s\n' "$p" > "$PIDFILE"; } 2>/dev/null || true
+        printf '%s' "$p"; return 0
+    fi
     if is_openconnect "$p"; then printf '%s' "$p"; return 0; fi
     if [ -f "$PIDFILE" ]; then
         ps -p "$p" >/dev/null 2>&1 && say "pid $p из pidfile — не openconnect (номер занят другим процессом), считаю туннель мёртвым"
