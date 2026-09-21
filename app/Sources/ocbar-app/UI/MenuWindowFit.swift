@@ -18,6 +18,10 @@ struct MenuWindowFit: NSViewRepresentable {
             // Меньше сотни — это ещё не разложенное меню: такому окну размер
             // не меняем, иначе оно схлопнется.
             guard !fixing, desired > 100, let window else { return }
+            // Только окно самого меню (оно ровно в ширину меню). Витрина и
+            // кадры README держат несколько меню в одном окне — подгонка
+            // сжимала его до высоты одного и обрезала кадр.
+            guard abs(window.frame.width - MenuView.width) < 2 else { return }
             fixing = true
             defer { fixing = false }
             // Предел размера — та же высота: попытка системы поставить окно
