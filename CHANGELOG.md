@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.15.6 — 2026-09-21
+
+- README screenshots in both languages: `assets/` shows the English
+  interface, `assets/ru/` the Russian one; `tools/screenshots.sh` retakes
+  all of them. Demo profiles in the preview follow the interface language.
+- The menu's own height fitting no longer applies to other windows that
+  contain a menu (the preview), which cut screenshots short.
+
 ## 0.15.5 — 2026-09-21
 
 - `ocbar app stop` returns only after the app has exited. Run right before
