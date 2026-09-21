@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.15.3 — 2026-09-21
+
+- The Screen Recording hint appears only when the capture has no QR code at
+  all. A QR code that was read but refused (several accounts, not a TOTP
+  code) is reported as such, with or without the permission. This also made
+  the self-test depend on the machine's permission: `brew test` failed in
+  the sandbox after 0.15.2.
+
 ## 0.15.2 — 2026-09-21
 
 - Adding a code with the camera no longer takes the first account from an
