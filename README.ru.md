@@ -437,8 +437,11 @@ app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest      # разбор, з
 
 - **чужие зоны в `/etc/resolver` не трогаются** — хелпер помнит только свои
   (манифест), чужой файл пропускает и в манифест не берёт;
-- **чужой openconnect не трогается** — без нашего pidfile `cleanup` его не убьёт,
-  а `disconnect` не погасит чужой `utun`;
+- **чужой openconnect не трогается** — `cleanup` и `disconnect` гасят только
+  свои сессии (запущенные хелпером, с его `--pid-file`), а `disconnect` не
+  погасит чужой `utun`. Своя лишняя сессия — та, что не записана в pidfile, —
+  видна в `ocbar status` и `ocbar doctor` и гасится `ocbar cleanup`; её
+  vpnc-script состояние текущей сессии не трогает;
 - **root исполняет копию из своего каталога**: `openconnect` копируется в
   `/usr/local/libexec/ocbar/` и сверяется по sha256 вместе с библиотеками,
   csd-wrapper берётся только по имени из root-каталога, vpnc-script — сам
