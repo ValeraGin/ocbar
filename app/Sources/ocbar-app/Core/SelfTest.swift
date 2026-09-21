@@ -172,6 +172,12 @@ enum SelfTest {
         check("плохая зона — ошибка",
               ProfileCheck.check(broken).contains { $0.level == .error })
 
+        // --- итог действия с паролем и кодом ---
+        let note = SecretNote(profile: "work", text: "код сохранён")
+        check("итог с секретом виден у своего профиля", SecretNote.shown(note, for: "work") == "код сохранён")
+        check("итог с секретом не переезжает на другой профиль", SecretNote.shown(note, for: "home") == nil)
+        check("итог с секретом не виден у нового несохранённого профиля", SecretNote.shown(note, for: nil) == nil)
+
         // --- глобальная горячая клавиша ---
         // Сочетание системное: занятое другой программой не регистрируется.
         // Берём заведомо редкое, чтобы проверка не зависела от того, что
