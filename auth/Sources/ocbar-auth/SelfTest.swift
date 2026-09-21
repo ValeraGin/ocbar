@@ -150,6 +150,27 @@ enum AuthSelfTest {
         var wifi = ""
         do { _ = try QRImport.parse("WIFI:S:home;T:WPA;P:hunter2;;") } catch { wifi = "\(error)" }
         ok("QR сети Wi-Fi: пароль сети в ошибку не попадает", !wifi.contains("hunter2") && wifi.contains("не QR второго фактора"), wifi)
+        // Ввод из настроек приложения (secret add-totp --stdin).
+        let bare = (try? otpEntries(text: "  jbsw y3dp ehpk 3pxp\n")) ?? []
+        ok("голый секрет: пробелы и строчные буквы — годится, SHA1/6/30",
+           bare.count == 1 && bare.first?.secretBase32 == secret && bare.first?.isTOTP == true
+               && bare.first?.digits == 6 && bare.first?.period == 30, "\(bare.count) записей")
+        let link = (try? otpEntries(text: "otpauth://totp/VPN:alice?secret=\(secret)&digits=8&period=60&algorithm=SHA256\n")) ?? []
+        ok("ссылка otpauth:// со входа — параметры из ссылки",
+           link.count == 1 && link.first?.digits == 8 && link.first?.period == 60 && link.first?.algorithm == "SHA256",
+           "\(link.map { "\($0.algorithm)/\($0.digits)/\($0.period)" })")
+        var junk = ""
+        do { _ = try otpEntries(text: "not a secret!!") } catch { junk = "\(error)" }
+        ok("не секрет и не ссылка — отказ", !junk.isEmpty, junk)
+        var none = ""
+        do { _ = try otpEntries(text: "   ") } catch { none = "\(error)" }
+        ok("пустой ввод — отказ", !none.isEmpty, none)
+        // Камера при добавлении с нуля: сверять не с чем — годится любая
+        // запись TOTP, но не HOTP.
+        let totp = QRImport.Entry(secretBase32: secret, name: "a", issuer: "", digits: 6, algorithm: "SHA1", isTOTP: true, period: 30)
+        var hotp = totp; hotp.isTOTP = false
+        ok("камера без кода: TOTP подходит, HOTP — нет",
+           QRCameraWindow.fits(totp, code: "", at: Date()) && !QRCameraWindow.fits(hotp, code: "", at: Date()))
     }
 
     // MARK: - журнал в --verbose

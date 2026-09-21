@@ -518,6 +518,53 @@ STUB
     is "secret status --short: источники без обращения к секретам" "password=ask totp=sms" "$(run secret status h --short | tr '\n' ' ' | sed 's/ $//' || true)"
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
+    # Пароль и код из настроек приложения: значения идут в security через
+    # stdin (-i), в аргументах их нет; причина отказа — словами ocbar-auth.
+    # Заглушка security ведёт одну запись, как связка на один секрет.
+    mkdir -p "$tmp/kc"
+    cat > "$tmp/kc/security" <<'STUB'
+#!/bin/bash
+d="$(dirname "$0")"
+printf '%s\n' "$*" >> "$d/argv"
+if [ "${1:-}" = -i ]; then
+    line=$(cat); printf '%s\n' "$line" >> "$d/stdin"
+    printf '%s' "$line" | sed -n 's/.* -w "\(.*\)"$/\1/p' | sed -e 's/\\"/"/g' -e 's/\\\\/\\/g' > "$d/value"
+    exit 0
+fi
+case " $* " in *" -w "*) cat "$d/value" 2>/dev/null; exit 0 ;; esac
+[ -s "$d/value" ]
+STUB
+    chmod +x "$tmp/kc/security"
+    kcrun() { OCBAR_SELFTEST_SECURITY="$tmp/kc/security" run "$@"; }
+    printf '[Connection]\nName = Секреты\nUrl = vpn.example.test/k\nUser = tester\n\n[Auth]\nTotp = keychain\n' > "$tmp/profiles/k.ocbar"
+    local chk
+    chk=$(printf '%s\n' 'pa"ss\wo rd' | kcrun secret set-password k --stdin)
+    has "пароль со входа: сохранён" "пароль сохранён" "$chk"
+    is "пароль со входа: в связке ровно он, с кавычкой и слэшем" 'pa"ss\wo rd' "$(cat "$tmp/kc/value" 2>/dev/null)"
+    has "пароль со входа: security вызван с -i" "-i" "$(cat "$tmp/kc/argv" 2>/dev/null)"
+    hasnt "пароль со входа: в аргументах security пароля нет" "pa" "$(cat "$tmp/kc/argv" 2>/dev/null)"
+    has "пароль со входа: пустой не сохраняется" "пустой пароль" "$(printf '\n' | kcrun secret set-password k --stdin || true)"
+    if qa=$(auth_path); then
+        : > "$tmp/kc/argv"
+        chk=$(printf '%s\n' 'otpauth://totp/VPN:tester?secret=JBSWY3DPEHPK3PXP&digits=8&period=60&algorithm=SHA256' \
+              | OCBAR_AUTH="$qa" kcrun secret add-totp k --stdin)
+        has "код ссылкой: сохранён" "код сохранён" "$chk"
+        matches "код ссылкой: показан текущий код из связки (8 цифр)" '[0-9]{8} — сверьте' "$chk"
+        is "код ссылкой: в связке секрет из ссылки" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
+        has "код ссылкой: учётка totp/<пользователь>, подпись как у set-totp" '-a "totp/tester" -l "ocbar: TOTP (tester)"' "$(cat "$tmp/kc/stdin" 2>/dev/null)"
+        hasnt "код ссылкой: в аргументах security секрета нет" "JBSWY" "$(cat "$tmp/kc/argv" 2>/dev/null)"
+        chk=$(cat "$tmp/profiles/k.ocbar")
+        has "код ссылкой: цифры — в профиль" "TotpDigits = 8" "$chk"
+        has "код ссылкой: период — в профиль" "TotpPeriod = 60" "$chk"
+        has "код ссылкой: источник — связка" "Totp = keychain" "$chk"
+        has "код: причина отказа — словами ocbar-auth" "нет ни одной записи TOTP" \
+            "$(printf 'not a secret!!\n' | OCBAR_AUTH="$qa" kcrun secret add-totp k --stdin || true)"
+        has "код: HOTP не сохраняется" "по счётчику" \
+            "$(printf 'otpauth://hotp/VPN:t?secret=JBSWY3DPEHPK3PXP&counter=1\n' | OCBAR_AUTH="$qa" kcrun secret add-totp k --stdin || true)"
+    else
+        omit "код ссылкой: сохранение, параметры, причина отказа" "не найден ocbar-auth (OCBAR_AUTH или auth/.build/release)"
+    fi
+    rm -rf "$tmp/kc" "$tmp/profiles/k.ocbar" "$tmp/profiles/k.ocbar.bak"
 
     # «В этой сети не подключаться»: сеть опознаётся по MAC маршрутизатора.
     rm -f "$tmp/state/skip-networks"
