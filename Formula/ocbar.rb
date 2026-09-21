@@ -28,6 +28,9 @@ class Ocbar < Formula
     libexec.install "libexec/ocbar-logs.py"
     libexec.install "libexec/ocbar-redact.py"
     libexec.install "libexec/ocbar-pwauth.py"
+    # Перевод сообщений клиента: каталог шаблонов и тот, кто его применяет.
+    libexec.install "libexec/ocbar-tr.pl"
+    libexec.install "libexec/ocbar-en.tsv"
     libexec.install "libexec/ocbar-selftest.sh"
     bin.install "bin/ocbar"
     (pkgshare/"swiftbar").install "swiftbar/ocbar.5s.sh"

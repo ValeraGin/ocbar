@@ -94,17 +94,39 @@ c_red=$'\033[31m'; c_grn=$'\033[32m'; c_yel=$'\033[33m'; c_dim=$'\033[2m'; c_off
 [ -t 1 ] || { c_red=""; c_grn=""; c_yel=""; c_dim=""; c_off=""; }
 # printf '%-Ns' считает БАЙТЫ — кириллица съезжает. Паддинг руками.
 pad() { local out="$1" w="${2:-26}"; while [ "${#out}" -lt "$w" ]; do out="$out "; done; printf '%s' "$out"; }
+# Язык сообщений — как у приложения: OCBAR_LANG=ru|en, иначе первый из ru/en
+# в языках системы, иначе ru. Определяется один раз, при первом сообщении.
+# Переводится то, что читает человек (ok/warn/bad/skip/info/die, уведомления);
+# журнал (log) и машинный вывод (--short, --json) — нет.
+_CLI_LANG="${OCBAR_LANG:-}"
+case "$_CLI_LANG" in ru|en) ;; *) _CLI_LANG="" ;; esac
+cli_lang_init() {
+    [ -n "$_CLI_LANG" ] && return 0
+    _CLI_LANG=$(defaults read -g AppleLanguages 2>/dev/null | tr -d ' "(),' | grep -E '^(ru|en)' | head -1 | cut -c1-2 || true)
+    _CLI_LANG="${_CLI_LANG:-ru}"
+}
+T() { # сообщение → на языке сообщений
+    cli_lang_init
+    if [ "$_CLI_LANG" = en ] && [ -n "${1:-}" ]; then
+        local pl cat
+        if pl=$(libexec_file ocbar-tr.pl) && cat=$(libexec_file ocbar-en.tsv); then
+            /usr/bin/perl "$pl" "$cat" "$1" 2>/dev/null && return 0
+        fi
+    fi
+    printf '%s' "${1:-}"
+}
 _line() {
+    cli_lang_init   # до подпроцессов $(T …): там язык не запомнился бы
     local color="$1" tag="$2"; shift 2
-    if [ $# -gt 1 ]; then printf '  %s[%s]%s %s %s\n' "$color" "$tag" "$c_off" "$(pad "$1")" "$2"
-    else printf '  %s[%s]%s %s\n' "$color" "$tag" "$c_off" "${1:-}"; fi
+    if [ $# -gt 1 ]; then printf '  %s[%s]%s %s %s\n' "$color" "$tag" "$c_off" "$(pad "$(T "$1")")" "$(T "$2")"
+    else printf '  %s[%s]%s %s\n' "$color" "$tag" "$c_off" "$(T "${1:-}")"; fi
 }
 ok()   { _line "$c_grn" " OK " "$@"; }
 warn() { _line "$c_yel" " !! " "$@"; }
 bad()  { _line "$c_red" "FAIL" "$@"; }
 skip() { _line "$c_dim" " -- " "$@"; }
-info() { printf '%s\n' "$*"; }
-die()  { printf '%socbar: %s%s\n' "$c_red" "$*" "$c_off" >&2; exit 1; }
+info() { cli_lang_init; printf '%s\n' "$(T "$*")"; }
+die()  { cli_lang_init; printf '%socbar: %s%s\n' "$c_red" "$(T "$*")" "$c_off" >&2; exit 1; }
 log()  { mkdir -p "$LOG_DIR"; printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$SUP_LOG"; }
 
 # Лог пишется дозаписью на каждый вызов log(), поэтому переименовать файл
@@ -207,8 +229,10 @@ notify() { # заголовок, текст, группа
     [ "$NOTIFY_ENABLED" = 0 ] && return 0
     notify_wanted "${3:-}" || { log "уведомление выключено в настройках: $1"; return 0; }
     [ "$(notify_fresh "$1")" = yes ] || { log "уведомление уже было за 10 минут: $1"; return 0; }
-    local r a n=0
-    r=$(notify_route "$1" "$2")
+    # Показывается на языке сообщений; в журнал и в счёт повторов — как есть.
+    local r a n=0 ttl bdy
+    cli_lang_init; ttl=$(T "$1"); bdy=$(T "$2")
+    r=$(notify_route "$ttl" "$bdy")
     if [ "$r" = launch ]; then
         a=$(app_path || true)
         if [ -z "$a" ]; then log "уведомление не показано (нет ocbar.app): $1 — $2"; return 0; fi
@@ -226,7 +250,7 @@ notify() { # заголовок, текст, группа
             if [ "$n" -ge 8 ] && [ -n "$(app_pid)" ] && [ -s "$USER_STATE/notify.token" ]; then break; fi
             sleep 0.25; n=$((n+1))
         done
-        r=$(OCBAR_SELFTEST_APP=1 notify_route "$1" "$2")
+        r=$(OCBAR_SELFTEST_APP=1 notify_route "$ttl" "$bdy")
     fi
     case "$r" in
         "app "*) open -g "${r#app }" >/dev/null 2>&1 && return 0
@@ -991,7 +1015,9 @@ services_with_localhost_dns() {
 }
 human_since() { # unix ts → "2ч 13м"
     local s=$(( $(date +%s) - ${1:-0} )); [ "$s" -ge 0 ] || s=0
-    if [ $s -ge 3600 ]; then printf '%dч %dм' $((s/3600)) $(((s%3600)/60)); elif [ $s -ge 60 ]; then printf '%dм' $((s/60)); else printf '%dс' $s; fi
+    local h=ч m=м c=с
+    cli_lang_init; [ "$_CLI_LANG" = en ] && { h=h; m=m; c=s; }
+    if [ $s -ge 3600 ]; then printf "%d$h %d$m" $((s/3600)) $(((s%3600)/60)); elif [ $s -ge 60 ]; then printf "%d$m" $((s/60)); else printf "%d$c" $s; fi
 }
 
 # --------------------------------------------------------------- секреты ----
@@ -1247,14 +1273,14 @@ cmd_secret() {
                     # снимок (OCBAR_SELFTEST_SCREENCAPTURE) — дальше путь тот же.
                     "${OCBAR_SELFTEST_SCREENCAPTURE:-/usr/sbin/screencapture}" -i -x "$shot" 2>/dev/null || true
                     [ -s "$shot" ] || { rm -rf "$(dirname "$shot")" "$err"; die "снимок отменён"; }
-                    got=$("$auth" --import-qr "$shot" "${sa[@]+"${sa[@]}"}" --print-all 2>"$err") || true
+                    local qrc=0
+                    got=$("$auth" --import-qr "$shot" "${sa[@]+"${sa[@]}"}" --print-all 2>"$err") || qrc=$?
                     rm -P "$shot" 2>/dev/null; rm -rf "$(dirname "$shot")"
                     # Без права на запись экрана снимок — рабочий стол без
                     # чужих окон: QR на нём нет, и «не найден» сбивает с толку.
-                    # Только когда QR не нашёлся вовсе: прочитанный QR (две записи,
-                    # не тот код) значит, что снимок в порядке. «нет QR-кода» —
-                    # QRImport.ImportError.noQR в ocbar-auth.
-                    if [ -z "$got" ] && grep -q 'нет QR-кода' "$err" && [ "$("$auth" --screen-access 2>/dev/null)" = denied ]; then
+                    # Только когда QR не нашёлся вовсе (код 3): прочитанный QR (две
+                    # записи, не тот код) значит, что снимок в порядке.
+                    if [ -z "$got" ] && [ "$qrc" = 3 ] && [ "$("$auth" --screen-access 2>/dev/null)" = denied ]; then
                         rm -f "$err"
                         die "у ocbar нет права на запись экрана — снимок вышел без окон, QR на нём нет. Системные настройки → Конфиденциальность и безопасность → Запись экрана: разрешите ocbar (или терминалу, из которого запускаете), затем повторите"
                     fi ;;
@@ -3665,6 +3691,8 @@ cmd_version() {
 
 # ------------------------------------------------------------------ main ----
 usage() {
+    cli_lang_init
+    if [ "$_CLI_LANG" = en ]; then usage_en; return 0; fi
     cat <<'USAGE'
 ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супервизор.
 
@@ -3737,6 +3765,84 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
 
 Профили: ~/.config/ocbar/profiles/*.ocbar (правила формы — в их [Autofill]);
 старый формат: ~/.config/ocbar/{profiles.conf,zones.conf,networks.conf,autofill.rules}
+USAGE
+}
+
+# Справка по-английски — отдельным текстом: строки справки выровнены в
+# колонки, и перевод по шаблонам их бы разъехал.
+usage_en() {
+    cat <<'USAGE'
+ocbar — OpenConnect for macOS: SSO, split DNS, split tunneling, a supervisor.
+
+  ocbar connect [profile] [--show] [--teach] [-v]
+                                      connect; --show — show the sign-in window;
+                                      --teach — sign in by hand while ocbar learns the
+                                      form and offers to save the password and code;
+                                      -v — verbose sign-in log; another profile while
+                                      connected — switch; Mode = proxy in the profile —
+                                      SOCKS through ocproxy, no root
+  ocbar disconnect                    disconnect
+  ocbar logout                        sign out completely: disconnect and forget sign-in
+                                      sessions (the next sign-in shows the form; for tests)
+  ocbar pause                         "as if off": take down routes and zones, keep the
+                                      tunnel and the sign-in alive
+  ocbar resume                        bring routes and zones back (instantly, no sign-in)
+  ocbar toggle                        pause ↔ resume
+  ocbar status [--short]              state; --short — machine-readable, for the menu
+  ocbar profiles                      list profiles
+  ocbar profiles order [name…]        profile order in the menu; without names — current
+  ocbar import <file> [name]          add a profile: .ocbar or a Cisco profile (.xml —
+                                      only server addresses are carried over)
+  ocbar export <profile> [file]       export a profile (and convert it to the new format)
+  ocbar routes [status]               state (same as ocbar status)
+  ocbar routes on|off|toggle <CIDR>   a network into the tunnel on the fly (add|del — same);
+                                      apply — all enabled; clear — remove all
+  ocbar dns status|apply|clear        /etc/resolver zones; on|off|toggle <zone>
+  ocbar dns init <file> <DNS|vpn>     create zones.conf from a list of domains
+  ocbar secret set-password|set-totp|status|code [profile]   Keychain; code — the current code
+  ocbar secret set-password <profile> --stdin
+                                      the password as one line on input (no terminal)
+  ocbar secret access                 Screen Recording and camera permissions as
+                                      ocbar-auth sees them (screen=granted|denied camera=…)
+  ocbar secret add-totp <profile> --screen|--camera|--stdin [--select NAME]
+                                      two-factor code: a QR code framed on screen,
+                                      the camera, or an otpauth:// link / secret on input
+  ocbar secret import-qr <file> [--list] [--select NAME] [profile]
+                                      TOTP from a QR code (a Google Authenticator export
+                                      too); the secret is never printed
+  ocbar learn [profile] [--probe] [--out <file>]
+                                      mark up the sign-in form with the mouse (--probe —
+                                      no window: what pre-filling detects by itself); the
+                                      rules go into the profile's own [Autofill] section,
+                                      with --out — into that file
+  ocbar rules show [profile]          the profile's autofill rules
+  ocbar rules import <file> [profile] put rules from a file into [Autofill]
+  ocbar rules clear [profile]         remove [Autofill] from the profile
+  ocbar app [start|stop|status]       the menu bar app; autostart on|off; devmode on|off;
+                                      start keeps a copy in ~/Applications for Launchpad
+  ocbar ui-lab [--live]               interface sandbox in the browser
+  ocbar version [--all]               version; --all — every part and path, for the app
+  ocbar doctor                        diagnostics, changes nothing
+  ocbar autoconnect [manual|resume|always <profile>|skip-here [label]|unskip-here|here]
+                                      who brings the tunnel up: nobody, "like last time"
+                                      (default) or the chosen profile at login
+  ocbar report [file] [--raw]         a report for troubleshooting: versions, diagnostics,
+                                      log tails; addresses and logins masked, --raw — as is
+  ocbar selftest                      parsing checks on synthetic configs
+  ocbar cleanup                       leftovers of the previous session
+  ocbar supervise                     the reconnect loop (the LaunchAgent runs it)
+  ocbar supervisor status|start|stop|restart
+                                      the supervisor agent: state, load, unload (the
+                                      tunnel survives it), restart
+  sudo ocbar install [--trust]        helper, sudoers, LaunchAgent (once)
+  sudo ocbar uninstall
+
+  --dry-run   print privileged commands instead of running them;
+              no processes are stopped (disconnect, cleanup, supervise)
+  -h, --help  this help
+
+Profiles: ~/.config/ocbar/profiles/*.ocbar (form rules in their [Autofill]);
+old format: ~/.config/ocbar/{profiles.conf,zones.conf,networks.conf,autofill.rules}
 USAGE
 }
 

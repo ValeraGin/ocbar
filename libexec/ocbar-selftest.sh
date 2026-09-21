@@ -625,6 +625,15 @@ STUB
         : > "$tmp/kc/value"
         has "камера: --select выбирает запись из экспорта" "код сохранён" "$(cam_add "$tmp/kc/two.png" --select vpn)"
         is "камера: выбрана нужная запись" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
+        # По-английски: сообщения клиента по каталогу, причины ocbar-auth — у
+        # источника. Кириллицы не остаётся нигде (имя профиля — латиницей).
+        nocyr() { total=$((total+1)); if printf '%s' "$2" | LC_ALL=C grep -q $'\xd0\|\xd1'; then fails=$((fails+1)); bad "$1" "кириллица: $(printf '%s' "$2" | head -3)"; else ok "$1"; fi; }
+        chk=$(OCBAR_LANG=en run help); has "по-английски: справка" "OpenConnect for macOS" "$chk"; nocyr "по-английски: справка без кириллицы" "$chk"
+        chk=$(OCBAR_LANG=en run profile-check "$tmp/nope.ocbar" || true); has "по-английски: ошибка die" "no such file" "$chk"; nocyr "по-английски: ошибка без кириллицы" "$chk"
+        chk=$(printf '%s\n' 'pw' | OCBAR_LANG=en kcrun secret set-password k --stdin); has "по-английски: строка ok с подстановками" "password saved" "$chk"; nocyr "по-английски: строка ok без кириллицы" "$chk"
+        chk=$(OCBAR_LANG=en OCBAR_SELFTEST_SCREEN_ACCESS=denied shot_add "$tmp/kc/blank.png"); has "по-английски: про право на запись экрана" "Screen Recording" "$chk"; nocyr "по-английски: право — без кириллицы" "$chk"
+        chk=$(OCBAR_LANG=en shot_add "$tmp/kc/blank.png"); has "по-английски: QR нет — причина от ocbar-auth" "no QR code" "$chk"; nocyr "по-английски: причина ocbar-auth без кириллицы" "$chk"
+        chk=$(OCBAR_LANG=en cam_add "$tmp/kc/two.png"); has "по-английски: экспорт на две — причина с камеры" "export just the VPN account" "$chk"; nocyr "по-английски: камера без кириллицы" "$chk"
     else
         omit "код ссылкой: сохранение, параметры, причина отказа" "не найден ocbar-auth (OCBAR_AUTH или auth/.build/release)"
     fi

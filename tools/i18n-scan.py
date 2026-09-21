@@ -13,6 +13,10 @@ SwiftUI берёт русский текст как ключ и ищет пер�
 ocbar-auth — голый файл без бандла: перевод у него в коде, словарём
 auth/Sources/ocbar-auth/Translations.swift; --check сверяет и его (--update
 туда не пишет — пары добавляются руками).
+
+Клиент bin/ocbar переводится при выводе, по шаблонам libexec/ocbar-en.tsv
+(«русский<TAB>английский», {} — подстановка, {1}, {2}… — если порядок
+другой); --check сверяет и его.
 """
 import re
 import sys
@@ -133,8 +137,109 @@ def auth_check() -> int:
     return 1 if missing or extra or unwrapped else 0
 
 
+# --- клиент (bin/ocbar) ------------------------------------------------------
+# Сообщения человеку идут через ok/warn/bad/skip/info/die; перевод — по
+# шаблонам libexec/ocbar-en.tsv (подстановки $var, ${…}, $(…) — это {}).
+CLI = ROOT / "bin/ocbar"
+CLI_TABLE = ROOT / "libexec/ocbar-en.tsv"
+
+
+def cli_template(s: str) -> str:
+    out, i = "", 0
+    while i < len(s):
+        c = s[i]
+        if c == "\\" and i + 1 < len(s):
+            out += s[i + 1]; i += 2; continue
+        if c == "$" and i + 1 < len(s) and s[i + 1] == "(":
+            depth, j = 0, i + 1
+            while j < len(s):
+                depth += {"(": 1, ")": -1}.get(s[j], 0)
+                if depth == 0:
+                    break
+                j += 1
+            out += "{}"; i = j + 1; continue
+        if c == "$" and i + 1 < len(s) and s[i + 1] == "{":
+            out += "{}"; i = s.index("}", i) + 1; continue
+        m = re.match(r"\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9#@*?]", s[i:])
+        if m:
+            out += "{}"; i += len(m.group(0)); continue
+        out += c; i += 1
+    return out
+
+
+CLI_NAME = re.compile(r'(?:^|[;&|{(\s])(?:die|info|ok|warn|bad|skip)\s+(?=")')
+
+
+def cli_quoted(line: str, i: int) -> tuple[str, int]:
+    """Строка в двойных кавычках с позиции i (там кавычка): внутри $( … )
+    свои кавычки не закрывают внешнюю. Возвращает содержимое и позицию за ней."""
+    j, depth, inner = i + 1, 0, False
+    while j < len(line):
+        c = line[j]
+        if c == "\\":
+            j += 2; continue
+        if depth and c == '"':
+            inner = not inner
+        elif not inner and line.startswith("$(", j):
+            depth += 1; j += 2; continue
+        elif depth and not inner and c == ")":
+            depth -= 1
+        elif not depth and c == '"':
+            return line[i + 1:j], j + 1
+        j += 1
+    return line[i + 1:], len(line)
+
+
+def cli_keys() -> list[str]:
+    found: dict[str, None] = {}
+    for line in CLI.read_text(encoding="utf-8").split("\n"):
+        if line.lstrip().startswith("#"):
+            continue
+        for m in CLI_NAME.finditer(line):
+            pos = m.end()
+            while pos < len(line) and line[pos] == '"':
+                raw, pos = cli_quoted(line, pos)
+                t = cli_template(raw)
+                if CYRILLIC.search(t) and t.strip("{} "):
+                    found.setdefault(t, None)
+                while pos < len(line) and line[pos] == " ":
+                    pos += 1
+    return list(found)
+
+
+def cli_check() -> int:
+    keys = cli_keys()
+    table: dict[str, str] = {}
+    bad: list[str] = []
+    if CLI_TABLE.exists():
+        for line in CLI_TABLE.read_text(encoding="utf-8").split("\n"):
+            if not line or line.startswith("#") or "\t" not in line:
+                continue
+            ru, en = line.split("\t", 1)
+            table[ru] = en
+            n = ru.count("{}")
+            idx = re.findall(r"\{(\d+)\}", en)
+            if idx:
+                if "{}" in en or sorted(set(int(x) for x in idx)) != list(range(1, n + 1)):
+                    bad.append(ru)
+            elif en.count("{}") != n:
+                bad.append(ru)
+            if CYRILLIC.search(re.sub(r"\{\d*\}", "", en)):
+                bad.append(ru)
+    missing = [k for k in keys if k not in table]
+    extra = [k for k in table if k not in keys]
+    for k in missing:
+        print(f"ocbar: нет перевода: {k}")
+    for k in extra:
+        print(f"ocbar: лишний перевод (сообщения в коде нет): {k}")
+    for k in bad:
+        print(f"ocbar: перевод не сходится с шаблоном (подстановки или кириллица): {k}")
+    print(f"сообщений клиента: {len(keys)}, переведено: {len(keys) - len(missing)}")
+    return 1 if missing or extra or bad else 0
+
+
 if __name__ == "__main__":
     rc = main()
     if (sys.argv[1] if len(sys.argv) > 1 else "--check") == "--check":
-        rc = max(rc, auth_check())
+        rc = max(rc, auth_check(), cli_check())
     sys.exit(rc)
