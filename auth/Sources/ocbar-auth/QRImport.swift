@@ -37,11 +37,11 @@ enum QRImport {
         case noImage(String), noQR, notOTP, badPayload(String), empty
         var description: String {
             switch self {
-            case .noImage(let p): return "не удалось прочитать изображение: \(p)"
-            case .noQR:           return "в изображении нет QR-кода (или он нечитаем — попробуйте кадр покрупнее)"
-            case .notOTP:         return "QR прочитан, но это не QR второго фактора (нет ссылки otpauth://)"
-            case .badPayload(let s): return "QR второго фактора прочитан, но разобрать не удалось: \(s)"
-            case .empty:          return "в QR нет ни одной записи TOTP"
+            case .noImage(let p): return L("не удалось прочитать изображение: %@", p)
+            case .noQR:           return L("в изображении нет QR-кода (или он нечитаем — попробуйте кадр покрупнее)")
+            case .notOTP:         return L("QR прочитан, но это не QR второго фактора (нет ссылки otpauth://)")
+            case .badPayload(let s): return L("QR второго фактора прочитан, но разобрать не удалось: %@", s)
+            case .empty:          return L("в QR нет ни одной записи TOTP")
             }
         }
     }

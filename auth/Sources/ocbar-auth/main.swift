@@ -75,7 +75,8 @@ func usage() -> String {
                             странице-образце в WebView вне экрана; окон не открывает
       --import-qr FILE      прочитать TOTP-секрет из QR (в том числе экспорт
                             Google Authenticator); печатает метаданные и код
-                            для сверки, сам секрет — только с --print-secret
+                            для сверки, сам секрет — только с --print-secret;
+                            QR на картинке нет — код 3
         --list              показать все записи в QR и выйти
         --select ПОДСТРОКА  выбрать запись по issuer/имени; подходит несколько —
                             отказ (код 1). Без --select при нескольких записях
@@ -435,7 +436,7 @@ if args.importCamera && args.cameraWindowShot == nil {
     DispatchQueue.main.async {
         let r = QRCameraWindow(code: "", at: Date(), select: args.selectEntry).run()
         guard let e = r.entry, e.isTOTP else {
-            Log.error(r.entry == nil ? r.note : "это HOTP (код по счётчику) — ocbar его не ведёт")
+            Log.error(r.entry == nil ? r.note : L("это HOTP (код по счётчику) — ocbar его не ведёт"))
             exit(1)
         }
         out("TOTP \(e.algorithm) \(e.digits) \(e.period)")
@@ -461,20 +462,20 @@ if args.importQR != nil || args.importOTP {
         if let want = args.selectEntry?.lowercased(), !want.isEmpty {
             let matched = candidates.filter { label($0).lowercased().contains(want) }
             if matched.count > 1 {
-                Log.error("под «\(args.selectEntry!)» подходит несколько записей: \(matched.map(label).joined(separator: ", ")) — уточните")
+                Log.error(L("под «%@» подходит несколько записей: %@ — уточните", args.selectEntry!, matched.map(label).joined(separator: ", ")))
                 exit(1)
             }
             guard let m = matched.first else {
-                Log.error("в QR нет записи, похожей на «\(args.selectEntry!)». Есть: \(candidates.map(label).joined(separator: ", "))")
+                Log.error(L("в QR нет записи, похожей на «%@». Есть: %@", args.selectEntry!, candidates.map(label).joined(separator: ", ")))
                 exit(1)
             }
             chosen = m
         } else if candidates.count > 1 {
             // Молча взять первую из нескольких — верный способ записать чужой
             // секрет и потом долго не понимать, почему код не подходит.
-            Log.error("в QR \(candidates.count) записи: \(candidates.map(label).joined(separator: ", "))")
+            Log.error(L("в QR %@ записи: %@", candidates.count, candidates.map(label).joined(separator: ", ")))
             // Читает это и человек в настройках приложения, и в терминале.
-            Log.error("снимите QR одной записи или укажите нужную: --select <часть имени>")
+            Log.error(L("снимите QR одной записи или укажите нужную: --select <часть имени>"))
             exit(1)
         } else {
             chosen = candidates.first ?? entries.first
@@ -504,6 +505,9 @@ if args.importQR != nil || args.importOTP {
         exit(0)
     } catch {
         Log.error("\(error)")
+        // QR на картинке не нашёлся вовсе — свой код: ocbar по нему решает,
+        // не в праве ли на запись экрана дело (слова зависят от языка).
+        if case QRImport.ImportError.noQR = error { exit(3) }
         exit(1)
     }
 }
