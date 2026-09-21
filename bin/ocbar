@@ -1235,11 +1235,19 @@ cmd_secret() {
                 --screen)
                     shot=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-qr.XXXXXX")/qr.png
                     info "Выделите рамкой QR на экране (Esc — отмена)"
-                    /usr/sbin/screencapture -i -x "$shot" 2>/dev/null || true
+                    # Рамку выделяет человек; самопроверка подставляет готовый
+                    # снимок (OCBAR_SELFTEST_SCREENCAPTURE) — дальше путь тот же.
+                    "${OCBAR_SELFTEST_SCREENCAPTURE:-/usr/sbin/screencapture}" -i -x "$shot" 2>/dev/null || true
                     [ -s "$shot" ] || { rm -rf "$(dirname "$shot")" "$err"; die "снимок отменён"; }
                     got=$("$auth" --import-qr "$shot" "${sa[@]+"${sa[@]}"}" --print-all 2>"$err") || true
-                    rm -P "$shot" 2>/dev/null; rm -rf "$(dirname "$shot")" ;;
-                --camera)  got=$("$auth" --import-camera --print-all 2>"$err") || true ;;
+                    rm -P "$shot" 2>/dev/null; rm -rf "$(dirname "$shot")"
+                    # Без права на запись экрана снимок — рабочий стол без
+                    # чужих окон: QR на нём нет, и «не найден» сбивает с толку.
+                    if [ -z "$got" ] && [ "$("$auth" --screen-access 2>/dev/null)" = denied ]; then
+                        rm -f "$err"
+                        die "у ocbar нет права на запись экрана — снимок вышел без окон, QR на нём нет. Системные настройки → Конфиденциальность и безопасность → Запись экрана: разрешите ocbar (или терминалу, из которого запускаете), затем повторите"
+                    fi ;;
+                --camera)  got=$("$auth" --import-camera "${sa[@]+"${sa[@]}"}" --print-all 2>"$err") || true ;;
                 --stdin)   got=$("$auth" --import-otp "${sa[@]+"${sa[@]}"}" --print-all 2>"$err") || true ;;
                 *) rm -f "$err"; die "add-totp <профиль> --screen | --camera | --stdin [--select <часть имени>]" ;;
             esac
