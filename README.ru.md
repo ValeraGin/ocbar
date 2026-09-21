@@ -8,7 +8,7 @@
 прокси-режим без привилегий (`openconnect --script-tun` + `ocproxy`),
 приложение меню-бара на SwiftUI, раздача через Homebrew tap.
 
-![Меню ocbar](assets/menu.png)
+![Меню ocbar](assets/ru/menu.png)
 
 **Статус:** 0.4 — рабочий инструмент одного автора, которым он пользуется
 каждый день. Вход через SSO, туннель, split DNS, маршруты и зоны на лету,
@@ -74,7 +74,7 @@ sudo ./bin/ocbar install
 
 ### Профиль одним файлом
 
-![Окно профиля](assets/profile.png)
+![Окно профиля](assets/ru/profile.png)
 
 По образцу конфигов WireGuard: один файл — одно подключение, целиком.
 Кладётся в `~/.config/ocbar/profiles/<имя>.ocbar`, образец —
