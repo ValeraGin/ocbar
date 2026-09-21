@@ -41,6 +41,8 @@ struct Args {
     var printAll = false            // параметры и секрет одним вызовом (камера, ввод)
     var importOTP = false           // otpauth:// или секрет — со стандартного ввода
     var importCamera = false        // QR с камеры, без сверки с кодом
+    var qrPNG: String?              // QR из строки со входа — в PNG (для проверок)
+    var screenAccess = false        // есть ли право на запись экрана
     var teachDialogShot: String?
     var prompt: String?
     var promptTitle = ""
@@ -85,7 +87,13 @@ func usage() -> String {
                             ссылка otpauth://, экспорт Google Authenticator или
                             голый секрет base32 (пробелы и регистр не важны)
       --import-camera       QR с камеры, без сверки с кодом; печатает, как
-                            --print-all
+                            --print-all; в QR несколько записей — нужна одна или
+                            --select. OCBAR_SELFTEST_CAMERA_FRAMES=a.png:b.png —
+                            кадры из файлов вместо камеры, без окна
+      --qr-png FILE         QR из строки со стандартного ввода — в PNG (для
+                            проверок: то, что человек выделил бы на экране)
+      --screen-access       есть ли право на запись экрана: granted или denied
+                            (снимок без права — пустой рабочий стол)
       --totp-now            напечатать текущий код из OCBAR_TOTP_SECRET с
                             параметрами OCBAR_TOTP_*; OCBAR_TOTP_AT — момент (unix)
       --learn               разметка: открыть форму входа и показать мышью, где
@@ -104,7 +112,8 @@ func usage() -> String {
       --prompt-shot FILE    снимок окна «Код из SMS» в PNG
       --teach-dialog-shot FILE   снимок окна «Запомнить для следующего входа?»
                             в PNG, без показа и без записи в связку ключей
-      --camera-window-shot FILE  снимок окна камеры в PNG; камера не включается
+      --camera-window-shot FILE  снимок окна камеры в PNG; камера не включается;
+                            с --import-camera — окно добавления кода с нуля
       -h, --help            эта справка
 
     Опции входа:
@@ -175,6 +184,8 @@ func parseArgs() -> Args {
         case "--print-all": a.printAll = true
         case "--import-otp": a.importOTP = true
         case "--import-camera": a.importCamera = true
+        case "--qr-png": a.qrPNG = next(arg)
+        case "--screen-access": a.screenAccess = true
         case "--list": a.listEntries = true
         case "--totp-now": a.totpNow = true
         case "--learn": a.learn = true
@@ -332,7 +343,7 @@ if args.selfTest {
     let flags = ["--url", "--useragent", "--version", "--device-id", "--rules", "--timeout", "--show-after",
                  "--always-show", "--no-window", "--no-autofill", "--fill-hosts", "--probe", "--dump-script",
                  "--selftest", "--import-qr", "--print-secret", "--print-params", "--list", "--totp-now",
-                 "--print-all", "--import-otp", "--import-camera",
+                 "--print-all", "--import-otp", "--import-camera", "--qr-png", "--screen-access",
                  "--learn", "--learn-selftest", "--learn-probe", "--teach-out", "--teach-on",
                  "--teach-dialog-shot", "--camera-window-shot", "--out", "--select", "--json", "--insecure",
                  "--verbose", "-v", "--help", "-h"]
@@ -380,13 +391,32 @@ func otpEntries(text: String) throws -> [QRImport.Entry] {
                            algorithm: "SHA1", isTOTP: true, period: 30)]
 }
 
+if let path = args.qrPNG {
+    let raw = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !raw.isEmpty, let png = QRImport.png(payload: raw),
+          (try? png.write(to: URL(fileURLWithPath: path))) != nil else {
+        Log.error("QR не записан в \(path)")
+        exit(1)
+    }
+    exit(0)
+}
+
+if args.screenAccess {
+    // Снимок экрана без права на запись даёт рабочий стол без чужих окон —
+    // QR на нём нет, и без этой проверки человек видит только «не найден».
+    let forced = ProcessInfo.processInfo.environment["OCBAR_SELFTEST_SCREEN_ACCESS"] ?? ""
+    out(forced.isEmpty ? (CGPreflightScreenCaptureAccess() ? "granted" : "denied") : forced)
+    exit(0)
+}
+
 // Камера: окно с видеопотоком, первое распознанное — ответ. Своё приложение
 // AppKit нужно и здесь, поэтому ветка отдельная.
-if args.importCamera {
+if args.importCamera && args.cameraWindowShot == nil {
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
     DispatchQueue.main.async {
-        let r = QRCameraWindow(code: "", at: Date()).run()
+        let r = QRCameraWindow(code: "", at: Date(), select: args.selectEntry).run()
         guard let e = r.entry, e.isTOTP else {
             Log.error(r.entry == nil ? r.note : "это HOTP (код по счётчику) — ocbar его не ведёт")
             exit(1)
@@ -401,10 +431,7 @@ if args.importCamera {
 if args.importQR != nil || args.importOTP {
     do {
         let entries = try otpEntries(args)
-        func label(_ e: QRImport.Entry) -> String {
-            let i = e.issuer.isEmpty ? "" : e.issuer + "/"
-            return i + (e.name.isEmpty ? "(без имени)" : e.name)
-        }
+        func label(_ e: QRImport.Entry) -> String { e.label }
         if args.listEntries {
             out("записей в QR: \(entries.count)")
             for (i, e) in entries.enumerated() {
@@ -573,7 +600,7 @@ if let shotPath = args.cameraWindowShot {
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
     DispatchQueue.main.async {
-        let ok = QRCameraWindow.shot(to: shotPath)
+        let ok = QRCameraWindow.shot(to: shotPath, adding: args.importCamera)
         out(ok ? "снимок: \(shotPath)" : "снимок не получился")
         exit(ok ? 0 : 1)
     }

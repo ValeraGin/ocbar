@@ -171,6 +171,28 @@ enum AuthSelfTest {
         var hotp = totp; hotp.isTOTP = false
         ok("камера без кода: TOTP подходит, HOTP — нет",
            QRCameraWindow.fits(totp, code: "", at: Date()) && !QRCameraWindow.fits(hotp, code: "", at: Date()))
+        // Добавление с нуля: из нескольких записей молча не берём ни одной.
+        let vpn = QRImport.Entry(secretBase32: secret, name: "alice", issuer: "VPN", digits: 6, algorithm: "SHA1", isTOTP: true, period: 30)
+        var mail = vpn; mail.issuer = "Mail"; mail.secretBase32 = "GEZDGNBVGY3TQOJQ"
+        let one = QRCameraWindow.decide([vpn], code: "", at: Date())
+        ok("добавление: единственная запись TOTP берётся", one.entry?.issuer == "VPN", one.status)
+        let two = QRCameraWindow.decide([mail, vpn], code: "", at: Date())
+        ok("добавление: из двух записей молча не берётся ни одна, названы обе",
+           two.entry == nil && two.status.contains("записей: 2") && two.status.contains("Mail/alice") && two.status.contains("VPN/alice"), two.status)
+        let picked = QRCameraWindow.decide([mail, vpn], code: "", at: Date(), select: "vpn")
+        ok("добавление: --select выбирает нужную", picked.entry?.issuer == "VPN", picked.status)
+        let miss = QRCameraWindow.decide([mail, vpn], code: "", at: Date(), select: "bank")
+        ok("добавление: --select мимо — отказ со списком", miss.entry == nil && miss.status.contains("bank") && miss.status.contains("Есть:"), miss.status)
+        let onlyHOTP = QRCameraWindow.decide([hotp], code: "", at: Date())
+        ok("добавление: только HOTP — отказ", onlyHOTP.entry == nil && onlyHOTP.status.contains("HOTP"), onlyHOTP.status)
+        // QR, который проверки «показывают» вместо экрана и камеры, читается
+        // тем же путём, что снимок экрана.
+        let pngPath = NSTemporaryDirectory() + "ocbar-qr-selftest-\(getpid()).png"
+        let qrLink = "otpauth://totp/VPN:alice?secret=\(secret)"
+        let wrote = QRImport.png(payload: qrLink).map { (try? $0.write(to: URL(fileURLWithPath: pngPath))) != nil } ?? false
+        let back = (try? QRImport.decode(file: pngPath)) ?? []
+        try? FileManager.default.removeItem(atPath: pngPath)
+        ok("--qr-png: картинка читается обратно в ту же ссылку", wrote && back == [qrLink], "\(back)")
     }
 
     // MARK: - журнал в --verbose

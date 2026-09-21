@@ -20,6 +20,19 @@ enum QRImport {
         var period: Int
     }
 
+    /// QR из строки — PNG с белыми полями. Для проверок без человека: то,
+    /// что человек выделил бы рамкой на экране (ocbar-auth --qr-png).
+    static func png(payload: String) -> Data? {
+        guard let f = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        f.setValue(Data(payload.utf8), forKey: "inputMessage")
+        f.setValue("M", forKey: "inputCorrectionLevel")
+        guard var q = f.outputImage else { return nil }
+        q = q.samplingNearest().transformed(by: CGAffineTransform(scaleX: 8, y: 8))
+        q = q.composited(over: CIImage(color: .white).cropped(to: q.extent.insetBy(dx: -32, dy: -32)))
+        q = q.transformed(by: CGAffineTransform(translationX: -q.extent.minX, y: -q.extent.minY))
+        return CIContext().pngRepresentation(of: q, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB())
+    }
+
     enum ImportError: Error, CustomStringConvertible {
         case noImage(String), noQR, notOTP, badPayload(String), empty
         var description: String {
@@ -190,4 +203,9 @@ private struct ProtoReader {
         }
         return nil
     }
+}
+
+extension QRImport.Entry {
+    /// «issuer/имя» — как запись называют человеку и как её ищет --select.
+    var label: String { (issuer.isEmpty ? "" : issuer + "/") + (name.isEmpty ? "(без имени)" : name) }
 }
