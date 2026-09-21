@@ -4,6 +4,14 @@
 
 enum Translations {
     static let en: [String: String] = [
+        "не удалось прочитать изображение: %@": "could not read the image: %@",
+        "в изображении нет QR-кода (или он нечитаем — попробуйте кадр покрупнее)": "no QR code in the image (or it is unreadable — try a larger frame)",
+        "QR прочитан, но это не QR второго фактора (нет ссылки otpauth://)": "the QR code was read, but it is not a two-factor QR code (no otpauth:// link)",
+        "QR второго фактора прочитан, но разобрать не удалось: %@": "the two-factor QR code was read but could not be parsed: %@",
+        "в QR нет ни одной записи TOTP": "no TOTP accounts in the QR code",
+        "под «%@» подходит несколько записей: %@ — уточните": "several accounts match “%@”: %@ — be more specific",
+        "в QR %@ записи: %@": "the QR code holds %@ accounts: %@",
+        "снимите QR одной записи или укажите нужную: --select <часть имени>": "capture a QR code with one account, or pick one: --select <part of name>",
         "Основной": "Main",
         "Парольная группа": "Password group",
         " · на других шагах ещё %@": " · %@ more on other steps",

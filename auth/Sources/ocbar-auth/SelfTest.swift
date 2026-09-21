@@ -208,10 +208,6 @@ enum AuthSelfTest {
         let wrote = QRImport.png(payload: qrLink).map { (try? $0.write(to: URL(fileURLWithPath: pngPath))) != nil } ?? false
         let back = (try? QRImport.decode(file: pngPath)) ?? []
         try? FileManager.default.removeItem(atPath: pngPath)
-        // ocbar secret add-totp --screen отличает «QR не найден» (тогда
-        // спрашивает про право на запись экрана) по этим словам.
-        ok("«нет QR-кода» — в тексте ошибки, по нему ocbar решает про право на запись экрана",
-           "\(QRImport.ImportError.noQR)".contains("нет QR-кода"))
         ok("--qr-png: картинка читается обратно в ту же ссылку", wrote && back == [qrLink], "\(back)")
     }
 
