@@ -24,7 +24,7 @@ struct SetupView: View {
         return 0
     }()
 
-    private var helperReady: Bool { store.helperWarning == nil && !doctorText.contains("не установлен") && !doctorText.isEmpty }
+    private var helperReady: Bool { store.helperWarning == nil && !doctorText.contains("не установлен") && !doctorText.contains("not installed") && !doctorText.isEmpty }
     private var hasProfile: Bool { saved != nil || !store.status.profiles.isEmpty }
     private var formFilled: Bool { !name.trimmed.isEmpty && !url.trimmed.isEmpty }
     private static let titles = [L("Системная часть"), L("Профиль"), L("Первый вход")]

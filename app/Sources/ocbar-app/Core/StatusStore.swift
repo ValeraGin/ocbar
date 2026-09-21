@@ -339,7 +339,7 @@ final class StatusStore: ObservableObject {
         perform("Идёт разметка формы…", cancel: "Отменить разметку", {
             let r = OcbarClient.shared.learn(profile: profile, cancel: $0)
             if case .ok(let text) = r {
-                return .ok(text.contains("отменена") ? "разметка отменена — профиль не тронут" : "правила записаны в профиль «\(profile)»")
+                return .ok((text.contains("отменена") || text.contains("cancelled")) ? "разметка отменена — профиль не тронут" : "правила записаны в профиль «\(profile)»")
             }
             return r
         }, completion: completion)

@@ -623,12 +623,19 @@ extension MenuView {
     /// Что делать с этой ошибкой: команда, которую приложение выполнить не
     /// может (нужен пароль или Homebrew), но может отдать в буфер обмена.
     static func fix(for message: String) -> (title: String, command: String)? {
+        // Клиент говорит на языке системы: узнаём по командам в сообщении,
+        // а слова — на обоих языках.
         let m = message.lowercased()
-        if m.contains("sudo ocbar install") || m.contains("нужен root") {
+        if m.range(of: #"sudo \S*ocbar install"#, options: .regularExpression) != nil,
+           !m.contains("--trust") {
             return (L("Скопировать команду"), "sudo ocbar install")
         }
-        if m.contains("нет openconnect") { return (L("Скопировать команду"), "brew install openconnect") }
-        if m.contains("нет ocproxy") || m.contains("ocproxy —") { return (L("Скопировать команду"), "brew install ocproxy") }
+        if m.contains("brew install openconnect") || m.contains("нет openconnect") || m.contains("no openconnect") {
+            return (L("Скопировать команду"), "brew install openconnect")
+        }
+        if m.contains("brew install ocproxy") || m.contains("нет ocproxy") || m.contains("no ocproxy") {
+            return (L("Скопировать команду"), "brew install ocproxy")
+        }
         if m.contains("--trust") { return (L("Скопировать команду"), "sudo ocbar install --trust") }
         return nil
     }
