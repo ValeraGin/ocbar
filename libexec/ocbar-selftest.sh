@@ -10,6 +10,9 @@
 cmd_selftest() {
     local tmp fails=0 total=0 skipped=0 out rc port bad qa tok oc ours foreign lp
     local -a pids=()
+    # Окна и причины отказа ocbar-auth — на языке системы; проверки сверяют
+    # русский текст, поэтому язык закреплён.
+    export OCBAR_LANG=ru
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-selftest.XXXXXX") || die "нет временного каталога"
     mkdir -p "$tmp/profiles" "$tmp/state" "$tmp/var" "$tmp/logs" "$tmp/other/profiles" "$tmp/fake" "$tmp/foreign"
     # Заглушка хелпера: пишет вызов в журнал и ведёт socks.state, как настоящий.
