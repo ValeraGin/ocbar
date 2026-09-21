@@ -72,7 +72,9 @@ struct ProfileEditorView: View {
     @State private var newPassword = ""
     @State private var askCodeText = false
     @State private var codeText = ""
-    @State private var secretNote: String?
+    // Итог — вместе с профилем, к которому он относится: съёмка QR идёт до
+    // пяти минут, за это время человек может открыть другой профиль.
+    @State private var secretNote: SecretNote?
     @State private var secretBusy = false
     // Имя файла нового профиля подставляется из названия, пока его не правили руками.
     @State private var autoFileName = ""
@@ -346,10 +348,11 @@ struct ProfileEditorView: View {
         } header: {
             Text(L("Вход"))
         } footer: {
-            Footnote(doc.auth == "password"
+            Footnote(SecretNote.shown(secretNote, for: loadedName)
+                 ?? (doc.auth == "password"
                  ? L("Пароль ocbar подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может.")
                  : doc.password == "ask" ? L("Пароль вводит человек — молчаливое переподключение работать не будет.")
-                 : secretNote ?? L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC."))
+                 : L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC.")))
         }
         if doc.auth != "password" {
             Section {
@@ -531,7 +534,7 @@ struct ProfileEditorView: View {
             let err = OcbarClient.shared.savePassword(profile: name, password: pw)
             DispatchQueue.main.async {
                 secretBusy = false
-                secretNote = err.map { L("пароль не сохранён: %@", $0) } ?? L("пароль сохранён в связке ключей")
+                secretNote = SecretNote(profile: name, text: err.map { L("пароль не сохранён: %@", $0) } ?? L("пароль сохранён в связке ключей"))
                 refreshSecrets()
             }
         }
@@ -540,19 +543,21 @@ struct ProfileEditorView: View {
     private func addCode(_ source: OcbarClient.TOTPSource, text: String? = nil) {
         guard let name = loadedName else { return }
         secretBusy = true
-        secretNote = source == .screen ? L("Выделите рамкой QR на экране — Esc отменяет")
-            : source == .camera ? L("Покажите QR камере") : nil
+        secretNote = source == .screen ? SecretNote(profile: name, text: L("Выделите рамкой QR на экране — Esc отменяет"))
+            : source == .camera ? SecretNote(profile: name, text: L("Покажите QR камере")) : nil
         DispatchQueue.global(qos: .userInitiated).async {
             let r = OcbarClient.shared.addTOTP(profile: name, from: source, text: text)
             DispatchQueue.main.async {
                 secretBusy = false
                 switch r {
                 case .success(let code):
-                    secretNote = L("код сохранён; сейчас %@ — сверьте с приложением-аутентификатором", code)
-                    // Клиент записал источник кода в профиль — перечитать файл.
-                    if !dirty { open(name) }
+                    secretNote = SecretNote(profile: name, text: L("код сохранён; сейчас %@ — сверьте с приложением-аутентификатором", code))
+                    // Клиент записал источник кода в профиль — перечитать файл,
+                    // но только если он всё ещё открыт: иначе редактор сам
+                    // перескочил бы с того профиля, который открыл человек.
+                    if loadedName == name && !dirty { open(name) }
                 case .failure(let why):
-                    secretNote = L("код не добавлен: %@", why)
+                    secretNote = SecretNote(profile: name, text: L("код не добавлен: %@", why))
                 }
                 refreshSecrets()
             }
@@ -1252,5 +1257,17 @@ struct ProfileEditorView: View {
                 }
             }
         }
+    }
+}
+
+/// Итог действия с паролем или кодом и профиль, к которому он относится.
+/// Показывается только у этого профиля.
+struct SecretNote: Equatable {
+    let profile: String
+    let text: String
+
+    static func shown(_ note: SecretNote?, for open: String?) -> String? {
+        guard let note, note.profile == open else { return nil }
+        return note.text
     }
 }
