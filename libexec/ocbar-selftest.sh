@@ -62,6 +62,7 @@ STUB
     # Жив ли процесс (зомби — не жив). Поддельные процессы — сироты, их
     # подбирает launchd, поэтому зомби не задерживаются.
     alive() { case "$(ps -p "$1" -o stat= 2>/dev/null)" in ''|Z*) return 1 ;; *) return 0 ;; esac; }
+    gone_now() { ! alive "$1"; }
     gone()  { local i=0; while alive "$1" && [ $i -lt 30 ]; do sleep 0.1; i=$((i+1)); done; ! alive "$1"; }
     # Фоновый процесс-сирота; печатает свой номер. Каждый живёт не дольше
     # двух минут, даже если проверка оборвётся.
@@ -518,6 +519,19 @@ STUB
     is "secret status --short: источники без обращения к секретам" "password=ask totp=sms" "$(run secret status h --short | tr '\n' ' ' | sed 's/ $//' || true)"
     rm -f "$tmp/profiles/h.ocbar"
     rm -f "$tmp/profiles/c.ocbar"
+    # app stop возвращается, только когда приложение вышло: за ним сразу
+    # идёт start, и живой ещё процесс тот принял бы за работающий.
+    # Подставное приложение выходит через секунду после TERM.
+    mkdir -p "$tmp/fakeapp/ocbar-selftest.app/Contents/MacOS"
+    printf '#!/bin/bash\ntrap "sleep 1; exit 0" TERM\nfor i in $(seq 1 600); do sleep 0.2; done\n' \
+        > "$tmp/fakeapp/ocbar-selftest.app/Contents/MacOS/ocbar-app"
+    chmod +x "$tmp/fakeapp/ocbar-selftest.app/Contents/MacOS/ocbar-app"
+    local fa; fa=$(spawn "$tmp/fakeapp/ocbar-selftest.app/Contents/MacOS/ocbar-app"); pids+=("$fa")
+    sleep 0.3
+    local chk
+    chk=$(OCBAR_SELFTEST_APP_PATTERN='ocbar-selftest\.app/Contents/MacOS/ocbar-app' run app stop)
+    has "app stop: остановлено" "остановлено" "$chk"
+    check "app stop: вернулся, когда процесс уже вышел" gone_now "$fa"
     # Пароль и код из настроек приложения: значения идут в security через
     # stdin (-i), в аргументах их нет; причина отказа — словами ocbar-auth.
     # Заглушка security ведёт одну запись, как связка на один секрет.
@@ -537,7 +551,6 @@ STUB
     chmod +x "$tmp/kc/security"
     kcrun() { OCBAR_SELFTEST_SECURITY="$tmp/kc/security" run "$@"; }
     printf '[Connection]\nName = Секреты\nUrl = vpn.example.test/k\nUser = tester\n\n[Auth]\nTotp = keychain\n' > "$tmp/profiles/k.ocbar"
-    local chk
     chk=$(printf '%s\n' 'pa"ss\wo rd' | kcrun secret set-password k --stdin)
     has "пароль со входа: сохранён" "пароль сохранён" "$chk"
     is "пароль со входа: в связке ровно он, с кавычкой и слэшем" 'pa"ss\wo rd' "$(cat "$tmp/kc/value" 2>/dev/null)"
