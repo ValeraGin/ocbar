@@ -179,6 +179,10 @@ enum SelfTest {
         check("итог с секретом не переезжает на другой профиль", SecretNote.shown(note, for: "home") == nil)
         check("итог с секретом не виден у нового несохранённого профиля", SecretNote.shown(note, for: nil) == nil)
 
+        // --- проверка прав (ocbar://debug-access) ---
+        let access = AccessProbe.parse("screen=granted camera=not-determined\n")
+        check("права: ответ ocbar secret access разбирается", access["screen"] == "granted" && access["camera"] == "not-determined", "\(access)")
+
         // --- глобальная горячая клавиша ---
         // Сочетание системное: занятое другой программой не регистрируется.
         // Берём заведомо редкое, чтобы проверка не зависела от того, что

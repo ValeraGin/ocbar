@@ -578,6 +578,10 @@ STUB
         chmod +x "$tmp/kc/screencapture"
         shot_add() { OCBAR_SELFTEST_SCREEN_ACCESS="${OCBAR_SELFTEST_SCREEN_ACCESS:-granted}" OCBAR_AUTH="$qa" OCBAR_SELFTEST_SCREENCAPTURE="$tmp/kc/screencapture" OCBAR_STUB_SHOT="$1" kcrun secret add-totp k --screen "${@:2}" || true; }
         cam_add() { OCBAR_AUTH="$qa" OCBAR_SELFTEST_CAMERA_FRAMES="$1" kcrun secret add-totp k --camera "${@:2}" || true; }
+        matches "secret access: права одной строкой, без профиля" '^screen=(granted|denied) camera=[a-z-]+$' \
+            "$(OCBAR_AUTH="$qa" run secret access)"
+        is "secret access: право на экран — как видит ocbar-auth" "screen=denied" \
+            "$(OCBAR_AUTH="$qa" OCBAR_SELFTEST_SCREEN_ACCESS=denied run secret access | cut -d' ' -f1)"
         : > "$tmp/kc/value"
         has "экран: QR из рамки сохранён" "код сохранён" "$(shot_add "$tmp/kc/one.png")"
         is "экран: в связке секрет из QR" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"

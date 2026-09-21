@@ -92,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where !Notifier.handle(url) {
             if MenuProbe.handle(url) { continue }
+            if AccessProbe.handle(url) { continue }
             AppLog.write("неизвестный URL: \(url.absoluteString)")
         }
     }
