@@ -1208,6 +1208,14 @@ cmd_secret() {
             shift
         done
     fi
+    if [ "$what" = access ]; then
+        # Права на запись экрана и камеру — такими, какими их видит ocbar-auth,
+        # запущенный отсюда: так же он запускается у кнопок «Снять QR с
+        # экрана…» и «Камерой…». Профиль не нужен, ничего не спрашивает.
+        local auth; auth=$(auth_path) || die "не найден ocbar-auth"
+        printf 'screen=%s camera=%s\n' "$("$auth" --screen-access 2>/dev/null || echo '?')" "$("$auth" --camera-access 2>/dev/null || echo '?')"
+        return 0
+    fi
     load_profile "$p"
     case "$what" in
         set-password)
@@ -3679,6 +3687,8 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocbar secret set-password|set-totp|status|code [профиль]   Keychain; code — текущий код
   ocbar secret set-password <профиль> --stdin
                                       пароль одной строкой со входа (без терминала)
+  ocbar secret access                 права на запись экрана и камеру, как их видит
+                                      ocbar-auth (screen=granted|denied camera=…)
   ocbar secret add-totp <профиль> --screen|--camera|--stdin [--select ИМЯ]
                                       код второго фактора: QR рамкой с экрана,
                                       камерой или ссылка otpauth:// / секрет со входа

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 
 // ocbar-auth — аутентификатор Cisco AnyConnect в режиме single-sign-on-v2.
@@ -43,6 +44,7 @@ struct Args {
     var importCamera = false        // QR с камеры, без сверки с кодом
     var qrPNG: String?              // QR из строки со входа — в PNG (для проверок)
     var screenAccess = false        // есть ли право на запись экрана
+    var cameraAccess = false        // что с доступом к камере (не спрашивает)
     var teachDialogShot: String?
     var prompt: String?
     var promptTitle = ""
@@ -94,6 +96,8 @@ func usage() -> String {
                             проверок: то, что человек выделил бы на экране)
       --screen-access       есть ли право на запись экрана: granted или denied
                             (снимок без права — пустой рабочий стол)
+      --camera-access       доступ к камере: authorized, denied, restricted или
+                            not-determined; сам доступ не запрашивает
       --totp-now            напечатать текущий код из OCBAR_TOTP_SECRET с
                             параметрами OCBAR_TOTP_*; OCBAR_TOTP_AT — момент (unix)
       --learn               разметка: открыть форму входа и показать мышью, где
@@ -186,6 +190,7 @@ func parseArgs() -> Args {
         case "--import-camera": a.importCamera = true
         case "--qr-png": a.qrPNG = next(arg)
         case "--screen-access": a.screenAccess = true
+        case "--camera-access": a.cameraAccess = true
         case "--list": a.listEntries = true
         case "--totp-now": a.totpNow = true
         case "--learn": a.learn = true
@@ -343,7 +348,7 @@ if args.selfTest {
     let flags = ["--url", "--useragent", "--version", "--device-id", "--rules", "--timeout", "--show-after",
                  "--always-show", "--no-window", "--no-autofill", "--fill-hosts", "--probe", "--dump-script",
                  "--selftest", "--import-qr", "--print-secret", "--print-params", "--list", "--totp-now",
-                 "--print-all", "--import-otp", "--import-camera", "--qr-png", "--screen-access",
+                 "--print-all", "--import-otp", "--import-camera", "--qr-png", "--screen-access", "--camera-access",
                  "--learn", "--learn-selftest", "--learn-probe", "--teach-out", "--teach-on",
                  "--teach-dialog-shot", "--camera-window-shot", "--out", "--select", "--json", "--insecure",
                  "--verbose", "-v", "--help", "-h"]
@@ -407,6 +412,17 @@ if args.screenAccess {
     // QR на нём нет, и без этой проверки человек видит только «не найден».
     let forced = ProcessInfo.processInfo.environment["OCBAR_SELFTEST_SCREEN_ACCESS"] ?? ""
     out(forced.isEmpty ? (CGPreflightScreenCaptureAccess() ? "granted" : "denied") : forced)
+    exit(0)
+}
+
+if args.cameraAccess {
+    switch AVCaptureDevice.authorizationStatus(for: .video) {
+    case .authorized: out("authorized")
+    case .denied: out("denied")
+    case .restricted: out("restricted")
+    case .notDetermined: out("not-determined")
+    @unknown default: out("unknown")
+    }
     exit(0)
 }
 

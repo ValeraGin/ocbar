@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 
 // Проверка живого меню без человека: приложение само нажимает свой значок в
@@ -116,5 +117,59 @@ enum MenuProbe {
             }
         }
         next()
+    }
+}
+
+// Права без человека: видит ли ocbar-auth, запущенный через ocbar (как у
+// кнопок «Снять QR с экрана…» и «Камерой…»), те же права, что само
+// приложение. Если нет — подсказка про право будет врать.
+//
+//   open "ocbar://debug-access?token=<токен уведомлений>"
+//   итог — строка «проверка прав: ИТОГ» в app.log
+enum AccessProbe {
+    static func handle(_ url: URL) -> Bool {
+        guard url.scheme == "ocbar", url.host == "debug-access" else { return false }
+        let token = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "token" }?.value
+        guard let token, let expected = Notifier.expectedToken, !expected.isEmpty, token == expected else {
+            AppLog.write("debug-access: чужой токен — пропускаю")
+            return true
+        }
+        DispatchQueue.global(qos: .utility).async { run() }
+        return true
+    }
+
+    static func own() -> (screen: String, camera: String) {
+        let screen = CGPreflightScreenCaptureAccess() ? "granted" : "denied"
+        let camera: String
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized: camera = "authorized"
+        case .denied: camera = "denied"
+        case .restricted: camera = "restricted"
+        case .notDetermined: camera = "not-determined"
+        @unknown default: camera = "unknown"
+        }
+        return (screen, camera)
+    }
+
+    /// «screen=granted camera=authorized» → поля.
+    static func parse(_ line: String) -> [String: String] {
+        var d: [String: String] = [:]
+        for part in line.split(separator: " ") {
+            let kv = part.split(separator: "=", maxSplits: 1).map(String.init)
+            if kv.count == 2 { d[kv[0]] = kv[1].trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+        return d
+    }
+
+    private static func run() {
+        let mine = own()
+        guard let binary = OcbarClient.shared.binary else { AppLog.write("проверка прав: ИТОГ ПЛОХО — ocbar не найден"); return }
+        let r = Shell.run(binary, ["secret", "access"], timeout: 20)
+        let theirs = parse(r.out)
+        AppLog.write("проверка прав: приложение screen=\(mine.screen) camera=\(mine.camera); через ocbar \(r.out.trimmed)")
+        let same = theirs["screen"] == mine.screen && theirs["camera"] == mine.camera
+        AppLog.write(same ? "проверка прав: ИТОГ ОК — совпадает"
+                          : "проверка прав: ИТОГ ПЛОХО — расходится (код \(r.code)\(r.err.isEmpty ? "" : ", " + r.err.trimmed))")
     }
 }
