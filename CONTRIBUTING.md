@@ -65,7 +65,10 @@ key means: CLI parser, app parser, validation in both, example file, docs.
 UI text: every string the person sees goes through `L("…")` with the Russian
 text as the key, and `app/Resources/en.lproj/Localizable.strings` holds the
 English. `tools/i18n-scan.py --check` lists what is missing and fails the
-build, so a new screen cannot ship half-translated. Strings that are compared
+build, so a new screen cannot ship half-translated. The sign-in windows (`auth/`) use
+the same `L("…")`; `ocbar-auth` has no bundle, so its English lives in
+`auth/Sources/ocbar-auth/Translations.swift`, checked by the same scan. Log
+lines and messages the CLI parses stay in Russian. Strings that are compared
 against output of the CLI, or written into files, are not UI text and stay
 unwrapped.
 

@@ -3,6 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.16.0 — 2026-09-21
+
+- The sign-in windows speak English when the system does, like the app:
+  the SMS code and VPN password prompts, "Remember how I sign in", "Remember
+  for the next sign-in?", the form mark-up window and the camera window.
+  The log and the messages the command line reads stay as they were.
+- The password prompt points to Settings → Profiles → Sign-in to save the
+  password, instead of a terminal command.
+- `tools/i18n-scan.py --check` covers the sign-in windows too.
+
 ## 0.15.6 — 2026-09-21
 
 - README screenshots in both languages: `assets/` shows the English
