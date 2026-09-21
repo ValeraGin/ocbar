@@ -3513,7 +3513,9 @@ app_path() {
     done
     return 1
 }
-app_pid() { pgrep -f 'ocbar\.app/Contents/MacOS/ocbar-app' 2>/dev/null | head -1 || true; }
+# Самопроверка подставляет свой шаблон: иначе она нашла бы (и остановила)
+# настоящее приложение.
+app_pid() { pgrep -f "${OCBAR_SELFTEST_APP_PATTERN:-ocbar\.app/Contents/MacOS/ocbar-app}" 2>/dev/null | head -1 || true; }
 
 # Лаунчер и Spotlight видят программы только в /Applications и ~/Applications,
 # а Homebrew кладёт бандл в свой Cellar и за пределы префикса писать не может.
@@ -3569,7 +3571,14 @@ cmd_app() {
         stop)
             local p; p=$(app_pid)
             [ -n "$p" ] || { info "не работает"; return 0; }
-            kill "$p" && ok "остановлено" "pid $p" ;;
+            kill "$p" || die "не остановилось (pid $p)"
+            # Ждать выхода: сразу за stop обычно идёт start, и живой ещё
+            # процесс он принял бы за работающее приложение — копия в
+            # ~/Applications осталась бы старой (выпуск 0.15.4).
+            local i=0
+            while kill -0 "$p" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+            kill -0 "$p" 2>/dev/null && die "не вышло за 5 с (pid $p)"
+            ok "остановлено" "pid $p" ;;
         status)
             [ -n "$a" ] && ok "Бандл" "$a" || bad "Бандл" "не найден"
             if [ -d "$APP_USER_COPY" ]; then
