@@ -561,6 +561,46 @@ STUB
             "$(printf 'not a secret!!\n' | OCBAR_AUTH="$qa" kcrun secret add-totp k --stdin || true)"
         has "код: HOTP не сохраняется" "по счётчику" \
             "$(printf 'otpauth://hotp/VPN:t?secret=JBSWY3DPEHPK3PXP&counter=1\n' | OCBAR_AUTH="$qa" kcrun secret add-totp k --stdin || true)"
+        # Экран и камера — без человека: рамку «выделяет» заглушка
+        # screencapture (кладёт готовый QR туда, куда просил ocbar), кадры
+        # камеры идут из файлов. Дальше путь тот же, что у живых.
+        local mig='otpauth-migration://offline?data=CiEKCjEyMzQ1Njc4OTASB3NvbWVvbmUaBE1haWwgASgBMAIKHwoKSGVsbG8h3q2%2B7xIGdGVzdGVyGgNWUE4gASgBMAIQARgBIAAoAA%3D%3D'
+        printf '%s\n' 'otpauth://totp/VPN:tester?secret=JBSWY3DPEHPK3PXP' | "$qa" --qr-png "$tmp/kc/one.png"
+        printf '%s\n' "$mig" | "$qa" --qr-png "$tmp/kc/two.png"
+        # Картинка без QR — как снимок экрана без права на запись.
+        printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==' | base64 -D > "$tmp/kc/blank.png"
+        cat > "$tmp/kc/screencapture" <<'STUB'
+#!/bin/bash
+for a; do dst="$a"; done
+[ -n "${OCBAR_STUB_SHOT:-}" ] && cp "$OCBAR_STUB_SHOT" "$dst"
+exit 0
+STUB
+        chmod +x "$tmp/kc/screencapture"
+        shot_add() { OCBAR_AUTH="$qa" OCBAR_SELFTEST_SCREENCAPTURE="$tmp/kc/screencapture" OCBAR_STUB_SHOT="$1" kcrun secret add-totp k --screen "${@:2}" || true; }
+        cam_add() { OCBAR_AUTH="$qa" OCBAR_SELFTEST_CAMERA_FRAMES="$1" kcrun secret add-totp k --camera "${@:2}" || true; }
+        : > "$tmp/kc/value"
+        has "экран: QR из рамки сохранён" "код сохранён" "$(shot_add "$tmp/kc/one.png")"
+        is "экран: в связке секрет из QR" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
+        has "экран: Esc — «снимок отменён»" "снимок отменён" "$(shot_add "")"
+        chk=$(shot_add "$tmp/kc/two.png")
+        has "экран: экспорт на две записи — названы обе" "Mail/someone, VPN/tester" "$chk"
+        hasnt "экран: из двух записей ни одна не сохранена молча" "код сохранён" "$chk"
+        : > "$tmp/kc/value"
+        has "экран: --select выбирает запись из экспорта" "код сохранён" "$(shot_add "$tmp/kc/two.png" --select vpn)"
+        is "экран: выбрана нужная запись" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
+        has "экран: без права на запись — сказано про право" "Запись экрана" \
+            "$(OCBAR_SELFTEST_SCREEN_ACCESS=denied shot_add "$tmp/kc/blank.png")"
+        chk=$(OCBAR_SELFTEST_SCREEN_ACCESS=granted shot_add "$tmp/kc/blank.png")
+        has "экран: право есть, QR нет — причина словами ocbar-auth" "нет QR-кода" "$chk"
+        hasnt "экран: право есть — про право не говорим" "Запись экрана" "$chk"
+        : > "$tmp/kc/value"
+        has "камера: кадр без QR и экспорт на две пропущены, нужный QR сохранён" "код сохранён" \
+            "$(cam_add "$tmp/kc/blank.png:$tmp/kc/two.png:$tmp/kc/one.png")"
+        is "камера: в связке секрет из QR" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
+        has "камера: только экспорт на две — причина, без сохранения" "экспортируйте одну" "$(cam_add "$tmp/kc/two.png")"
+        : > "$tmp/kc/value"
+        has "камера: --select выбирает запись из экспорта" "код сохранён" "$(cam_add "$tmp/kc/two.png" --select vpn)"
+        is "камера: выбрана нужная запись" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
     else
         omit "код ссылкой: сохранение, параметры, причина отказа" "не найден ocbar-auth (OCBAR_AUTH или auth/.build/release)"
     fi
