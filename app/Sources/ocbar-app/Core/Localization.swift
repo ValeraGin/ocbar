@@ -11,7 +11,14 @@ func L(_ ru: String) -> String {
     Bundle.main.localizedString(forKey: ru, value: ru, table: nil)
 }
 
-/// То же с подстановками: «Всегда: %@».
-func L(_ ru: String, _ args: CVarArg...) -> String {
-    String(format: L(ru), arguments: args)
+/// То же с подстановками: «Всегда: %@». Значения любые: каждое становится
+/// текстом и встаёт на место очередного %@. String(format:) здесь не годится —
+/// число, переданное в %@, роняло приложение (так упало окно журналов).
+func L(_ ru: String, _ args: Any...) -> String {
+    var out = L(ru)
+    for arg in args {
+        guard let r = out.range(of: "%@") else { break }
+        out.replaceSubrange(r, with: "\(arg)")
+    }
+    return out
 }

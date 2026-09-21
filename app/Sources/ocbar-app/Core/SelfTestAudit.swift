@@ -22,6 +22,7 @@ extension SelfTest {
         auditProfileParsing(t)
         auditProfileChecks(t)
         auditStatus(t)
+        auditLocalization(t)
         auditProfileVerdicts(t)
         auditNotify(t)
         auditTimeouts(t)
@@ -132,6 +133,18 @@ extension SelfTest {
         t.check("состояние: битый JSON — не состояние, а nil", Status.parse(json: "{не json") == nil)
         t.check("состояние: пустой JSON — состояние по умолчанию",
                 Status.parse(json: "{}")?.presentation == .down)
+    }
+
+    // --- перевод с подстановками -----------------------------------------------
+
+    static func auditLocalization(_ t: Tally) {
+        // Число в %@ раньше роняло приложение: окно журналов падало при
+        // открытии из диагностики.
+        let s = L("%@ строк · %@", 3, "12 КБ")
+        t.check("перевод: число в подстановке — текстом, без падения",
+                s.contains("3") && s.contains("12 КБ"), s)
+        t.check("перевод: подстановок меньше, чем %@ — остаток как есть",
+                L("%@ · %@", "a").hasPrefix("a"), L("%@ · %@", "a"))
     }
 
     // --- согласие редактора и клиента --------------------------------------

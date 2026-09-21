@@ -48,7 +48,7 @@ struct ProfileEditorView: View {
     @State private var learnResult: String?
     // Редкое свёрнуто: наверху то, что нужно для входа.
     @State private var showNets = false
-    @State private var showMore = false
+    @State private var showMore = CommandLine.arguments.contains("--advanced")
     // Есть ли пароль и секрет кода в связке — `ocbar secret status --short`.
     @State private var secrets: [String: String] = [:]
     // Редактор разбит на три части, как вкладки профиля: вход, режим, сети.
@@ -361,7 +361,27 @@ struct ProfileEditorView: View {
             } header: { Text(L("Форма входа")) }
         }
         Section {
-            DisclosureGroup(isExpanded: $showMore) {
+            // Вся строка нажимается, а не только треугольник: у стандартного
+            // раскрывающегося блока в форме в него было трудно попасть.
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { showMore.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(showMore ? 90 : 0))
+                        .frame(width: 14)
+                    Text(L("Дополнительно")).foregroundStyle(.primary)
+                    Spacer()
+                    Text(L("User-Agent, MTU, DTLS, CSD, правила")).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("Дополнительно"))
+            .accessibilityValue(showMore ? L("раскрыто") : L("свёрнуто"))
+            if showMore {
                 field(L("Имя файла"), $doc.fileName, hint: L("имя.ocbar в ~/.config/ocbar/profiles"))
                 userAgentField
                 field("CsdWrapper", $doc.csdWrapper, hint: L("если шлюз просит проверку соответствия"))
@@ -381,12 +401,6 @@ struct ProfileEditorView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
-                }
-            } label: {
-                HStack {
-                    Text(L("Дополнительно"))
-                    Spacer()
-                    Text(L("User-Agent, MTU, DTLS, CSD, правила")).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
         }
