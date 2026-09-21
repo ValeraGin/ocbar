@@ -3,6 +3,19 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.0 — 2026-09-21
+
+- The command line speaks English when the system does: every message,
+  notification and `ocbar help`. `OCBAR_LANG=ru|en` picks the language
+  explicitly. The log and the machine-readable output (`--short`, `--json`,
+  `key=value`) stay as they were.
+- Reasons for refusing a two-factor code (no QR code in the image, several
+  accounts in one export) come in the same language.
+- The app recognises the client's hints ("sudo ocbar install", "brew install
+  openconnect/ocproxy", "not installed") in both languages.
+- `tools/i18n-scan.py --check` now covers the command line: a message
+  without a translation fails the build.
+
 ## 0.16.0 — 2026-09-21
 
 - The sign-in windows speak English when the system does, like the app:
