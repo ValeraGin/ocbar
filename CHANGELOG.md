@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.15.5 — 2026-09-21
+
+- `ocbar app stop` returns only after the app has exited. Run right before
+  `ocbar app start`, it used to leave the old process alive for a moment, so
+  `start` reported "already running" and the copy in `~/Applications` stayed
+  on the previous version after an upgrade.
+
 ## 0.15.4 — 2026-09-21
 
 - `ocbar secret access` shows the Screen Recording and camera permissions as
