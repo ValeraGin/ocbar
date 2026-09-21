@@ -419,6 +419,18 @@ printf 'STATE=connected\nTUNDEV=utun5\n' > "$ST/tunnel.env"
 reason=reconnect TUNDEV=utun7 as_oc 'INTERNAL_IP4_ADDRESS=10.9.0.2 "$H" --dry-run vpnc'
 check 14 "vpnc reconnect от лишней сессии не уводит маршруты на свой utun" \
     all rc0 'has "от лишней сессии"' 'hasnt "ifconfig utun7"' 'hasnt "маршрут: 10.1.0.0/16"' 'fline "$ST/tunnel.env" TUNDEV=utun5'
+# openconnect при выходе стирает общий pidfile: текущая узнаётся по отметке.
+fresh; stamp "$A"; printf 'STATE=connected\nTUNDEV=utun5\n' > "$ST/tunnel.env"; echo "10.0.0.0/8 utun5" > "$ST/routes.state"
+reason=disconnect TUNDEV=utun7 as_oc '"$H" --dry-run vpnc'
+check 14 "pidfile стёрт выходящей сессией: vpnc лишней всё равно не трогает текущую" \
+    all rc0 'has "текущая — pid $A"' 'hasnt "маршрут снят"' 'fline "$ST/tunnel.env" STATE=connected'
+check 14 "pidfile стёрт: восстанавливается по отметке запуска" fline "$ST/openconnect.pid" "$A"
+fresh; stamp "$A"
+H_ tunnel-stop
+check контроль "pidfile стёрт: tunnel-stop всё равно гасит текущую" all 'has "kill -INT $A"' 'has "kill -INT $B"'
+fresh; printf '%s чужое время\n' "$A" > "$ST/openconnect.started"
+H_ tunnel-stop
+check контроль "pidfile нет, отметка не того процесса — текущей нет" all 'hasnt "восстанавливаю"' 'has "openconnect не запущен"'
 fresh; printf 'STATE=connected\nTUNDEV=utun5\n' > "$ST/tunnel.env"; echo "10.0.0.0/8 utun5" > "$ST/routes.state"
 reason=disconnect TUNDEV=utun5 as_oc 'echo $$ > "$ST/openconnect.pid"; "$H" --dry-run vpnc'
 check контроль "vpnc disconnect от текущей сессии убирает её состояние" \
