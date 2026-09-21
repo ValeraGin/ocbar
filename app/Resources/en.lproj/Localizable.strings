@@ -410,3 +410,11 @@
 "%@ с" = "%@ s";
 "одноразовый код %@" = "one-time code %@";
 "ocbar не найден" = "ocbar is not found";
+"Основной" = "Main";
+"Любые устройства" = "Any device";
+"Из офиса" = "Office";
+"Изнутри сети" = "From inside the network";
+"Парольная группа" = "Password group";
+"пароль + код из SMS" = "password + SMS code";
+"живое состояние" = "live state";
+"живое состояние · подробности" = "live state · details";

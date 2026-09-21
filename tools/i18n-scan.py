@@ -33,8 +33,8 @@ def keys(report_unwrapped: bool = False) -> list[str]:
     unwrapped: list[str] = []
     for root in SOURCES:
         for path in sorted(root.rglob("*.swift")):
-            if path.name in {"SelfTest.swift", "SelfTestAudit.swift", "Stage.swift"}:
-                continue  # самопроверка и витрина человеку не показываются
+            if path.name in {"SelfTest.swift", "SelfTestAudit.swift"}:
+                continue  # самопроверка человеку не показывается; витрина — да: из неё кадры README
             for line in path.read_text(encoding="utf-8").split("\n"):
                 if line.lstrip().startswith("//"):
                     continue

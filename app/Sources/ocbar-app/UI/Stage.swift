@@ -5,11 +5,13 @@ import SwiftUI
 // tools/ui-lab/index.html, в поставке она не мешает: обычный запуск её не
 // показывает.
 enum Fixture {
-    static let demoProfiles: [(String, String)] = [
+    // Имена и описания — через перевод: витрина снимает кадры для README
+    // на обоих языках, и русское имя профиля в английском кадре выглядит ошибкой.
+    static var demoProfiles: [(String, String)] { [
         ("main", """
         [Connection]
-        Name        = Основной
-        Description = Любые устройства
+        Name        = \(L("Основной"))
+        Description = \(L("Любые устройства"))
         Url         = vpn.example.com/employees
         User        = alice
         [Routes]
@@ -24,8 +26,8 @@ enum Fixture {
         """),
         ("office", """
         [Connection]
-        Name        = Из офиса
-        Description = Изнутри сети
+        Name        = \(L("Из офиса"))
+        Description = \(L("Изнутри сети"))
         Url         = vpn.example.com/office
         User        = alice
         [Routes]
@@ -33,12 +35,12 @@ enum Fixture {
         """),
         ("sms", """
         [Connection]
-        Name        = Парольная группа
-        Description = пароль + код из SMS
+        Name        = \(L("Парольная группа"))
+        Description = \(L("пароль + код из SMS"))
         Url         = vpn.example.com/sms
         User        = alice
         """),
-    ]
+    ] }
 
     /// Временный каталог конфигурации с вымышленными профилями.
     static func demoConfigDir() -> String? {
@@ -57,11 +59,11 @@ enum Fixture {
         var s = Status()
         s.profile = "main"
         s.profiles = [
-            ProfileEntry(name: "main", title: "Основной", auth: "", descr: "Любые устройства",
+            ProfileEntry(name: "main", title: L("Основной"), auth: "", descr: L("Любые устройства"),
                          url: "vpn.example.com/employees"),
-            ProfileEntry(name: "office", title: "Из офиса", auth: "", descr: "Изнутри сети",
+            ProfileEntry(name: "office", title: L("Из офиса"), auth: "", descr: L("Изнутри сети"),
                          url: "office-vpn.example.com/inside"),
-            ProfileEntry(name: "sms", title: "Парольная группа", auth: "password", descr: "",
+            ProfileEntry(name: "sms", title: L("Парольная группа"), auth: "password", descr: "",
                          url: "vpn2.example.com/sms"),
         ]
         s.defaultProfile = "main"
@@ -156,7 +158,7 @@ struct LiveStageView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("живое состояние").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                Text(L("живое состояние")).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                 MenuView()
                     .environmentObject(store)
                     .fixedSize(horizontal: false, vertical: true)
@@ -164,7 +166,7 @@ struct LiveStageView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text("живое состояние · подробности").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+                Text(L("живое состояние · подробности")).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
                 MenuView(expandDetails: true, expandProfiles: true)
                     .environmentObject(store)
                     .fixedSize(horizontal: false, vertical: true)
@@ -274,7 +276,7 @@ struct StageView: View {
                 .environmentObject(StatusStore(
                     preview: status,
                     samples: Fixture.samples(active: active),
-                    latency: "41 мс", busy: busy, actionNote: note))
+                    latency: "41 " + L("мс"), busy: busy, actionNote: note))
                 .fixedSize(horizontal: false, vertical: true)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
@@ -311,7 +313,7 @@ struct ScreenshotMenuView: View {
         MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles)
             .environmentObject(StatusStore(preview: Fixture.status(.connected),
                                            samples: Fixture.samples(active: true),
-                                           latency: "41 мс", busy: nil, actionNote: nil))
+                                           latency: "41 " + L("мс"), busy: nil, actionNote: nil))
             .fixedSize(horizontal: false, vertical: true)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
