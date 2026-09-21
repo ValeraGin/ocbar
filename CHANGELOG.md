@@ -3,6 +3,23 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.15.1 — 2026-09-21
+
+- Adding a code now says why it failed, in the authenticator's own words —
+  for example that the QR holds several accounts — instead of a generic
+  "not recognised". `ocbar secret add-totp` takes `--select <part of name>`
+  for such exports.
+- The result of saving a password or code stays with its profile: it no
+  longer shows up under another profile, and a slow camera or screen capture
+  no longer switches the editor back to the profile it started on. Password
+  groups now show the result too.
+- Codes saved from a QR image, the camera or a link get the same keychain
+  label as `ocbar secret set-totp`.
+- Self-tests cover saving the password and code: what reaches the keychain,
+  that neither shows up in process arguments, parameters written to the
+  profile, and the reason for a refusal. The new `ocbar-auth` flags are
+  documented in `--help`.
+
 ## 0.15.0 — 2026-09-21
 
 - Password and one-time code without the terminal. Settings → Profiles → Sign-in
