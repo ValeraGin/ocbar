@@ -576,7 +576,7 @@ for a; do dst="$a"; done
 exit 0
 STUB
         chmod +x "$tmp/kc/screencapture"
-        shot_add() { OCBAR_AUTH="$qa" OCBAR_SELFTEST_SCREENCAPTURE="$tmp/kc/screencapture" OCBAR_STUB_SHOT="$1" kcrun secret add-totp k --screen "${@:2}" || true; }
+        shot_add() { OCBAR_SELFTEST_SCREEN_ACCESS="${OCBAR_SELFTEST_SCREEN_ACCESS:-granted}" OCBAR_AUTH="$qa" OCBAR_SELFTEST_SCREENCAPTURE="$tmp/kc/screencapture" OCBAR_STUB_SHOT="$1" kcrun secret add-totp k --screen "${@:2}" || true; }
         cam_add() { OCBAR_AUTH="$qa" OCBAR_SELFTEST_CAMERA_FRAMES="$1" kcrun secret add-totp k --camera "${@:2}" || true; }
         : > "$tmp/kc/value"
         has "экран: QR из рамки сохранён" "код сохранён" "$(shot_add "$tmp/kc/one.png")"
@@ -590,6 +590,10 @@ STUB
         is "экран: выбрана нужная запись" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
         has "экран: без права на запись — сказано про право" "Запись экрана" \
             "$(OCBAR_SELFTEST_SCREEN_ACCESS=denied shot_add "$tmp/kc/blank.png")"
+        # Право не дано, но QR прочитан — дело не в праве: называем записи.
+        chk=$(OCBAR_SELFTEST_SCREEN_ACCESS=denied shot_add "$tmp/kc/two.png")
+        has "экран: без права, но QR прочитан — причина про записи" "Mail/someone, VPN/tester" "$chk"
+        hasnt "экран: без права, но QR прочитан — про право не говорим" "Запись экрана" "$chk"
         chk=$(OCBAR_SELFTEST_SCREEN_ACCESS=granted shot_add "$tmp/kc/blank.png")
         has "экран: право есть, QR нет — причина словами ocbar-auth" "нет QR-кода" "$chk"
         hasnt "экран: право есть — про право не говорим" "Запись экрана" "$chk"
