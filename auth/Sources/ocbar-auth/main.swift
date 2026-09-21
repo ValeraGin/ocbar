@@ -79,6 +79,13 @@ func usage() -> String {
         --print-secret      вывести секрет в stdout (для ocbar secret import)
         --print-params      вывести «TOTP|HOTP алгоритм цифры период» записи —
                             решить, годится ли она, до того как класть секрет
+        --print-all         параметры первой строкой, секрет второй — одним
+                            вызовом (для ocbar secret add-totp)
+      --import-otp          то же, что --import-qr, но со стандартного ввода:
+                            ссылка otpauth://, экспорт Google Authenticator или
+                            голый секрет base32 (пробелы и регистр не важны)
+      --import-camera       QR с камеры, без сверки с кодом; печатает, как
+                            --print-all
       --totp-now            напечатать текущий код из OCBAR_TOTP_SECRET с
                             параметрами OCBAR_TOTP_*; OCBAR_TOTP_AT — момент (unix)
       --learn               разметка: открыть форму входа и показать мышью, где
@@ -325,6 +332,7 @@ if args.selfTest {
     let flags = ["--url", "--useragent", "--version", "--device-id", "--rules", "--timeout", "--show-after",
                  "--always-show", "--no-window", "--no-autofill", "--fill-hosts", "--probe", "--dump-script",
                  "--selftest", "--import-qr", "--print-secret", "--print-params", "--list", "--totp-now",
+                 "--print-all", "--import-otp", "--import-camera",
                  "--learn", "--learn-selftest", "--learn-probe", "--teach-out", "--teach-on",
                  "--teach-dialog-shot", "--camera-window-shot", "--out", "--select", "--json", "--insecure",
                  "--verbose", "-v", "--help", "-h"]
@@ -352,21 +360,24 @@ func otpEntries(_ a: Args) throws -> [QRImport.Entry] {
             entries.append(contentsOf: (try? QRImport.parse(payload)) ?? [])
         }
     } else if a.importOTP {
-        let raw = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if raw.lowercased().hasPrefix("otpauth") {
-            entries = try QRImport.parse(raw)
-        } else {
-            // Голый секрет из поля «ключ настройки»: пробелы и регистр не важны.
-            let secret = raw.replacingOccurrences(of: " ", with: "").uppercased()
-            guard !secret.isEmpty, TOTP.code(secretBase32: secret, params: TOTPParams()) != nil else {
-                throw QRImport.ImportError.empty
-            }
-            entries = [QRImport.Entry(secretBase32: secret, name: "", issuer: "", digits: 6,
-                                      algorithm: "SHA1", isTOTP: true, period: 30)]
-        }
+        let raw = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        entries = try otpEntries(text: raw)
     }
     return entries
+}
+
+/// Текст из поля «ссылка или секрет»: otpauth:// (и экспорт Google
+/// Authenticator) или голый секрет из «ключа настройки» — пробелы и регистр
+/// не важны.
+func otpEntries(text: String) throws -> [QRImport.Entry] {
+    let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if raw.lowercased().hasPrefix("otpauth") { return try QRImport.parse(raw) }
+    let secret = raw.replacingOccurrences(of: " ", with: "").uppercased()
+    guard !secret.isEmpty, TOTP.code(secretBase32: secret, params: TOTPParams()) != nil else {
+        throw QRImport.ImportError.empty
+    }
+    return [QRImport.Entry(secretBase32: secret, name: "", issuer: "", digits: 6,
+                           algorithm: "SHA1", isTOTP: true, period: 30)]
 }
 
 // Камера: окно с видеопотоком, первое распознанное — ответ. Своё приложение
@@ -418,7 +429,8 @@ if args.importQR != nil || args.importOTP {
             // Молча взять первую из нескольких — верный способ записать чужой
             // секрет и потом долго не понимать, почему код не подходит.
             Log.error("в QR \(candidates.count) записи: \(candidates.map(label).joined(separator: ", "))")
-            Log.error("укажите нужную: --select <часть имени> (у ocbar: secret import-qr <файл> --select <часть имени>)")
+            // Читает это и человек в настройках приложения, и в терминале.
+            Log.error("снимите QR одной записи или укажите нужную: --select <часть имени>")
             exit(1)
         } else {
             chosen = candidates.first ?? entries.first
