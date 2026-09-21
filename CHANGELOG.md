@@ -3,6 +3,20 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.15.2 — 2026-09-21
+
+- Adding a code with the camera no longer takes the first account from an
+  export that holds several: it asks for an export with one account, or
+  `--select <part of name>`. The camera window explains what to show when
+  a code is added from scratch.
+- Capturing a QR code on screen without the Screen Recording permission now
+  says so, instead of "no QR code found" on a capture that shows only the
+  desktop.
+- Screen capture, the camera and the keychain are covered end to end
+  without a person: from the editor's buttons through `ocbar` and
+  `ocbar-auth` to what reaches the keychain. New `ocbar-auth --qr-png` and
+  `--screen-access` for such checks.
+
 ## 0.15.1 — 2026-09-21
 
 - Adding a code now says why it failed, in the authenticator's own words —

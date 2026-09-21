@@ -26,6 +26,15 @@ All of these run in CI on every push and must stay green. No network, no
 privileges, no VPN: configs are synthetic, state and logs go to a temporary
 directory, the helper is replaced by a stub.
 
+What a person would do is replaced by stand-ins, so the checks run
+unattended: `OCBAR_SELFTEST_SECURITY` (the keychain — a script that records
+what reached it), `OCBAR_SELFTEST_SCREENCAPTURE` (drawing a frame around a QR
+code on screen — a ready-made image), `OCBAR_SELFTEST_CAMERA_FRAMES` (the
+camera — PNG frames, no window), `OCBAR_SELFTEST_SCREEN_ACCESS` (the Screen
+Recording permission). `ocbar-auth --qr-png FILE` turns a string into the QR
+image these checks show. A new step that waits for a human needs its own
+stand-in, not a line in "not verified".
+
 **Every behaviour change needs a check that fails without it.** The self-tests
 are the specification; a regression that no check catches is how this project
 breaks. Prove it: temporarily revert your fix and show the check failing.
