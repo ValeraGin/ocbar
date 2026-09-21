@@ -65,6 +65,14 @@ jobs:
           OCBAR_AUTH: ${{ github.workspace }}/auth/.build/release/ocbar-auth
         run: bin/ocbar selftest
 
+      - name: CLI and auth self-tests in the brew test sandbox
+        env:
+          OCBAR_AUTH: ${{ github.workspace }}/auth/.build/release/ocbar-auth
+        run: |
+          t=$(mktemp -d /private/tmp/ocbar-brewsb.XXXXXX)
+          TMPDIR="$t" sandbox-exec -f tools/brew-sandbox.sb bin/ocbar selftest
+          TMPDIR="$t" sandbox-exec -f tools/brew-sandbox.sb auth/.build/release/ocbar-auth --selftest
+
       - name: Build app bundle
         run: app/make-app.sh
 

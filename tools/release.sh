@@ -19,6 +19,16 @@ auth/.build/release/ocbar-auth --selftest >/dev/null
 auth/.build/release/ocbar-auth --learn-selftest >/dev/null
 tools/helper-selftest.sh >/dev/null
 OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" bin/ocbar selftest >/dev/null
+# И в песочнице brew test (tools/brew-sandbox.sb): там нет прав машины —
+# записи экрана, камеры, служб системы. Проверка, которая на них молча
+# опирается, падает здесь, до push, а не в brew test после выпуска (0.15.2).
+sbtmp=$(mktemp -d /private/tmp/ocbar-brewsb.XXXXXX)
+TMPDIR="$sbtmp" OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" \
+    sandbox-exec -f tools/brew-sandbox.sb bin/ocbar selftest > "$sbtmp.log" 2>&1 \
+    || { grep -E 'FAIL|selftest:' "$sbtmp.log" >&2; echo "release: самопроверка не проходит в песочнице brew — полный вывод: $sbtmp.log" >&2; exit 1; }
+TMPDIR="$sbtmp" sandbox-exec -f tools/brew-sandbox.sb auth/.build/release/ocbar-auth --selftest > "$sbtmp.log" 2>&1 \
+    || { grep -E 'FAIL|selftest:' "$sbtmp.log" >&2; echo "release: ocbar-auth --selftest не проходит в песочнице brew — $sbtmp.log" >&2; exit 1; }
+rm -rf "$sbtmp" "$sbtmp.log"
 app/make-app.sh >/dev/null
 app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest >/dev/null
 grep -q "^## $ver " CHANGELOG.md || { echo "release: в CHANGELOG.md нет раздела $ver" >&2; exit 1; }

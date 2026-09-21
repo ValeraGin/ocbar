@@ -22,6 +22,15 @@ auth/.build/release/ocbar-auth --learn-selftest
 app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
 ```
 
+The CLI and `ocbar-auth` self-tests also run inside the sandbox `brew test`
+uses (`tools/brew-sandbox.sb`: no screen, camera or system services, writes
+only to temporary directories), so a check that quietly relies on this
+machine's permissions fails before release, not after:
+
+```bash
+TMPDIR=$(mktemp -d /private/tmp/ocbar-brewsb.XXXXXX) sandbox-exec -f tools/brew-sandbox.sb bin/ocbar selftest
+```
+
 All of these run in CI on every push and must stay green. No network, no
 privileges, no VPN: configs are synthetic, state and logs go to a temporary
 directory, the helper is replaced by a stub.
