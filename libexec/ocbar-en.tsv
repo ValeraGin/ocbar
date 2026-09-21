@@ -1,0 +1,391 @@
+# Английский для сообщений bin/ocbar: «русский шаблон<TAB>английский», {} —
+# подстановка ($var, ${…}, $(…) в коде), {1}, {2}… — если порядок другой.
+# Сверяет tools/i18n-scan.py --check; применяет libexec/ocbar-tr.pl.
+задан OCBAR_STATE_DIR ({}), а хелпер от root его не увидит — не зову; для опытов есть --dry-run	OCBAR_STATE_DIR is set ({}), but the root helper will not see it — not calling it; use --dry-run for experiments
+не найден ocbar-helper (ни {}, ни в libexec/ рядом)	ocbar-helper not found (neither {} nor in libexec/ next to it)
+хелпер не установлен под NOPASSWD, а терминала для пароля нет — sudo ocbar install	the helper is not installed under NOPASSWD and there is no terminal for a password — sudo ocbar install
+профиль [{}]: TotpAlgorithm = SHA1 | SHA256 | SHA512, а не '{}'	profile [{}]: TotpAlgorithm = SHA1 | SHA256 | SHA512, not '{}'
+профиль [{}]: TotpDigits = 6 | 7 | 8, а не '{}'	profile [{}]: TotpDigits = 6 | 7 | 8, not '{}'
+профиль [{}]: TotpPeriod — число секунд, а не '{}'	profile [{}]: TotpPeriod is a number of seconds, not '{}'
+профиль [{}]: TotpPeriod вне 10–300 с	profile [{}]: TotpPeriod is outside 10–300 s
+нет профиля: укажи имя или default в {} (образец: etc/profiles.conf.example)	no profile: give a name or set default in {} (example: etc/profiles.conf.example)
+профиля [{}] нет (есть: {}); ищу в {}/*.ocbar и в {}	no profile [{}] (available: {}); looking in {}/*.ocbar and in {}
+у профиля [{}] нет url	profile [{}] has no url
+профиль [{}]: password = auto | keychain | keepassxc | command | ask, а не '{}'	profile [{}]: password = auto | keychain | keepassxc | command | ask, not '{}'
+профиль [{}]: режим full убран (он не работал). Полный туннель — двумя строками в networks.conf: 0.0.0.0/1 и 128.0.0.0/1. Учтите, что шлюз может не выпускать наружу	profile [{}]: full mode was removed (it did not work). For a full tunnel, put two lines in networks.conf: 0.0.0.0/1 and 128.0.0.0/1. Note that the gateway may not let traffic out to the internet
+профиль [{}]: mode = split, а не '{}'	profile [{}]: mode = split, not '{}'
+не найден ocbar-status-json.py	ocbar-status-json.py not found
+profile-check <файл>	profile-check <file>
+нет файла: {}	no such file: {}
+профиль принимается	the profile is valid
+в {} нет Url в секции [Connection]	{} has no Url in the [Connection] section
+профиль [{}]: Mode = tunnel или proxy, а не '{}'	profile [{}]: Mode = tunnel or proxy, not '{}'
+профиль [{}]: Proxy Port = число, а не '{}'	profile [{}]: Proxy Port = a number, not '{}'
+профиль [{}]: Proxy Port вне диапазона 1024-65535	profile [{}]: Proxy Port is outside 1024-65535
+профиль [{}]: Mtu — число 576–9000, а не '{}'	profile [{}]: Mtu is a number 576–9000, not '{}'
+профиль [{}]: Mtu вне 576–9000	profile [{}]: Mtu is outside 576–9000
+профиль [{}]: Dtls = on | off, а не '{}'	profile [{}]: Dtls = on | off, not '{}'
+недопустимое имя зоны, пропущено: {}	invalid zone name, skipped: {}
+недопустимый адрес, пропущено: {} {}	invalid address, skipped: {} {}
+строка без DNS пропущена: {}	line without DNS skipped: {}
+некорректная сеть в профиле: {}	invalid network in the profile: {}
+сеть {} уводит в туннель почти весь трафик	network {} sends almost all traffic into the tunnel
+некорректная сеть в networks.conf: {}	invalid network in networks.conf: {}
+сеть {} уводит в туннель почти весь трафик — интернет пойдёт через шлюз	network {} sends almost all traffic into the tunnel — internet traffic will go through the gateway
+это код по счётчику (HOTP): ocbar его не ведёт — счётчик живёт в приложении, и две копии разойдутся после первого же входа	this is a counter-based code (HOTP): ocbar does not keep it — the counter lives in the app, and two copies drift apart after the very first sign-in
+алгоритм кода {} не поддерживается (бывает SHA1, SHA256, SHA512)	code algorithm {} is not supported (SHA1, SHA256, SHA512 are)
+в коде {} цифр — поддерживается 6, 7 или 8	the code has {} digits — 6, 7 or 8 are supported
+период кода «{}» не разобрался	could not parse the code period “{}”
+период кода {} с не поддерживается (10–300 с)	a code period of {} s is not supported (10–300 s)
+у записи нестандартные параметры ({}, {} цифр, {} с), а профиль [{}] — старого формата: их некуда записать. Переведите его в файл: ocbar export {} ~/.config/ocbar/profiles/{}.ocbar	the entry has non-standard parameters ({}, {} digits, {} s), but profile [{}] is in the old format: there is nowhere to write them. Convert it to a file: ocbar export {} ~/.config/ocbar/profiles/{}.ocbar
+параметры кода	code parameters
+профиль {} не записался — поставьте в [Auth]: TotpAlgorithm = {}, TotpDigits = {}, TotpPeriod = {}	profile {} was not written — put in [Auth]: TotpAlgorithm = {}, TotpDigits = {}, TotpPeriod = {}
+{}, {} цифр, {} с — записаны в профиль [{}]	{}, {} digits, {} s — written to profile [{}]
+не найден ocbar-auth	ocbar-auth not found
+пустой пароль — не сохраняю	empty password — not saving
+не удалось сохранить в Keychain	could not save to Keychain
+пароль сохранён в Keychain ({} / {})	password saved to Keychain ({} / {})
+Пароль для {} (сервис Keychain: {}). Ввод спросит security, в argv он не попадёт.	Password for {} (Keychain service: {}). security will ask for it; it will not end up in argv.
+сохранено	saved
+Выделите рамкой QR на экране (Esc — отмена)	Drag a frame around the QR code on screen (Esc to cancel)
+снимок отменён	capture cancelled
+у ocbar нет права на запись экрана — снимок вышел без окон, QR на нём нет. Системные настройки → Конфиденциальность и безопасность → Запись экрана: разрешите ocbar (или терминалу, из которого запускаете), затем повторите	ocbar has no screen recording permission — the capture came out without windows, so there is no QR code on it. System Settings → Privacy & Security → Screen Recording: allow ocbar (or the terminal you run it from), then try again
+add-totp <профиль> --screen | --camera | --stdin [--select <часть имени>]	add-totp <profile> --screen | --camera | --stdin [--select <part of name>]
+код сохранён в Keychain	code saved to Keychain
+{} — сверьте с приложением-аутентификатором	{} — check it against your authenticator app
+TOTP-секрет (base32) для {} (сервис Keychain: {}).	TOTP secret (base32) for {} (Keychain service: {}).
+использование: ocbar secret import-qr <файл-с-QR> [профиль]	usage: ocbar secret import-qr <QR-file> [profile]
+нет файла {}	no file {}
+Читаю QR из {} (секрет не печатается)	Reading the QR code from {} (the secret is not printed)
+QR не импортирован	QR code not imported
+декодер не вернул секрет	the decoder returned no secret
+секрет сохранён в Keychain ({} / totp/{})	secret saved to Keychain ({} / totp/{})
+код из Keychain	code from Keychain
+{} — должен совпасть с показанным выше и с приложением	{} — must match the one shown above and the one in the app
+Сверьте код с приложением. Совпал — включайте автоввод:	Check the code against the app. If it matches, turn on auto-fill:
+  в {} у профиля [{}] замените 'totp = off' на 'totp = auto'	  in {}, for profile [{}], replace 'totp = off' with 'totp = auto'
+Файл с QR лучше удалить: rm -P "{}"	Better delete the QR file: rm -P "{}"
+пароль	password
+из Keychain ({} / {})	from Keychain ({} / {})
+источник Keychain, но пароля там нет — ocbar secret set-password {}	source is Keychain, but the password is not there — ocbar secret set-password {}
+вводит человек (password = ask)	typed by you (password = ask)
+TOTP-секрет	TOTP secret
+лежит в Keychain, хотя источник — KeePassXC: лишняя копия	is in Keychain although the source is KeePassXC: a spare copy
+есть ({} / totp/{})	present ({} / totp/{})
+в Keychain не хранится — источник KeePassXC	not stored in Keychain — the source is KeePassXC
+нет — ocbar secret set-totp {} (если IdP просит код)	none — ocbar secret set-totp {} (if the IdP asks for a code)
+Автоввод TOTP	TOTP auto-fill
+выключен (totp = off) — код вводит человек	off (totp = off) — you type the code
+код приходит по SMS (Totp = sms) — вводит человек, молчаливого переподключения не будет	the code comes by SMS (Totp = sms) — you type it, there will be no silent reconnect
+из {} (код сейчас {})	from {} (code now {})
+из Keychain, один раз за вход{}	from Keychain, once per sign-in{}
+включён, но секрета нет	on, but there is no secret
+у профиля [{}] Totp = {} — код вводит человек	profile [{}] has Totp = {} — you type the code
+в Keychain нет TOTP-секрета ({} / totp/{})	no TOTP secret in Keychain ({} / totp/{})
+код не получен	no code received
+secret: set-password | set-totp | import-qr <файл> | status | code [профиль]	secret: set-password | set-totp | import-qr <file> | status | code [profile]
+не найден ocbar-auth — собрать: (cd auth && swift build -c release)	ocbar-auth not found — build it: (cd auth && swift build -c release)
+SSO: тайм-аут	SSO: timed out
+SSO: окно закрыто	SSO: window closed
+SSO: ошибка ({})	SSO: error ({})
+нет openconnect — brew install openconnect	no openconnect — brew install openconnect
+не найден ocbar-auth — нужен для окна кода из SMS	ocbar-auth not found — it is needed for the SMS code window
+парольная группа: код не введён вовремя	password group: the code was not entered in time
+парольная группа: вход отменён	password group: sign-in cancelled
+парольная группа: вход не прошёл — подробности в {}	password group: sign-in failed — details in {}
+logs: -n требует число	logs: -n needs a number
+logs: [-f] [-n строк] [supervisor|openconnect|proxy|auth|app …], а не «{}»	logs: [-f] [-n lines] [supervisor|openconnect|proxy|auth|app …], not “{}”
+logs: -n — число строк, а не «{}»	logs: -n is a number of lines, not “{}”
+не найден ocbar-logs.py	ocbar-logs.py not found
+сети без автоподключения:	networks without auto-connect:
+  (сейчас вы в одной из них)	  (you are on one of them now)
+сеть не опознаётся: нет маршрута по умолчанию или ARP пуст	network not recognised: no default route or the ARP table is empty
+эта сеть уже в списке	this network is already on the list
+автоподключение	auto-connect
+в этой сети ({}) не подключаюсь: {}	not connecting on this network ({}): {}
+сеть не опознаётся	network not recognised
+в этой сети ({}) снова подключаюсь	connecting on this network ({}) again
+autoconnect always <профиль>	autoconnect always <profile>
+профиля [{}] нет	no profile [{}]
+autoconnect [manual|resume|always <профиль>]	autoconnect [manual|resume|always <profile>]
+уже подключён (прокси, pid {}, SOCKS 127.0.0.1:{})	already connected (proxy, pid {}, SOCKS 127.0.0.1:{})
+уже подключён (pid {}, {})	already connected (pid {}, {})
+openconnect уже запускается — подожди или ocbar disconnect	openconnect is already starting — wait or run ocbar disconnect
+остались следы прошлой сессии — убираю	leftovers from a previous session — cleaning up
+[dry-run] аутентификация пропущена; подключение выглядело бы так:	[dry-run] authentication skipped; the connection would look like this:
+    (сначала отключение профиля [{}])	    (disconnecting profile [{}] first)
+Вход в парольную группу: {} ({}) — код из SMS спросит окно…	Signing in to the password group: {} ({}) — a window will ask for the SMS code…
+Вход через SSO: {} ({})…	Signing in via SSO: {} ({})…
+аутентификация не вернула токен	authentication returned no token
+балансировщик увёл на {} — туннель туда же	the load balancer redirected to {} — the tunnel goes there too
+подключён профиль [{}] — отключаю, чтобы подключить [{}]	profile [{}] is connected — disconnecting it to connect [{}]
+порт 127.0.0.1:{} не освободился после отключения [{}]	port 127.0.0.1:{} was not freed after disconnecting [{}]
+сессия получена, поднимаю туннель ({})…	session received, bringing up the tunnel ({})…
+openconnect умер при старте — хвост {}:	openconnect died on start — tail of {}:
+туннель не поднялся за 40 с (STATE={}), см. {}	the tunnel did not come up within 40 s (STATE={}), see {}
+запомненное	learned
+итог окна входа не разобрался — профиль не тронут; повторите: ocbar connect --teach	could not read the result of the sign-in window — profile untouched; try again: ocbar connect --teach
+правила формы	form rules
+не сохранились — повторите: ocbar connect --teach	not saved — try again: ocbar connect --teach
+код второго фактора	two-factor code
+секрет в связке ключей, проверен по введённому коду — Totp = keychain{}	secret in the keychain, checked against the code you entered — Totp = keychain{}
+секрет в связке ключей, но профиль {} не записался — поставьте в [Auth]: Totp = keychain	secret in the keychain, but profile {} was not written — put in [Auth]: Totp = keychain
+приходит по SMS — Totp = sms: вводите вы, молчаливого переподключения не будет	comes by SMS — Totp = sms: you type it, there will be no silent reconnect
+профиль {} не записался — поставьте в [Auth]: Totp = sms	profile {} was not written — put in [Auth]: Totp = sms
+в связке ключей — Password = keychain	in the keychain — Password = keychain
+в связке ключей, но профиль {} не записался — поставьте в [Auth]: Password = keychain	in the keychain, but profile {} was not written — put in [Auth]: Password = keychain
+прокси-режим: нет ocproxy — brew install ocproxy (в формулу он не входит: нужен только этому режиму)	proxy mode: no ocproxy — brew install ocproxy (it is not in the formula: only this mode needs it)
+не найден — brew install ocproxy	not found — brew install ocproxy
+порт 127.0.0.1:{} уже занят (чужой SOCKS? ocbar doctor покажет) — укажите другой в профиле, [Proxy] Port	port 127.0.0.1:{} is already taken (someone else's SOCKS? ocbar doctor will show) — set another one in the profile, [Proxy] Port
+нет openconnect	no openconnect
+сессия получена, поднимаю прокси (SOCKS 127.0.0.1:{})…	session received, bringing up the proxy (SOCKS 127.0.0.1:{})…
+openconnect завершился с кодом {} — хвост {}:	openconnect exited with code {} — tail of {}:
+_proxy-tun зовёт только openconnect --script-tun (нет VPNFD)	_proxy-tun is called only by openconnect --script-tun (no VPNFD)
+нет ocproxy	no ocproxy
+[dry-run] kill -INT {} (openconnect прокси-режима)	[dry-run] kill -INT {} (proxy-mode openconnect)
+[dry-run] kill {} (ocproxy этой сессии)	[dry-run] kill {} (this session's ocproxy)
+останавливаю openconnect прокси-режима (pid {})	stopping proxy-mode openconnect (pid {})
+не вышел за 10 с — SIGKILL	did not exit within 10 s — SIGKILL
+Системный SOCKS	System-wide SOCKS
+хелпер старее CLI и не умеет socks-set — sudo {} install	the helper is older than the CLI and cannot do socks-set — sudo {} install
+не нашёл активный сетевой сервис	could not find an active network service
+включён на «{}»	on for “{}”
+системный SOCKS включён, а прокси не отвечает — снимаю	system-wide SOCKS is on but the proxy does not answer — removing it
+[dry-run] прокси: процесса нет, а состояние говорит {} — пометил бы отключённым	[dry-run] proxy: no process, but the state says {} — would mark it disconnected
+прокси: процесса нет, а состояние говорит {} — помечаю отключённым	proxy: no process, but the state says {} — marking it disconnected
+[dry-run] kill {} (осиротевший ocproxy этой сессии)	[dry-run] kill {} (this session's orphaned ocproxy)
+осиротевший ocproxy этой сессии (pid {}) — гашу	this session's orphaned ocproxy (pid {}) — stopping it
+Проверка доступа	Access check
+{} отвечает	{} answers
+{} НЕ отвечает — туннель поднят, но доступа нет	{} does NOT answer — the tunnel is up, but there is no access
+[dry-run] ocbar disconnect, затем {} --forget-sessions	[dry-run] ocbar disconnect, then {} --forget-sessions
+сессии окна входа не стёрлись	the sign-in window sessions were not erased
+вышли совсем	signed out completely
+следующий ocbar connect покажет форму входа	the next ocbar connect will show the sign-in form
+не подключён	not connected
+отключён	disconnected
+не найден ocbar-status-json.py (ищу рядом с ocbar и в libexec)	ocbar-status-json.py not found (looking next to ocbar and in libexec)
+Прокси	Proxy
+openconnect жив (pid {}), но SOCKS 127.0.0.1:{} не отвечает — супервизор перезапустит	openconnect is alive (pid {}), but SOCKS 127.0.0.1:{} does not answer — the supervisor will restart it
+openconnect запускается (pid {})	openconnect is starting (pid {})
+Туннель	Tunnel
+не наш: работает чужой openconnect (pid {})	not ours: someone else's openconnect is running (pid {})
+не поднят	not up
+Профиль	Profile
+не выбран	not selected
+Шлюз	Gateway
+{} · DNS от шлюза: {}	{} · DNS from the gateway: {}
+Сеть	Network
+Маршруты и зоны	Routes and zones
+в прокси-режиме не используются: curl --socks5-hostname 127.0.0.1:{} …	not used in proxy mode: curl --socks5-hostname 127.0.0.1:{} …
+включён на: {}	on for: {}
+не включён (SystemProxy = off)	not on (SystemProxy = off)
+Маршруты	Routes
+networks.conf пуст	networks.conf is empty
+Зоны /etc/resolver	/etc/resolver zones
+{} наших: {}	{} ours: {}
+наших нет	none of ours
+Супервизор	Supervisor
+не запущен	not running
+Связь	Connection
+Сон	Sleep
+Автоподключение	Auto-connect
+остановлено: нужен вход — ocbar connect	stopped: sign-in needed — ocbar connect
+{} включена; применится при подключении туннелем	{} enabled; takes effect when the tunnel connects
+{} выключена	{} disabled
+туннель не поднят	the tunnel is not up
+туннель не поднят — маршрутов туннеля нет, снимать нечего	the tunnel is not up — there are no tunnel routes, nothing to remove
+  в {} остались записи прошлой сессии — ocbar cleanup	  {} still has entries from a previous session — ocbar cleanup
+Зоны в {}	Zones in {}
+пусто	empty
+Как это видит система (scutil --dns)	How the system sees it (scutil --dns)
+в {} нет ни одной активной зоны	{} has no active zones
+все зоны ждут DNS от шлюза (vpn), а туннель не поднят	all zones wait for DNS from the gateway (vpn), but the tunnel is not up
+Применяю зоны из {}	Applying zones from {}
+использование: ocbar dns init <файл-со-списком-доменов> <DNS|vpn>	usage: ocbar dns init <file-with-domain-list> <DNS|vpn>
+не похоже на адрес: {}	does not look like an address: {}
+конфиг уже есть: {} (правьте руками)	config already exists: {} (edit it by hand)
+создан {}	created {}
+наших зон в {} нет — снимать нечего	no zones of ours in {} — nothing to remove
+dns on <зона>	dns on <zone>
+dns off <зона>	dns off <zone>
+dns toggle <зона>	dns toggle <zone>
+dns: status | apply | clear | init <файл> <DNS|vpn> | on|off|toggle <зона>	dns: status | apply | clear | init <file> <DNS|vpn> | on|off|toggle <zone>
+порядок профилей	profile order
+профилей нет: положите файл в {} (образец etc/example.ocbar) или заполните {}	no profiles: put a file in {} (example: etc/example.ocbar) or fill in {}
+не нашёл страницу песочницы (tools/ui-lab/index.html)	could not find the sandbox page (tools/ui-lab/index.html)
+снимок состояния	state snapshot
+открываю {}	opening {}
+не разобрал XML: это точно профиль Cisco?	could not parse the XML: is this really a Cisco profile?
+в XML нет ни одного HostEntry — переносить нечего	the XML has no HostEntry — nothing to transfer
+профиль [{}] уже есть — пропускаю	profile [{}] already exists — skipping
+профиль [{}]	profile [{}]
+ничего не импортировано	nothing imported
+Перенесены только адреса серверов. Дальше укажите в профиле:	Only the server addresses were transferred. Next, set in the profile:
+  [Routes] — сети в туннель (список ваш, а не шлюза)	  [Routes] — networks for the tunnel (your list, not the gateway's)
+  [DNS]    — внутренние зоны, [Auth] — источник пароля и кода	  [DNS]    — internal zones, [Auth] — where the password and code come from
+  правила формы входа запишет первый вход: ocbar connect --teach	  the sign-in form rules are written by the first sign-in: ocbar connect --teach
+использование: ocbar import <файл.ocbar|профиль Cisco .xml> [имя]	usage: ocbar import <file.ocbar|Cisco profile .xml> [name]
+это не похоже на профиль ocbar: в [Connection] нет Url	this does not look like an ocbar profile: [Connection] has no Url
+имя профиля может содержать буквы, цифры, дефис и точку: {}	a profile name may contain letters, digits, hyphens and dots: {}
+профиль [{}] уже есть: {} (удалите или укажите другое имя)	profile [{}] already exists: {} (delete it or give another name)
+профиль [{}] импортирован	profile [{}] imported
+  подключение: {}	  connection: {}
+  сетей в туннель: {}, зон DNS: {}	  networks in the tunnel: {}, DNS zones: {}
+  код второго фактора: {}	  two-factor code: {}
+профиль импортирован, но прочитать его целиком не удалось	the profile was imported, but it could not be read in full
+профиль [{}] выгружен	profile [{}] exported
+  секретов в файле нет — можно передавать	  the file has no secrets — safe to share
+не найден ocbar-redact.py	ocbar-redact.py not found
+отчёт	report
+  перед отправкой посмотрите его глазами: {}	  look it over yourself before sending: {}
+Платформа	Platform
+не найден — brew install openconnect	not found — brew install openconnect
+openconnect (root-копия)	openconnect (root copy)
+нет — sudo ocbar install	none — sudo ocbar install
+Манифест доверия	Trust manifest
+хеши НЕ совпадают — после brew upgrade: sudo ocbar install --trust	hashes do NOT match — after brew upgrade: sudo ocbar install --trust
+по старому пути {} — sudo ocbar install перенесёт в {}	at the old path {} — sudo ocbar install will move it to {}
+не найден	not found
+{} — {}, должно быть root:wheel 755	{} — {}, must be root:wheel 755
+NOPASSWD на хелпер есть	NOPASSWD for the helper is set
+нет NOPASSWD — из меню/супервизора не сработает: sudo ocbar install	no NOPASSWD — will not work from the menu or the supervisor: sudo ocbar install
+Версия хелпера	Helper version
+{} — совпадает с {}	{} — matches {}
+{}: хелпер отстал от {} — sudo {} install	{}: the helper is behind {} — sudo {} install
+{} — умеет pause/resume	{} — supports pause/resume
+{} старее CLI: sudo {} install	{} is older than the CLI: sudo {} install
+не установлен, есть только {} (sudo спросит пароль)	not installed, only {} exists (sudo will ask for a password)
+{} — root, без записи для других	{} — root, not writable by others
+{} — хелпер откажется писать; chown root:wheel, chmod go-w, затем sudo ocbar install	{} — the helper will refuse to write; chown root:wheel, chmod go-w, then sudo ocbar install
+Каталог состояния	State directory
+старый путь {} — sudo ocbar install перенесёт в {}	old path {} — sudo ocbar install will move it to {}
+Профили	Profiles
+{} в {}, default={}	{} in {}, default={}
+нет {} — см. etc/profiles.conf.example	no {} — see etc/profiles.conf.example
+{} зон	{} zones
+нет — ocbar dns init	none — ocbar dns init
+нет — см. etc/networks.conf.example	none — see etc/networks.conf.example
+{} загружен	{} loaded
+plist есть, но не загружен: launchctl bootstrap gui/{} {}	plist present but not loaded: launchctl bootstrap gui/{} {}
+не установлен (sudo ocbar install)	not installed (sudo ocbar install)
+pid {}, код актуален	pid {}, code is current
+pid {} — версия кода неизвестна (запущен старой сборкой): ocbar supervisor restart	pid {} — code version unknown (started by an old build): ocbar supervisor restart
+Активный интерфейс	Active interface
+запускается	starting
+чужой openconnect работает (не наш pidfile)	someone else's openconnect is running (not our pidfile)
+Мусор от прошлых сессий	Leftovers from previous sessions
+DNS интерфейсов	Interface DNS
+у {} сервисов DNS 127.0.0.1, а резолвер не отвечает — не наше, сбросьте сами: networksetup -setdnsservers <сервис> Empty	{} services have DNS 127.0.0.1 and the resolver does not answer — not ours, reset it yourself: networksetup -setdnsservers <service> Empty
+интерфейсов с DNS 127.0.0.1: {} (на :53 кто-то отвечает — похоже, штатно)	interfaces with DNS 127.0.0.1: {} (something answers on :53 — looks normal)
+чисто	clean
+наши зоны /etc/resolver есть, а туннель не поднят	our /etc/resolver zones are present, but the tunnel is not up
+маршруты без живого туннеля: {}	routes without a live tunnel: {}
+tunnel.env говорит connected, а openconnect мёртв	tunnel.env says connected, but openconnect is dead
+Прокси-режим (Mode = proxy)	Proxy mode (Mode = proxy)
+нет — нужен только прокси-режиму: brew install ocproxy	none — only proxy mode needs it: brew install ocproxy
+работает: SOCKS 127.0.0.1:{}, pid {}	running: SOCKS 127.0.0.1:{}, pid {}
+openconnect жив (pid {}), а SOCKS 127.0.0.1:{} не отвечает	openconnect is alive (pid {}), but SOCKS 127.0.0.1:{} does not answer
+Порт {}	Port {}
+занят кем-то другим — профиль с Mode = proxy не подключится; кто слушает: lsof -nP -iTCP:{} -sTCP:LISTEN	taken by someone else — a profile with Mode = proxy will not connect; who is listening: lsof -nP -iTCP:{} -sTCP:LISTEN
+свободен	free
+proxy.env говорит {}, а процесса нет	proxy.env says {}, but there is no process
+включён на {}, а за 127.0.0.1:{} никто не отвечает — мак без сети	on for {}, but nothing answers at 127.0.0.1:{} — the Mac has no network
+наш, на {}	ours, on {}
+чужой, не трогаем: {}	someone else's, leaving it alone: {}
+не включён	not on
+Проблем не найдено.	No problems found.
+Проблем: {}. Починить — ocbar cleanup	Problems: {}. To fix: ocbar cleanup
+установленный хелпер старее CLI и не умеет паузу — обновите: sudo {} install	the installed helper is older than the CLI and cannot pause — update it: sudo {} install
+в прокси-режиме паузы нет: маршрутов и зон не ставилось, снимать нечего. Программы, которым указан SOCKS 127.0.0.1:{}, перестанут ходить только после ocbar disconnect	proxy mode has no pause: no routes or zones were set, nothing to remove. Programs pointed at SOCKS 127.0.0.1:{} stop working only after ocbar disconnect
+уже на паузе	already paused
+туннель не поднят — паузить нечего	the tunnel is not up — nothing to pause
+паузы нет, всё уже на месте	not paused, everything is already in place
+туннель не поднят — возобновлять нечего	the tunnel is not up — nothing to resume
+нужен root: sudo {} install	root needed: sudo {} install
+нет libexec/ocbar-helper рядом с {} — установка возможна только из дерева проекта	no libexec/ocbar-helper next to {} — install works only from the project tree
+источник и приёмник совпали ({}) — запускайте install из каталога проекта	source and destination are the same ({}) — run install from the project directory
+шаг не выполнен (код {}): {}	step failed (code {}): {}
+[dry-run] ничего не сделано. Плист выглядел бы так:	[dry-run] nothing done. The plist would look like this:
+установлено. Проверка: ocbar doctor	installed. Check: ocbar doctor
+загружен	loaded
+не загружен	not loaded
+Процесс	Process
+не работает	not running
+Последние записи:	Recent entries:
+нет {} — sudo ocbar install	no {} — sudo ocbar install
+агент загружен	agent loaded
+агент выгружен (туннель это переживёт: openconnect в своей сессии)	agent unloaded (the tunnel survives this: openconnect runs in its own session)
+агент не был загружен	the agent was not loaded
+агент перезапущен	agent restarted
+нужен root: sudo {} uninstall (посмотреть шаги — ocbar uninstall --dry-run)	root needed: sudo {} uninstall (to see the steps: ocbar uninstall --dry-run)
+состояние в {} оставлено (журнал openconnect, записи сессии); удалить: sudo rm -rf {}	state in {} kept (openconnect log, session records); to delete it: sudo rm -rf {}
+[dry-run] ничего не сделано	[dry-run] nothing done
+Правила автозаполнения для [{}]: {}	Auto-fill rules for [{}]: {}
+  (встроенные — Keycloak, Microsoft; свои — ocbar learn {})	  (built-in: Keycloak, Microsoft; your own: ocbar learn {})
+rules import <файл> [профиль]	rules import <file> [profile]
+профиль [{}] — старого формата (profiles.conf); правила в него не кладутся, используйте Rules = <файл>	profile [{}] is in the old format (profiles.conf); rules cannot go into it, use Rules = <file>
+непонятное правило	unrecognised rule
+правила не приняты — формат: stop <сел> | fill username|password|totp <сел> | click[!] <сел>	rules not accepted — format: stop <sel> | fill username|password|totp <sel> | click[!] <sel>
+не удалось записать {}	could not write {}
+правила в профиле [{}]	rules in profile [{}]
+профиль [{}] старого формата	profile [{}] is in the old format
+секция [Autofill] убрана из [{}]	[Autofill] section removed from [{}]
+действуют {}	now in effect: {}
+rules: show [профиль] | import <файл> [профиль] | clear [профиль]	rules: show [profile] | import <file> [profile] | clear [profile]
+learn: --out <файл>	learn: --out <file>
+Пробник разметки: профиль [{}], {} (без окна, ничего не нажимается)	Mark-up probe: profile [{}], {} (no window, nothing is clicked)
+Разметка формы входа: профиль [{}], {}	Sign-in form mark-up: profile [{}], {}
+  открою форму; отмечайте поля и кнопку мышью, потом «Готово»	  the form will open; mark the fields and the button with the mouse, then press “Done”
+  правила лягут в сам профиль ({}, секция [Autofill]; прошлая версия — рядом с суффиксом .bak)	  the rules go into the profile itself ({}, section [Autofill]; the previous version is kept next to it with the .bak suffix)
+  правила лягут в {} (прошлые — туда же с суффиксом .bak)	  the rules go into {} (the previous ones are kept there too, with the .bak suffix)
+  форма в несколько окон (сначала пароль, потом код)? Отметьте поля и кнопку первого окна	  a multi-window form (password first, then the code)? Mark the fields and the button of the first window
+правила записаны	rules written
+что получилось:	result:
+проверить на живом входе: ocbar connect --show	check on a live sign-in: ocbar connect --show
+разметка отменена — профиль не тронут	mark-up cancelled — profile untouched
+разметка не удалась (код {})	mark-up failed (code {})
+[dry-run] копия для лаунчера: {} → {}	[dry-run] launcher copy: {} → {}
+копия для лаунчера	launcher copy
+не записалась в {} — запускаю из {}	could not be written to {} — launching from {}
+не найден ocbar.app (соберите: app/make-app.sh, или brew install)	ocbar.app not found (build it: app/make-app.sh, or brew install)
+уже работает (pid {})	already running (pid {})
+запущено	started
+не остановилось (pid {})	did not stop (pid {})
+не вышло за 5 с (pid {})	did not exit within 5 s (pid {})
+остановлено	stopped
+Бандл	Bundle
+Копия для лаунчера	Launcher copy
+нет — появится при ocbar app start	none — appears on ocbar app start
+не запущено	not running
+Автозапуск	Start at login
+включён	on
+plist есть, но агент не загружен	plist present, but the agent is not loaded
+выключен (ocbar app autostart on)	off (ocbar app autostart on)
+не найден ocbar.app	ocbar.app not found
+автозапуск	start at login
+путь {} из дерева проекта; после переустановки повторите ocbar app autostart on	path {} is from the project tree; after reinstalling, run ocbar app autostart on again
+плист не разобрался	could not parse the plist
+автозапуск включён	start at login on
+автозапуск выключен	start at login off
+режим разработчика включён	developer mode on
+в меню — «Выйти совсем (сброс входа)»	the menu has “Sign out completely (reset login)”
+режим разработчика выключен	developer mode off
+режим разработчика: включён	developer mode: on
+режим разработчика: выключен	developer mode: off
+не найден ocbar-selftest.sh	ocbar-selftest.sh not found
+_selftest-fn — только для selftest (нет OCBAR_SELFTEST_HELPER)	_selftest-fn — for selftest only (no OCBAR_SELFTEST_HELPER)
+_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>	_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <bundle>
+прокси не поднялся за 40 с (STATE={}, порт {} {}), см. {}	the proxy did not come up within 40 s (STATE={}, port {} {}), see {}
+SOCKS 127.0.0.1:{} · адрес {} · {} · pid {}	SOCKS 127.0.0.1:{} · address {} · {} · pid {}
+на паузе: поднят ({}, {}), но маршруты и зоны сняты — ocbar resume	paused: up ({}, {}), but routes and zones are removed — ocbar resume
+работает (pid {})	running (pid {})
+не отвечает {} с — openconnect восстанавливает сессию сам	not answering for {} s — openconnect restores the session by itself
+мак просыпался после подключения ({}) — {}	the Mac woke up after connecting ({}) — {}
+профиля [{}] нет (есть: {})	no profile [{}] (available: {})
+{} файлов, хеши совпадают	{} files, hashes match
+pid {} работает по коду от {}, файл правился в {} — подхватит сам в течение 5 с	pid {} runs code from {}, the file changed at {} — it picks that up by itself within 5 s
+супервизор уже работает (pid {})	the supervisor is already running (pid {})
+{} правил{}, прошлая версия — {}.bak	{} rules{}, the previous version — {}.bak
+  и нажмите «Пройти шаг →»: ocbar заполнит их вашими данными (пароль: {}{}, код: {})	  and press “Next step →”: ocbar fills them with your data (password: {}{}, code: {})
+{} — версия {}, обновит ocbar app stop && ocbar app start	{} — version {}, ocbar app stop && ocbar app start updates it
