@@ -3,6 +3,17 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.2 — 2026-09-21
+
+- Stopping a stray session no longer takes the current one down with it.
+  openconnect deletes its pid file when it exits, and all of the helper's
+  sessions share one: a stray that exited (closed by the gateway or stopped
+  by `ocbar cleanup`) erased the current session's pid. The next stray's
+  disconnect then removed the current routes and DNS zones, and the
+  supervisor, seeing no tunnel, signed in again. The helper and the command
+  line now recognise the current session by its recorded start time as
+  well, and the helper restores the pid file.
+
 ## 0.17.1 — 2026-09-21
 
 - Stray openconnect sessions no longer pile up. The helper compared the
