@@ -3,6 +3,20 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.15.0 — 2026-09-21
+
+- Password and one-time code without the terminal. Settings → Profiles → Sign-in
+  has "Save…" for the password and "Add…" for the code: capture a QR code on
+  screen (drag a frame around it), use the camera, or paste an `otpauth://`
+  link or the setup key. Both go to the macOS keychain.
+- Once the code is set up, the row shows the current code and how long it is
+  valid, so you can compare it with your authenticator app before the first
+  sign-in.
+- Password and code sources (KeePassXC, your own command) moved to Advanced;
+  the keychain is the default.
+- CLI: `ocbar secret set-password <profile> --stdin` and `ocbar secret add-totp
+  <profile> --screen|--camera|--stdin`.
+
 ## 0.14.1 — 2026-09-21
 
 - Fixed a crash when opening Diagnostics and logs: a number passed into a

@@ -95,6 +95,38 @@ final class OcbarClient: @unchecked Sendable {
         return s
     }
 
+    // --- секреты профиля -------------------------------------------------
+
+    /// Сохранить пароль в связке ключей. Пароль идёт на стандартный вход
+    /// клиента, в аргументах его нет. nil — сохранено, иначе причина.
+    func savePassword(profile: String, password: String) -> String? {
+        guard let binary else { return L("ocbar не найден") }
+        let r = Shell.run(binary, ["secret", "set-password", profile, "--stdin"], stdin: password + "\n", timeout: 20)
+        return r.code == 0 ? nil : (r.err.isEmpty ? r.out : r.err).trimmed
+    }
+
+    enum TOTPSource: String { case screen = "--screen", camera = "--camera", text = "--stdin" }
+    enum TOTPAdded { case success(String), failure(String) }
+
+    /// Добавить код второго фактора: QR с экрана, с камеры или ссылкой.
+    /// Ответ — текущий код (для сверки) или причина отказа.
+    func addTOTP(profile: String, from source: TOTPSource, text: String? = nil) -> TOTPAdded {
+        guard let binary else { return .failure(L("ocbar не найден")) }
+        // Рамку на экране и камеру человек может держать долго.
+        let r = Shell.run(binary, ["secret", "add-totp", profile, source.rawValue],
+                          stdin: text.map { $0 + "\n" }, timeout: 300)
+        guard r.code == 0 else { return .failure((r.err.isEmpty ? r.out : r.err).trimmed) }
+        return .success(totpCode(profile: profile) ?? "")
+    }
+
+    /// Текущий одноразовый код профиля (из его источника) или nil.
+    func totpCode(profile: String) -> String? {
+        guard let binary else { return nil }
+        let r = Shell.run(binary, ["secret", "code", profile], timeout: 15)
+        let c = r.out.trimmed
+        return r.code == 0 && !c.isEmpty ? c : nil
+    }
+
     /// Примет ли клиент такой профиль. Редактор показывает свои подсказки по
     /// ходу правки, но сохранять то, что клиент отвергнет, нельзя: файл потом
     /// не подключится. nil — принимает, иначе причина отказа словами клиента.
