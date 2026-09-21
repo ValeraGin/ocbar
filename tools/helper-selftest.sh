@@ -405,6 +405,10 @@ H_ cleanup
 check 14 "cleanup находит и гасит лишнюю сессию, текущую оставляет" \
     all 'has "лишняя сессия openconnect: pid $B"' 'has "kill -INT $B"' 'hasnt "kill -INT $A"' 'hasnt "kill -INT $C"'
 check 14 "cleanup: pidfile живой сессии на месте" fline "$ST/openconnect.pid" "$A"
+fresh
+Hin $'cookie=x\n' tunnel-start vpn.example.com "$HASH" split user
+check 14 "tunnel-start без живого туннеля гасит прежние наши openconnect" \
+    all rc0 'has "kill -INT $A"' 'has "kill -INT $B"' 'hasnt "kill -INT $C"'
 fresh; echo "$A" > "$ST/openconnect.pid"; stamp "$A"
 printf 'STATE=connected\nTUNDEV=utun5\n' > "$ST/tunnel.env"; echo "10.0.0.0/8 utun5" > "$ST/routes.state"
 reason=disconnect TUNDEV=utun7 as_oc '"$H" --dry-run vpnc'

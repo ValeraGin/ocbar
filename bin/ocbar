@@ -922,6 +922,25 @@ tunnel_alive() {
     local p; p=$(tunnel_pid); [ -n "$p" ] || return 1
     case "$(ps -p "$p" -o comm= 2>/dev/null)" in *openconnect) return 0 ;; *) return 1 ;; esac
 }
+# Лишние сессии туннеля: наши openconnect (с нашим --pid-file), кроме
+# записанного в pidfile. Шлюз закрывает такую по простою, и хелпер до 0.17.1
+# снимал при этом маршруты и зоны текущей. Гасит их хелпер (cleanup,
+# tunnel-stop); здесь — только найти и назвать. Строка на сессию:
+# «pid ЧЧ:ММ» (время запуска).
+stray_tunnels() {
+    local live=""; tunnel_alive && live=$(tunnel_pid)
+    ps -axo pid=,command= 2>/dev/null | while read -r p c; do
+        case " $c " in *" --pid-file $PIDFILE "*) ;; *) continue ;; esac
+        [ "$p" != "$live" ] || continue
+        case "$(ps -p "$p" -o comm= 2>/dev/null)" in *openconnect) ;; *) continue ;; esac
+        local ls t
+        ls=$(LC_ALL=C ps -p "$p" -o lstart= 2>/dev/null | awk '{$1=$1; print}')
+        t=$(LC_ALL=C date -j -f '%a %b %d %T %Y' "$ls" '+%H:%M' 2>/dev/null || echo '?')
+        printf '%s %s\n' "$p" "$t"
+    done
+}
+# «pid 123 (с 09:50), pid 456 (с 10:20)» — для doctor и status.
+stray_tunnels_text() { stray_tunnels | awk '{printf "%spid %s (с %s)", (NR>1 ? ", " : ""), $1, $2}'; }
 is_paused() { [ -f "$PAUSED_FLAG" ]; }
 # paused — это подсостояние connected: процесс жив, сессия цела, но трафик
 # идёт мимо туннеля. Отдельное имя нужно, чтобы супервизор не «чинил» это.
@@ -2244,7 +2263,10 @@ cmd_status() {
     else
         dev=$(env_get TUNDEV); ip=$(env_get IP4); since=$(env_get CONNECTED); gw=$(env_get GATEWAY); dns=$(env_get DNS); url=$(env_get URL); mode=$(env_get MODE)
     fi
-    local foreign=""; if [ "$st" = down ] && pgrep -x openconnect >/dev/null 2>&1; then foreign=1; fi
+    # Лишние сессии — наши, а не чужие: без этой сверки меню называло их
+    # «чужим туннелем» и не предлагало подключиться.
+    local strays=""; strays=$(stray_tunnels | awk '{print $1}' | paste -sd, -)
+    local foreign=""; if [ "$st" = down ] && [ -z "$strays" ] && pgrep -x openconnect >/dev/null 2>&1; then foreign=1; fi
     # Мак просыпался после подключения — повод проверить туннель. Сравнение
     # здесь, а не в приложении: kern.waketime знает только эта сторона.
     local woke=""; if [ "$st" = connected ] && [ -n "$since" ]; then
@@ -2263,6 +2285,7 @@ cmd_status() {
         [ -n "$woke" ] && printf 'woke_after_connect=%s\n' "$woke"
         printf 'state=%s\nprofile=%s\ntundev=%s\nip=%s\nsince=%s\ngateway=%s\ndns=%s\nurl=%s\nmode=%s\nforeign=%s\nsupervisor=%s\niface=%s\n' \
             "$st" "$prof" "$dev" "$ip" "$since" "$gw" "$dns" "$url" "$mode" "$foreign" "$(sup_alive && echo 1 || echo 0)" "$(active_iface)"
+        [ -z "$strays" ] || printf 'strays=%s\n' "$strays"
         if [ "$kind" = proxy ]; then
             # Маршрутов и зон в этом режиме нет — не показываем вовсе, а не
             # рисуем серыми: они не «выключены», а бессмысленны.
@@ -2310,6 +2333,7 @@ cmd_status() {
         starting)  warn "Туннель" "openconnect запускается (pid $(tunnel_pid))" ;;
         down)      if [ -n "$foreign" ]; then warn "Туннель" "не наш: работает чужой openconnect (pid $(pgrep -x openconnect | head -1))"; else skip "Туннель" "не поднят"; fi ;;
     esac
+    [ -z "$strays" ] || warn "Лишние сессии" "openconnect: $(stray_tunnels_text) — ocbar cleanup погасит их, текущую не тронет"
     fi
     [ -n "$prof" ] && ok "Профиль" "$prof$( [ -n "$url" ] && printf ' (%s)' "$url")" || skip "Профиль" "не выбран"
     [ -n "$gw" ] && ok "Шлюз" "$gw · DNS от шлюза: ${dns:-нет}"
@@ -2811,7 +2835,7 @@ cmd_doctor() {
     case "$(tunnel_state)" in
         connected) ok "Туннель" "$(env_get TUNDEV) $(env_get IP4)" ;;
         starting) warn "Туннель" "запускается" ;;
-        down) if pgrep -x openconnect >/dev/null; then skip "Туннель" "чужой openconnect работает (не наш pidfile)"; else skip "Туннель" "не поднят"; fi ;;
+        down) if [ -z "$(stray_tunnels)" ] && pgrep -x openconnect >/dev/null; then skip "Туннель" "чужой openconnect работает (не наш pidfile)"; else skip "Туннель" "не поднят"; fi ;;
     esac
     info "----------------------------------------"; info "Мусор от прошлых сессий"
     local n; n=$(services_with_localhost_dns | grep -c . || true)
@@ -2823,6 +2847,11 @@ cmd_doctor() {
     if [ "$(manifest_zones | grep -c .)" -gt 0 ] && ! tunnel_alive; then bad "наши зоны /etc/resolver есть, а туннель не поднят"; issues=$((issues+1)); fi
     if [ -s "$ROUTES_STATE" ] && ! tunnel_alive; then bad "маршруты без живого туннеля: $(wc -l < "$ROUTES_STATE" | tr -d ' ')"; issues=$((issues+1)); else ok "Маршруты" "чисто"; fi
     if [ "$(env_get STATE)" = connected ] && ! tunnel_alive; then bad "tunnel.env говорит connected, а openconnect мёртв"; issues=$((issues+1)); fi
+    # Лишний openconnect не виден ни в статусе, ни в меню, а шлюз закрывает
+    # его по простою — и хелпер до 0.17.1 снимал при этом маршруты текущей.
+    local strays; strays=$(stray_tunnels_text)
+    if [ -n "$strays" ]; then bad "Лишние сессии" "openconnect: $strays — ocbar cleanup погасит их, текущую не тронет"; issues=$((issues+1))
+    else ok "Лишние сессии" "нет"; fi
     info "----------------------------------------"; info "Прокси-режим (Mode = proxy)"
     local ocp pport; pport=$(proxy_port)
     if ocp=$(ocproxy_bin); then ok "ocproxy" "$ocp"; else skip "ocproxy" "нет — нужен только прокси-режиму: brew install ocproxy"; fi
