@@ -68,7 +68,15 @@ English. `tools/i18n-scan.py --check` lists what is missing and fails the
 build, so a new screen cannot ship half-translated. The sign-in windows (`auth/`) use
 the same `L("…")`; `ocbar-auth` has no bundle, so its English lives in
 `auth/Sources/ocbar-auth/Translations.swift`, checked by the same scan. Log
-lines and messages the CLI parses stay in Russian. Strings that are compared
+lines and messages the CLI parses stay in Russian.
+
+The CLI translates at output time: `ok`/`warn`/`bad`/`skip`/`info`/`die` and
+notifications look the finished message up in `libexec/ocbar-en.tsv`
+(Russian template, tab, English; `{}` stands for `$var`, `${…}` or `$(…)`,
+`{1}`, `{2}`… when the order changes). Write messages as before; the scan
+lists new ones without a translation. Do not build a message in a variable
+and pass it on — the scan cannot see it. Anything the app or a script parses
+must not depend on the language: use exit codes or `--json`. Strings that are compared
 against output of the CLI, or written into files, are not UI text and stay
 unwrapped.
 
