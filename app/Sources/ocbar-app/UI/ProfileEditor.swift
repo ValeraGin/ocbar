@@ -804,7 +804,7 @@ struct ProfileEditorView: View {
             if loadedName == name, !dirty { open(name) } else { checkDisk() }
             switch result {
             case .ok(let text):
-                learnResult = text.contains("отменена") ? L("разметка отменена — профиль не тронут")
+                learnResult = (text.contains("отменена") || text.contains("cancelled")) ? L("разметка отменена — профиль не тронут")
                     : L("правила записаны в профиль: %@ строк", doc.autofill.filter { !ProfileDoc.isComment($0.trimmed) }.count)
             case .needsLogin, .cancelled:
                 learnResult = L("разметка не завершена")
