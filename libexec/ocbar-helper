@@ -548,6 +548,9 @@ cmd_tunnel_start() {
 
     if tunnel_alive; then die "openconnect уже запущен (pid $(tunnel_pid)) — сначала tunnel-stop"; fi
     ensure_state_dir
+    # Текущего нет — значит, любой наш openconnect лишний: новая сессия
+    # не должна жить рядом со старой.
+    stop_strays
 
     # stdin: cookie и списки. Cookie не должна попасть ни в argv, ни в лог.
     # Сети и зоны проверяются ДО записи: в файл состояния попадает только то,

@@ -74,6 +74,9 @@ STUB
     # SIGINT возвращён по умолчанию — фоновым процессам скрипта его ставят в
     # «игнорировать», а openconnect гасится именно им.
     fake() { spawn /usr/bin/perl -e '$SIG{INT} = "DEFAULT"; exec { $ARGV[0] } @ARGV[1 .. $#ARGV]' /bin/sleep "$1" 120; }
+    # Поддельный openconnect туннеля: имя и --pid-file — как у запущенного
+    # хелпером, по ним клиент и находит лишние сессии.
+    fake_tun() { spawn /usr/bin/perl -e 'exec { "/usr/bin/perl" } "openconnect", "-e", q($SIG{INT} = "DEFAULT"; sleep 120), "--", "--pid-file", $ARGV[0]' "$1"; }
     listen() { spawn /usr/bin/python3 -c 'import signal, socket, sys
 signal.alarm(120)
 s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -373,6 +376,26 @@ STUB
     has "proxy_stop: системный SOCKS снят" "socks-clear Selftest LAN" "$(cat "$tmp/var/helper.log")"
     has "proxy_stop: состояние disconnected" "STATE=disconnected" "$(cat "$tmp/state/proxy.env")"
     has "журнал — во временном каталоге" "прокси остановлен" "$(cat "$tmp/logs/supervisor.log" 2>/dev/null)"
+
+    # Лишние сессии туннеля: наш openconnect, которого нет в pidfile. Прежний
+    # хелпер не узнавал свой процесс, не гасил его, и такие копились; клиент
+    # их не видел вовсе, а меню называло «чужим туннелем».
+    local cur stray
+    cur=$(fake_tun "$tmp/var/openconnect.pid"); stray=$(fake_tun "$tmp/var/openconnect.pid"); pids+=("$cur" "$stray")
+    sleep 0.2
+    printf '%s\n' "$cur" > "$tmp/var/openconnect.pid"
+    out=$(run status --short || true)
+    has "лишние сессии: номер в status --short" "strays=$stray" "$out"
+    hasnt "лишние сессии: текущая не лишняя" "strays=$cur" "$out"
+    matches "лишние сессии: список в status --json" "\"strays\": ?\\[\"$stray\"\\]" "$(run status --json | grep '^{' | tail -1)"
+    has "лишние сессии: status называет" "pid $stray (с " "$(run status || true)"
+    matches "лишние сессии: doctor называет" "Лишние сессии +openconnect: pid $stray" "$(run doctor || true)"
+    rm -f "$tmp/var/openconnect.pid"
+    out=$(run status --short || true)
+    matches "лишние сессии: без текущей обе лишние" "^strays=($cur,$stray|$stray,$cur)\$" "$out"
+    matches "лишние сессии: не «чужой туннель»" "^foreign=\$" "$out"
+    kill "$cur" "$stray" 2>/dev/null || true
+    is "лишние сессии: нет процессов — нет и строки" "" "$(run status --short | grep '^strays=' || true)"
     has "порт занят не нами — прокси-профиль отказывает" "уже занят" "$(OCBAR_OCPROXY=/usr/bin/true run connect --dry-run px2)"
     # Супервизор: прокси мёртв, ждём вход — свой системный SOCKS снимается не
     # только при старте, но и в цикле (заглушка его «не снимает», и каждое

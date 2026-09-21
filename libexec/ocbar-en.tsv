@@ -389,3 +389,6 @@ pid {} работает по коду от {}, файл правился в {} �
 {} правил{}, прошлая версия — {}.bak	{} rules{}, the previous version — {}.bak
   и нажмите «Пройти шаг →»: ocbar заполнит их вашими данными (пароль: {}{}, код: {})	  and press “Next step →”: ocbar fills them with your data (password: {}{}, code: {})
 {} — версия {}, обновит ocbar app stop && ocbar app start	{} — version {}, ocbar app stop && ocbar app start updates it
+Лишние сессии	Stray sessions
+openconnect: {} — ocbar cleanup погасит их, текущую не тронет	openconnect: {} — ocbar cleanup stops them and leaves the current one alone
+нет	none

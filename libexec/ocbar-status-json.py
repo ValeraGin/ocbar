@@ -10,7 +10,7 @@ import sys
 
 INTS = {"since", "access_at", "proxy_port", "link_lost", "woke_after_connect"}
 BOOLS = {"paused", "needs_login", "foreign", "supervisor", "socks_up"}
-LISTS = {"dns", "system_socks"}
+LISTS = {"dns", "system_socks", "strays"}
 
 
 def main() -> int:
