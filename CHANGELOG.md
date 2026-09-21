@@ -3,6 +3,26 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.1 — 2026-09-21
+
+- Stray openconnect sessions no longer pile up. The helper compared the
+  recorded start time of its openconnect with `ps` output that ends in
+  spaces, so it never recognised its own process: `disconnect`, cancelling a
+  connection and reconnecting after a network change left the old
+  openconnect running and started another. Thirty minutes later the gateway
+  closed the idle one for inactivity, and its disconnect script removed the
+  routes and DNS zones of the working session; the supervisor restored them
+  or connected again, and the cycle repeated.
+- A disconnect or reconnect from an openconnect that is not the current one
+  no longer touches routes, zones or the tunnel state.
+- `ocbar cleanup`, `disconnect` and a new connection stop stray sessions —
+  the helper's own openconnect processes that are not in its pidfile.
+  Someone else's openconnect is still left alone.
+- `ocbar status` and `ocbar doctor` name stray sessions (pid and start
+  time); `status --short`/`--json` list them as `strays`, and the menu no
+  longer calls them "someone else's tunnel".
+- The new helper takes `sudo ocbar install`.
+
 ## 0.17.0 — 2026-09-21
 
 - The command line speaks English when the system does: every message,
