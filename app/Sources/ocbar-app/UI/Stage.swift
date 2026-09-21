@@ -20,6 +20,7 @@ enum Fixture {
         int.example.com = vpn
         [Auth]
         Totp = keychain
+        KeychainService = ru.ocbar.stage-demo
         """),
         ("office", """
         [Connection]

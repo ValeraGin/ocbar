@@ -67,6 +67,13 @@ struct ProfileEditorView: View {
     // Название и адрес каждого профиля — из его файла: список не должен ждать
     // ответа ocbar и показывать имена файлов вместо названий.
     @State private var heads: [String: (title: String, host: String)] = [:]
+    // Окна ввода секретов и итог последнего действия с ними.
+    @State private var askPassword = false
+    @State private var newPassword = ""
+    @State private var askCodeText = false
+    @State private var codeText = ""
+    @State private var secretNote: String?
+    @State private var secretBusy = false
     // Имя файла нового профиля подставляется из названия, пока его не правили руками.
     @State private var autoFileName = ""
 
@@ -334,26 +341,15 @@ struct ProfileEditorView: View {
                 Text(L("SSO в окне браузера")).tag("")
                 Text(L("Пароль и код из SMS")).tag("password")
             }
-            sourceRow(L("Пароль"), selection: $doc.password, options: ProfileDoc.passwordSources, status: passwordStatus)
-            if doc.password == "command" {
-                field(L("Команда для пароля"), $doc.passwordCommand, hint: "op item get VPN --fields password")
-            }
-            if doc.auth != "password" {
-                sourceRow(L("Одноразовый код"), selection: $doc.totp, options: ProfileDoc.totpSources, status: totpStatus)
-                if doc.totp == "command" { field(L("Команда для кода"), $doc.totpCommand, hint: "op item get VPN --otp") }
-            }
-            if doc.totp == "keepassxc" || doc.password == "keepassxc" || !doc.keepassEntry.isEmpty {
-                field(L("Запись KeePassXC"), $doc.keepassEntry, hint: L("Группа/Запись"))
-                field(L("База KeePassXC"), $doc.keepassDb, hint: "~/Passwords.kdbx")
-                field(L("Мастер-пароль в связке"), $doc.keepassKeychain, hint: L("имя сервиса в Keychain"))
-            }
+            passwordRow
+            if doc.auth != "password" { codeRow }
         } header: {
             Text(L("Вход"))
         } footer: {
             Footnote(doc.auth == "password"
                  ? L("Пароль ocbar подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может.")
                  : doc.password == "ask" ? L("Пароль вводит человек — молчаливое переподключение работать не будет.")
-                 : L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC."))
+                 : secretNote ?? L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC."))
         }
         if doc.auth != "password" {
             Section {
@@ -382,6 +378,22 @@ struct ProfileEditorView: View {
             .accessibilityLabel(L("Дополнительно"))
             .accessibilityValue(showMore ? L("раскрыто") : L("свёрнуто"))
             if showMore {
+                // Откуда брать пароль и код — для тех, кто держит их в
+                // KeePassXC или отдаёт своей командой. По умолчанию — связка
+                // ключей, и основной раздел «Вход» управляет ею сам.
+                sourceRow(L("Пароль"), selection: $doc.password, options: ProfileDoc.passwordSources, status: passwordStatus)
+                if doc.password == "command" {
+                    field(L("Команда для пароля"), $doc.passwordCommand, hint: "op item get VPN --fields password")
+                }
+                if doc.auth != "password" {
+                    sourceRow(L("Одноразовый код"), selection: $doc.totp, options: ProfileDoc.totpSources, status: totpStatus)
+                    if doc.totp == "command" { field(L("Команда для кода"), $doc.totpCommand, hint: "op item get VPN --otp") }
+                }
+                if doc.totp == "keepassxc" || doc.password == "keepassxc" || !doc.keepassEntry.isEmpty {
+                    field(L("Запись KeePassXC"), $doc.keepassEntry, hint: L("Группа/Запись"))
+                    field(L("База KeePassXC"), $doc.keepassDb, hint: "~/Passwords.kdbx")
+                    field(L("Мастер-пароль в связке"), $doc.keepassKeychain, hint: L("имя сервиса в Keychain"))
+                }
                 field(L("Имя файла"), $doc.fileName, hint: L("имя.ocbar в ~/.config/ocbar/profiles"))
                 userAgentField
                 field("CsdWrapper", $doc.csdWrapper, hint: L("если шлюз просит проверку соответствия"))
@@ -402,6 +414,147 @@ struct ProfileEditorView: View {
                         .padding(8)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                 }
+            }
+        }
+    }
+
+    // --- пароль и код: хранить в связке ключей без команд ------------------
+
+    private var keychainPassword: Bool { ["auto", "keychain"].contains(doc.password) }
+    private var keychainCode: Bool { ["auto", "keychain"].contains(doc.totp) }
+    /// Секреты пишет клиент по имени профиля: нужен сохранённый файл.
+    private var secretsReady: Bool { loadedName != nil && !dirty && !secretBusy }
+
+    @ViewBuilder
+    private var passwordRow: some View {
+        LabeledContent {
+            HStack(spacing: 10) {
+                if keychainPassword {
+                    secretState(secrets["password"] == "keychain ok")
+                    Button(secrets["password"] == "keychain ok" ? L("Изменить…") : L("Сохранить…")) {
+                        newPassword = ""; askPassword = true
+                    }
+                    .disabled(!secretsReady)
+                    .help(secretsReady ? L("Пароль ляжет в связку ключей macOS") : L("Сначала сохраните профиль"))
+                } else {
+                    Text(sourceWords(doc.password)).foregroundStyle(.secondary)
+                    Button(L("Изменить…")) { showMore = true }
+                }
+            }
+        } label: { Text(L("Пароль")) }
+        .sheet(isPresented: $askPassword) { passwordSheet }
+    }
+
+    @ViewBuilder
+    private var codeRow: some View {
+        LabeledContent {
+            HStack(spacing: 10) {
+                if keychainCode {
+                    if secrets["totp"] == "keychain ok", let name = loadedName, !dirty {
+                        LiveTOTPCode(profile: name, period: Int(doc.totpPeriod) ?? 30)
+                    } else {
+                        secretState(false)
+                    }
+                    Menu(secrets["totp"] == "keychain ok" ? L("Изменить…") : L("Добавить…")) {
+                        Button(L("Снять QR с экрана…")) { addCode(.screen) }
+                        Button(L("Камерой…")) { addCode(.camera) }
+                        Button(L("Вставить ссылку или секрет…")) { codeText = ""; askCodeText = true }
+                    }
+                    .fixedSize()
+                    .disabled(!secretsReady)
+                    .help(secretsReady ? L("Код ляжет в связку ключей macOS") : L("Сначала сохраните профиль"))
+                } else {
+                    Text(sourceWords(doc.totp)).foregroundStyle(.secondary)
+                    Button(L("Изменить…")) { showMore = true }
+                }
+            }
+        } label: { Text(L("Одноразовый код")) }
+        .sheet(isPresented: $askCodeText) { codeTextSheet }
+    }
+
+    private func secretState(_ saved: Bool) -> some View {
+        Label(saved ? L("сохранён") : L("не сохранён"), systemImage: saved ? "checkmark.circle.fill" : "circle.dashed")
+            .foregroundStyle(saved ? Palette.ok : Palette.warn)
+            .labelStyle(TightLabel())
+    }
+
+    private func sourceWords(_ source: String) -> String {
+        switch source {
+        case "keepassxc": return L("из KeePassXC")
+        case "command": return L("своей командой")
+        case "ask": return L("вводите при входе")
+        case "sms": return L("из SMS — вводите при входе")
+        case "off": return L("не вводить")
+        default: return Self.sourceTitle(source)
+        }
+    }
+
+    private var passwordSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L("Пароль VPN")).font(.headline)
+            Text(L("Ляжет в связку ключей macOS. ocbar подставит его при входе.")).foregroundStyle(.secondary)
+            SecureField(L("Пароль"), text: $newPassword).frame(width: 320)
+            HStack {
+                Spacer()
+                Button(L("Отмена")) { askPassword = false }.keyboardShortcut(.cancelAction)
+                Button(L("Сохранить")) { savePassword() }
+                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .disabled(newPassword.isEmpty)
+            }
+        }
+        .padding(20)
+    }
+
+    private var codeTextSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L("Код второго фактора")).font(.headline)
+            Text(L("Ссылка otpauth://… из QR или ключ настройки, который показывает портал вместо QR."))
+                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            TextField("otpauth://totp/…", text: $codeText).frame(width: 380)
+            HStack {
+                Spacer()
+                Button(L("Отмена")) { askCodeText = false }.keyboardShortcut(.cancelAction)
+                Button(L("Добавить")) { askCodeText = false; addCode(.text, text: codeText) }
+                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .disabled(codeText.trimmed.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+
+    private func savePassword() {
+        guard let name = loadedName else { return }
+        let pw = newPassword
+        newPassword = ""; askPassword = false; secretBusy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let err = OcbarClient.shared.savePassword(profile: name, password: pw)
+            DispatchQueue.main.async {
+                secretBusy = false
+                secretNote = err.map { L("пароль не сохранён: %@", $0) } ?? L("пароль сохранён в связке ключей")
+                refreshSecrets()
+            }
+        }
+    }
+
+    private func addCode(_ source: OcbarClient.TOTPSource, text: String? = nil) {
+        guard let name = loadedName else { return }
+        secretBusy = true
+        secretNote = source == .screen ? L("Выделите рамкой QR на экране — Esc отменяет")
+            : source == .camera ? L("Покажите QR камере") : nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = OcbarClient.shared.addTOTP(profile: name, from: source, text: text)
+            DispatchQueue.main.async {
+                secretBusy = false
+                switch r {
+                case .success(let code):
+                    secretNote = L("код сохранён; сейчас %@ — сверьте с приложением-аутентификатором", code)
+                    // Клиент записал источник кода в профиль — перечитать файл.
+                    if !dirty { open(name) }
+                case .failure(let why):
+                    secretNote = L("код не добавлен: %@", why)
+                }
+                refreshSecrets()
             }
         }
     }

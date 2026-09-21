@@ -85,7 +85,10 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
     }
 
     static func fits(_ e: QRImport.Entry, code: String, at: Date) -> Bool {
-        TeachDialog.entryMatches(e, code: code, at: at)
+        // Без кода (добавление с нуля) подходит любая запись TOTP: сверять
+        // не с чем, а человек сам показывает камере нужный QR.
+        if code.isEmpty { return e.isTOTP }
+        return TeachDialog.entryMatches(e, code: code, at: at)
     }
 
     private func build(withPreview: Bool) {

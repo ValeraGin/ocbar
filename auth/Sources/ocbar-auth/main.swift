@@ -38,6 +38,9 @@ struct Args {
     var forgetSessions = false
     var teachOut: String?
     var printParams = false
+    var printAll = false            // параметры и секрет одним вызовом (камера, ввод)
+    var importOTP = false           // otpauth:// или секрет — со стандартного ввода
+    var importCamera = false        // QR с камеры, без сверки с кодом
     var teachDialogShot: String?
     var prompt: String?
     var promptTitle = ""
@@ -162,6 +165,9 @@ func parseArgs() -> Args {
         case "--import-qr": a.importQR = next(arg)
         case "--print-secret": a.printSecret = true
         case "--print-params": a.printParams = true
+        case "--print-all": a.printAll = true
+        case "--import-otp": a.importOTP = true
+        case "--import-camera": a.importCamera = true
         case "--list": a.listEntries = true
         case "--totp-now": a.totpNow = true
         case "--learn": a.learn = true
@@ -336,12 +342,54 @@ if args.selfTest {
     exit(failed == 0 ? 0 : 1)
 }
 
-if let qr = args.importQR {
-    do {
-        var entries: [QRImport.Entry] = []
+/// Записи TOTP из выбранного источника: файл с QR, текст со стандартного
+/// ввода (otpauth://, экспорт Google Authenticator или голый секрет base32)
+/// или камера.
+func otpEntries(_ a: Args) throws -> [QRImport.Entry] {
+    var entries: [QRImport.Entry] = []
+    if let qr = a.importQR {
         for payload in try QRImport.decode(file: qr) {
             entries.append(contentsOf: (try? QRImport.parse(payload)) ?? [])
         }
+    } else if a.importOTP {
+        let raw = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if raw.lowercased().hasPrefix("otpauth") {
+            entries = try QRImport.parse(raw)
+        } else {
+            // Голый секрет из поля «ключ настройки»: пробелы и регистр не важны.
+            let secret = raw.replacingOccurrences(of: " ", with: "").uppercased()
+            guard !secret.isEmpty, TOTP.code(secretBase32: secret, params: TOTPParams()) != nil else {
+                throw QRImport.ImportError.empty
+            }
+            entries = [QRImport.Entry(secretBase32: secret, name: "", issuer: "", digits: 6,
+                                      algorithm: "SHA1", isTOTP: true, period: 30)]
+        }
+    }
+    return entries
+}
+
+// Камера: окно с видеопотоком, первое распознанное — ответ. Своё приложение
+// AppKit нужно и здесь, поэтому ветка отдельная.
+if args.importCamera {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.async {
+        let r = QRCameraWindow(code: "", at: Date()).run()
+        guard let e = r.entry, e.isTOTP else {
+            Log.error(r.entry == nil ? r.note : "это HOTP (код по счётчику) — ocbar его не ведёт")
+            exit(1)
+        }
+        out("TOTP \(e.algorithm) \(e.digits) \(e.period)")
+        out(e.secretBase32)              // ← только для пайпа в security
+        exit(0)
+    }
+    app.run()
+}
+
+if args.importQR != nil || args.importOTP {
+    do {
+        let entries = try otpEntries(args)
         func label(_ e: QRImport.Entry) -> String {
             let i = e.issuer.isEmpty ? "" : e.issuer + "/"
             return i + (e.name.isEmpty ? "(без имени)" : e.name)
@@ -384,7 +432,11 @@ if let qr = args.importQR {
         } else if !e.params.isDefault {
             Log.info("параметры кода: \(e.params.label) — ocbar запишет их в профиль")
         }
-        if args.printParams {
+        if args.printAll {
+            // Одним вызовом: параметры первой строкой, секрет второй.
+            out("\(e.isTOTP ? "TOTP" : "HOTP") \(e.algorithm) \(e.digits) \(e.period)")
+            out(e.secretBase32)              // ← только для пайпа в security
+        } else if args.printParams {
             // Для ocbar: решить, годится ли запись, до того как класть секрет.
             out("\(e.isTOTP ? "TOTP" : "HOTP") \(e.algorithm) \(e.digits) \(e.period)")
         } else if args.printSecret {

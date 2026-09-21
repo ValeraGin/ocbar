@@ -190,6 +190,7 @@ ocbar profile-check <file>            will the client accept this profile file (
 ocbar state [--json]                  runtime state in one place: profile, auto-connect, access, flags
 ocbar pause | resume | toggle
 ocbar secret set-password|set-totp|status|code [profile]
+ocbar secret add-totp <profile> --screen|--camera|--stdin   add the TOTP secret from a QR on screen, the camera or an otpauth:// link
 ocbar secret import-qr <image> [--list] [--select NAME] [profile]
 ocbar learn [profile] [--probe] [--out <file>]    record login form rules by clicking
 ocbar rules show|import <file>|clear [profile]

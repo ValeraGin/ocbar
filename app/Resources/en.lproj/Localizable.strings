@@ -380,3 +380,33 @@
 "мс" = "ms";
 "раскрыто" = "expanded";
 "свёрнуто" = "collapsed";
+
+/* Пароль и код в связке ключей */
+"Изменить…" = "Change…";
+"Сохранить…" = "Save…";
+"Добавить…" = "Add…";
+"Пароль ляжет в связку ключей macOS" = "The password goes to the macOS keychain";
+"Снять QR с экрана…" = "Capture a QR code on screen…";
+"Камерой…" = "With the camera…";
+"Вставить ссылку или секрет…" = "Paste a link or a secret…";
+"Код ляжет в связку ключей macOS" = "The code goes to the macOS keychain";
+"сохранён" = "saved";
+"не сохранён" = "not saved";
+"из KeePassXC" = "from KeePassXC";
+"своей командой" = "from your command";
+"вводите при входе" = "you type it at sign-in";
+"из SMS — вводите при входе" = "from SMS — you type it at sign-in";
+"Пароль VPN" = "VPN password";
+"Ляжет в связку ключей macOS. ocbar подставит его при входе." = "It goes to the macOS keychain. ocbar fills it in at sign-in.";
+"Код второго фактора" = "Second-factor code";
+"Ссылка otpauth://… из QR или ключ настройки, который показывает портал вместо QR." = "The otpauth://… link from the QR code, or the setup key the portal shows instead of a QR code.";
+"Добавить" = "Add";
+"пароль не сохранён: %@" = "the password was not saved: %@";
+"пароль сохранён в связке ключей" = "the password is saved in the keychain";
+"Выделите рамкой QR на экране — Esc отменяет" = "Drag a frame around the QR code on screen — Esc cancels";
+"Покажите QR камере" = "Show the QR code to the camera";
+"код сохранён; сейчас %@ — сверьте с приложением-аутентификатором" = "the code is saved; it is %@ now — compare it with your authenticator app";
+"код не добавлен: %@" = "the code was not added: %@";
+"%@ с" = "%@ s";
+"одноразовый код %@" = "one-time code %@";
+"ocbar не найден" = "ocbar is not found";

@@ -389,3 +389,43 @@ struct Footnote: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 }
+
+// Живой одноразовый код: сам код и сколько секунд он ещё годен. Код берётся
+// у клиента из источника профиля заново, когда начинается новый период, —
+// так видно, что сохранённый секрет верный, ещё до первого входа.
+struct LiveTOTPCode: View {
+    let profile: String
+    let period: Int
+    @State private var code: String?
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let now = Int(ctx.date.timeIntervalSince1970)
+            let left = period - now % period
+            HStack(spacing: 8) {
+                Text(Self.grouped(code ?? "······"))
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .textSelection(.enabled)
+                ProgressView(value: Double(left), total: Double(period))
+                    .progressViewStyle(.circular).controlSize(.mini)
+                Text(L("%@ с", "\(left)")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(width: 34, alignment: .leading)
+            }
+            .task(id: now / max(1, period)) { await fetch() }
+        }
+        .accessibilityLabel(L("одноразовый код %@", code ?? "—"))
+    }
+
+    private func fetch() async {
+        let name = profile
+        let c = await Task.detached { OcbarClient.shared.totpCode(profile: name) }.value
+        code = c
+    }
+
+    /// «482913» → «482 913»: так код легче сверять глазами.
+    static func grouped(_ c: String) -> String {
+        guard c.count == 6 || c.count == 8 else { return c }
+        let mid = c.index(c.startIndex, offsetBy: c.count / 2)
+        return c[..<mid] + " " + c[mid...]
+    }
+}
