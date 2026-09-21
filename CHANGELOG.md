@@ -3,6 +3,14 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.14.1 — 2026-09-21
+
+- Fixed a crash when opening Diagnostics and logs: a number passed into a
+  translated string with a placeholder brought the app down. Translated
+  strings now take any value, and the self-test covers it.
+- The whole "Advanced" row in the profile editor is clickable, not just the
+  small disclosure triangle.
+
 ## 0.14.0 — 2026-09-20
 
 - The app speaks English when the system does: menu, settings, wizard,
