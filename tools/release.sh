@@ -66,6 +66,12 @@ if command -v gh >/dev/null; then
 fi
 
 brew update >/dev/null
+# Исходники brew тянет git'ом внутри своей песочницы, а там помощнику учётки
+# (gh, связка ключей) хода нет: репозиторий приватный, и fetch падает с
+# «could not read Username» (2026-09-21, 0.17.1). Кеш подтягиваем снаружи —
+# тогда brew нужный тег уже находит у себя.
+cache="$(brew --cache)/ocbar--git"
+[ -d "$cache" ] && git -C "$cache" fetch -q origin --tags '+refs/heads/*:refs/remotes/origin/*'
 brew upgrade ocbar
 brew test ocbar
 ocbar app stop >/dev/null 2>&1 || true
