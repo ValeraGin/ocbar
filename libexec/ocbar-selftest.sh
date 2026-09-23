@@ -429,8 +429,10 @@ STUB
     is "супервизор: «маршруты пропали» — строка раз, а не каждый круг" 1 "$(grep -c 'маршруты пропали' "$tmp/logs/supervisor.log" || true)"
     # Зависший «запускается»: openconnect жив, до connect дело не дошло.
     # Раньше супервизор в этом состоянии не делал ничего — бесконечно.
+    # Срок задан явно с обеих сторон: в медленном прогоне (песочница brew,
+    # release.sh) процесс успевал прожить больше 90 с по умолчанию.
     printf 'STATE=starting\n' > "$tmp/var/tunnel.env"; : > "$tmp/logs/supervisor.log"; : > "$tmp/var/helper.log"
-    run supervise --dry-run --iterations=1 >/dev/null || true
+    OCBAR_STARTING_LIMIT=3600 run supervise --dry-run --iterations=1 >/dev/null || true
     hasnt "супервизор: «запускается» меньше срока — не трогает" "tunnel-stop" "$(cat "$tmp/var/helper.log")"
     OCBAR_STARTING_LIMIT=0 run supervise --dry-run --iterations=1 >/dev/null || true
     has "супервизор: завис в «запускается» — останавливает" "tunnel-stop" "$(cat "$tmp/var/helper.log")"
