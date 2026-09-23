@@ -3,6 +3,20 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.5 — 2026-09-23
+
+Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
+
+- The helper records a route or a DNS zone as its own before it adds it,
+  not after. If it was interrupted in between, the route or the
+  `/etc/resolver` file stayed in the system without a record: cleanup never
+  removed it, and a zone file was from then on treated as someone else's.
+- Commands that change the helper's state run one at a time. The
+  openconnect script, the supervisor restoring routes and changes from the
+  menu used to rewrite the same state files at the same moment. A command
+  that cannot get its turn in 20 seconds fails and says so; the openconnect
+  script waits and then carries on, so a tunnel is never held up by it.
+
 ## 0.17.4 — 2026-09-23
 
 - A tunnel stuck in "connecting" no longer stays that way forever. When
