@@ -3,6 +3,22 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.4 — 2026-09-23
+
+- A tunnel stuck in "connecting" no longer stays that way forever. When
+  openconnect has been starting for more than 90 seconds without bringing
+  the tunnel up, the supervisor stops it and tries again with its usual
+  back-off. Before, it did nothing in that state.
+- `ocbar doctor` checks that every enabled network is routed through the
+  tunnel's own interface and names the ones that are not. On 2026-09-21
+  the routes went through a stray session's interface and nothing said so.
+- The supervisor no longer writes "routes missing" every five seconds while
+  it keeps restoring the same routes: once, then again only when the set
+  changes or after five minutes.
+- Releases refuse to go out when the privileged helper changed but its
+  version did not (`tools/helper-version-check.sh`): the version is how
+  `ocbar version` and `doctor` tell that the installed copy is outdated.
+
 ## 0.17.3 — 2026-09-23
 
 - `ocbar doctor` in English no longer shows one line in Russian: the label
