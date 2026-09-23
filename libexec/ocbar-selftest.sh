@@ -406,6 +406,39 @@ STUB
     rm -f "$tmp/var/openconnect.started" "$tmp/var/tunnel.env"
     kill "$cur" "$stray" 2>/dev/null || true
     is "лишние сессии: нет процессов — нет и строки" "" "$(run status --short | grep '^strays=' || true)"
+
+    # Маршруты не через utun туннеля: 21.09 tunnel.env говорил utun5, а
+    # маршруты шли через utun6 лишней сессии. doctor молчал, супервизор писал
+    # «маршруты пропали» каждые 5 с. Таблицу маршрутов подставляет заглушка.
+    # Следующие проверки опираются на networks.conf и desired — вернуть как было.
+    local nets_saved desired_saved=""; nets_saved=$(cat "$tmp/networks.conf" 2>/dev/null || true)
+    [ -f "$tmp/state/desired" ] && desired_saved=$(cat "$tmp/state/desired")
+    printf '10.0.0.0/8\n172.16.0.0/12\n' > "$tmp/networks.conf"
+    printf '#!/bin/bash\ncase "$1" in 10.*) echo "${OCBAR_STUB_ROUTE_10:-utun9}" ;; *) echo utun9 ;; esac\n' > "$tmp/route"; chmod +x "$tmp/route"
+    cur=$(fake_tun "$tmp/var/openconnect.pid"); pids+=("$cur"); sleep 0.2
+    printf '%s\n' "$cur" > "$tmp/var/openconnect.pid"
+    printf 'STATE=connected\nTUNDEV=utun9\n' > "$tmp/var/tunnel.env"
+    matches "doctor: маршруты через utun туннеля" "Маршруты туннеля +через utun9" "$(OCBAR_SELFTEST_ROUTE="$tmp/route" run doctor || true)"
+    out=$(OCBAR_SELFTEST_ROUTE="$tmp/route" OCBAR_STUB_ROUTE_10=utun6 run doctor || true)
+    has "doctor: маршрут не через utun туннеля назван" "не через utun9: 10.0.0.0/8→utun6" "$out"
+    hasnt "doctor: верный маршрут не назван" "172.16.0.0/12→" "$out"
+    printf 't\n' > "$tmp/state/desired"; : > "$tmp/logs/supervisor.log"; : > "$tmp/var/helper.log"
+    OCBAR_SELFTEST_ROUTE="$tmp/route" OCBAR_STUB_ROUTE_10=utun6 OCBAR_ACCESS_EVERY=99999999999 \
+        run supervise --dry-run --iterations=2 >/dev/null || true
+    is "супервизор: маршрут восстанавливается каждый круг" 2 "$(grep -c 'route-add 10.0.0.0/8' "$tmp/var/helper.log" || true)"
+    is "супервизор: «маршруты пропали» — строка раз, а не каждый круг" 1 "$(grep -c 'маршруты пропали' "$tmp/logs/supervisor.log" || true)"
+    # Зависший «запускается»: openconnect жив, до connect дело не дошло.
+    # Раньше супервизор в этом состоянии не делал ничего — бесконечно.
+    printf 'STATE=starting\n' > "$tmp/var/tunnel.env"; : > "$tmp/logs/supervisor.log"; : > "$tmp/var/helper.log"
+    run supervise --dry-run --iterations=1 >/dev/null || true
+    hasnt "супервизор: «запускается» меньше срока — не трогает" "tunnel-stop" "$(cat "$tmp/var/helper.log")"
+    OCBAR_STARTING_LIMIT=0 run supervise --dry-run --iterations=1 >/dev/null || true
+    has "супервизор: завис в «запускается» — останавливает" "tunnel-stop" "$(cat "$tmp/var/helper.log")"
+    has "супервизор: завис в «запускается» — причина в журнале" "завис, останавливаю" "$(cat "$tmp/logs/supervisor.log")"
+    kill "$cur" 2>/dev/null || true
+    printf '%s\n' "$nets_saved" > "$tmp/networks.conf"
+    rm -f "$tmp/var/openconnect.pid" "$tmp/var/tunnel.env" "$tmp/state/desired" "$tmp/route"
+    [ -z "$desired_saved" ] || printf '%s\n' "$desired_saved" > "$tmp/state/desired"
     has "порт занят не нами — прокси-профиль отказывает" "уже занят" "$(OCBAR_OCPROXY=/usr/bin/true run connect --dry-run px2)"
     # Супервизор: прокси мёртв, ждём вход — свой системный SOCKS снимается не
     # только при старте, но и в цикле (заглушка его «не снимает», и каждое
