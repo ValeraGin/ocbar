@@ -11,7 +11,8 @@
 #   tools/helper-selftest.sh [хелпер]    по умолчанию libexec/ocbar-helper рядом
 #
 # Проверки с номером пункта ловят конкретный дефект хелпера (1–13 — найденные
-# до 0.8.0, 14 — лишние сессии openconnect, 0.17.1) и на хелпере без
+# до 0.8.0, 14 — лишние сессии openconnect, 0.17.1; 15 — обрыв посреди
+# настройки, 16 — одновременные вызовы, 0.8.2) и на хелпере без
 # исправления должны падать все. «Контроль» — обычное поведение,
 # которое должно работать в обеих версиях.
 #
@@ -436,6 +437,43 @@ reason=disconnect TUNDEV=utun5 as_oc 'echo $$ > "$ST/openconnect.pid"; "$H" --dr
 check контроль "vpnc disconnect от текущей сессии убирает её состояние" \
     all rc0 'hasnt "от лишней сессии"' 'has "ifconfig utun5 down"' 'fline "$ST/tunnel.env" STATE=disconnected'
 kill $A $B $C 2>/dev/null
+
+# ----------------------------------------------------------------- 15 ----
+# Обрыв сразу после изменения системы (OCBAR_TEST_CRASH, только --dry-run):
+# запись «это наше» должна быть сделана раньше, иначе маршрут или зона
+# остаются в системе, а уборка о них не знает.
+fresh; printf 'STATE=connected\nTUNDEV=utun9\n' > "$ST/tunnel.env"
+Henv OCBAR_TEST_CRASH=route-added "$H" --dry-run route-add 10.15.0.0/16
+check 15 "обрыв после route add: маршрут уже записан как наш" \
+    all 'has "обрыв для проверки"' 'fline "$ST/routes.state" "10.15.0.0/16 utun9"'
+rm -f "$ST/tunnel.env"; route_fixture 10.15.0.0/16 utun9 10.15.0.0 255.255.0.0
+H_ cleanup
+check 15 "после обрыва cleanup снимает этот маршрут" has "route -n delete -net 10.15.0.0/16 -interface utun9"
+fresh
+OUT=$(printf 'new.test 10.0.0.1\n' | OCBAR_TEST_CRASH=zone-written OCBAR_STATE_DIR="$ST" "$H" --dry-run dns-apply 2>&1); RC=$?
+check 15 "обрыв после записи зоны: зона уже в манифесте" \
+    all 'has "обрыв для проверки"' 'fline "$ST/zones.state" new.test'
+printf 'nameserver 10.0.0.1\n' > "$RES/new.test"   # файл, который успел записаться
+H_ cleanup
+check 15 "после обрыва cleanup снимает эту зону как свою" has "зона снята: new.test"
+
+# ----------------------------------------------------------------- 16 ----
+# Меняющие команды — по одной: замок STATE_DIR/lock.
+fresh; /bin/sleep 60 & LP=$!; BG="$BG $LP"; mkdir "$ST/lock"; echo "$LP" > "$ST/lock/pid"
+Henv OCBAR_LOCK_WAIT=1 "$H" --dry-run zone-add a.test vpn
+check 16 "замок держит живой процесс — команда ждёт и отказывает" \
+    all rcbad 'has "занят другой операцией"' 'fnoline "$ST/zones.wanted" "a.test vpn 53"'
+check контроль "чужой живой замок не снят" fline "$ST/lock/pid" "$LP"
+Henv OCBAR_LOCK_WAIT=1 reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 "$H" --dry-run vpnc
+check 16 "vpnc при занятом замке не отказывает — без него туннель не поднять" \
+    all rc0 'has "продолжаю без неё"' 'fline "$ST/tunnel.env" STATE=connected'
+kill "$LP" 2>/dev/null; wait "$LP" 2>/dev/null
+fresh; mkdir "$ST/lock"; echo "$LP" > "$ST/lock/pid"
+H_ zone-add a.test vpn
+check 16 "брошенный замок (владелец умер) снимается" \
+    all rc0 'has "брошенную блокировку"' 'fline "$ST/zones.wanted" "a.test vpn 53"'
+fresh; H_ zone-add b.test vpn
+check контроль "после команды замка не остаётся" all rc0 '[ ! -d "$ST/lock" ]'
 
 # ------------------------------------------------------------- контроль ----
 fresh
