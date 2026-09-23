@@ -41,6 +41,10 @@
 #   migrate-state        перенести состояние из /usr/local/var/ocbar (до 0.8.0)
 #   version
 #
+# Меняющие подкоманды идут по одной: блокировка — каталог STATE_DIR/lock.
+# vpnc-скрипт, route-add от супервизора и правки из меню иначе переписывали
+# одни и те же файлы состояния одновременно.
+#
 # --dry-run первым аргументом: печатать команды, менять только файлы
 # состояния — всегда во временной копии или в OCBAR_STATE_DIR, никогда
 # в настоящем каталоге. Под root --dry-run запрещён.
@@ -50,7 +54,7 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.8.1"
+VERSION="0.8.2"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
 # Манифест доверия — рядом с копией openconnect, в root-овом каталоге.
@@ -106,6 +110,7 @@ GW_ROUTE="$STATE_DIR/gateway.route"        # host-route до шлюза, что�
 PAUSED="$STATE_DIR/paused"                 # «как будто выключен»: туннель жив, маршрутов и зон нет
 SOCKS_STATE="$STATE_DIR/socks.state"       # системный SOCKS, который поставили мы: "<сервис>\t<порт>"
 LOG="$STATE_DIR/openconnect.log"
+LOCK="$STATE_DIR/lock"                     # каталог-замок: внутри pid владельца
 # Что переносит migrate-state — фиксированный список, не маска.
 STATE_FILES="tunnel.env openconnect.pid zones.state zones.wanted routes.state routes.wanted gateway.route paused socks.state openconnect.log openconnect.log.1"
 
@@ -139,6 +144,51 @@ write_sys_file() { # path, content
 ensure_state_dir() {
     [ -d "$STATE_DIR" ] || mkdir -p -m 755 "$STATE_DIR"
 }
+
+# Точка обрыва для самопроверки: хелпер «падает» сразу после изменения
+# системы. Только при --dry-run — под root переменная ничего не значит.
+test_crash() {
+    if [ "$DRY_RUN" = 1 ] && [ "${OCBAR_TEST_CRASH:-}" = "$1" ]; then say "обрыв для проверки: $1"; exit 99; fi
+    return 0
+}
+
+# ------------------------------------------------------------ блокировка ----
+# mkdir атомарен: кто создал каталог, тот и владеет. flock в macOS нет.
+# Брошенный замок (владелец умер, не сняв) снимается: иначе после одного
+# падения хелпер отказывал бы навсегда. Живость — по ps, а не kill -0: без
+# root kill -0 чужому процессу отвечает «нет прав», как мёртвому.
+LOCKED=0
+state_lock() { # сколько ждать, с → 0 или 1 (не дождались)
+    local wait="${OCBAR_LOCK_WAIT:-${1:-20}}" i=0 owner age
+    matches "$wait" '^[0-9]{1,3}$' || wait=20
+    ensure_state_dir
+    until mkdir "$LOCK" 2>/dev/null; do
+        owner=$(cat "$LOCK/pid" 2>/dev/null || true)
+        if matches "${owner:-x}" '^[0-9]+$'; then
+            if ! ps -p "$owner" >/dev/null 2>&1; then
+                say "снимаю брошенную блокировку (pid $owner не жив)"; rm -rf "$LOCK"; continue
+            fi
+        else
+            # pid ещё не записан — или владелец упал между mkdir и записью.
+            age=$(( $(date +%s) - $(stat -f %m "$LOCK" 2>/dev/null || date +%s) ))
+            if [ "$age" -ge 30 ]; then say "снимаю брошенную блокировку без владельца"; rm -rf "$LOCK"; continue; fi
+        fi
+        i=$((i + 1)); [ "$i" -le $((wait * 10)) ] || return 1
+        sleep 0.1
+    done
+    printf '%s\n' "$$" > "$LOCK/pid"; LOCKED=1
+    return 0
+}
+state_unlock() {
+    [ "$LOCKED" = 1 ] || return 0
+    rm -rf "$LOCK"; LOCKED=0
+}
+# Для команд человека и супервизора: не дождались — отказ, повторят.
+state_lock_or_die() {
+    state_lock "$@" && return 0
+    die "хелпер занят другой операцией (pid $(cat "$LOCK/pid" 2>/dev/null || echo ?)) — повторите через несколько секунд"
+}
+trap state_unlock EXIT
 
 # ------------------------------------------------- каталоги, куда пишем ----
 # Узел пути годится, если принадлежит допустимому владельцу, а каталог ещё
@@ -421,15 +471,23 @@ add_route() { # cidr utun
     # падение здесь оставляло туннель без части маршрутов и совсем без зон
     # DNS, причём молча.
     valid_net "$1" || { say "маршрут $1 не ставлю"; return 0; }
+    # Сначала запись, потом таблица. Оборвись хелпер между ними в обратном
+    # порядке — маршрут остался бы в таблице без записи, и снять его было бы
+    # некому. Запись без маршрута безопасна: del_route снимает только то,
+    # что в таблице и сейчас идёт через наш интерфейс.
+    local had=0
+    grep -Fqx "$1 $2" "$ROUTES_STATE" 2>/dev/null && had=1
+    [ "$had" = 1 ] || printf '%s %s\n' "$1" "$2" >> "$ROUTES_STATE"
     if run_quiet route -n add -net "$1" -interface "$2"; then
+        test_crash route-added
         say "маршрут: $1 → $2"
     elif [ "$(route_dev_exact "$1")" = "$2" ]; then
         say "маршрут уже есть: $1 → $2"
     else
         say "не удалось поставить маршрут $1 → $2 (продолжаю)"
-        return 0
+        [ "$had" = 1 ] || state_drop_route_line "$1 $2"
     fi
-    grep -Fqx "$1 $2" "$ROUTES_STATE" 2>/dev/null || printf '%s %s\n' "$1" "$2" >> "$ROUTES_STATE"
+    return 0
 }
 # Снять СВОЙ маршрут: тот, что записан в routes.state, и только если в
 # таблице он и сейчас идёт через наш интерфейс. Чужой маршрут на ту же сеть
@@ -451,6 +509,11 @@ del_route() { # cidr utun
 state_drop_route() { # cidr
     [ -f "$ROUTES_STATE" ] || return 0
     awk -v n="$1" '$1 != n' "$ROUTES_STATE" > "$ROUTES_STATE.tmp" || true
+    mv "$ROUTES_STATE.tmp" "$ROUTES_STATE"
+}
+state_drop_route_line() { # "cidr utun"
+    [ -f "$ROUTES_STATE" ] || return 0
+    awk -v l="$1" '$0 != l' "$ROUTES_STATE" > "$ROUTES_STATE.tmp" || true
     mv "$ROUTES_STATE.tmp" "$ROUTES_STATE"
 }
 state_route_dev() { # cidr → utun из routes.state
@@ -502,7 +565,13 @@ apply_zones() {
         body=$(resolver_body "$dns" "$port")
         current=$([ -f "$RESOLVER_DIR/$zone" ] && cat "$RESOLVER_DIR/$zone" || true)
         if [ "$current" != "$body" ]; then
+            # Сначала в манифест, потом файл: оборвись хелпер после записи
+            # файла, зона без манифеста считалась бы чужой — её не сняли бы
+            # и не обновили никогда. Итоговый манифест всё равно пишется
+            # ниже целиком.
+            in_manifest "$zone" || printf '%s\n' "$zone" >> "$MANIFEST"
             write_sys_file "$RESOLVER_DIR/$zone" "$body"
+            test_crash zone-written
             say "зона: $zone → $dns:$port"
         fi
         new_manifest="$new_manifest$zone"$'\n'; n=$((n+1))
@@ -567,8 +636,10 @@ cmd_tunnel_start() {
     if tunnel_alive; then die "openconnect уже запущен (pid $(tunnel_pid)) — сначала tunnel-stop"; fi
     ensure_state_dir
     # Текущего нет — значит, любой наш openconnect лишний: новая сессия
-    # не должна жить рядом со старой.
+    # не должна жить рядом со старой. Гасим до замка: vpnc-скрипт лишней при
+    # выходе ждёт замок, и под замком мы ждали бы его 10 с до SIGKILL.
     stop_strays
+    state_lock_or_die
 
     # stdin: cookie и списки. Cookie не должна попасть ни в argv, ни в лог.
     # Сети и зоны проверяются ДО записи: в файл состояния попадает только то,
@@ -642,6 +713,9 @@ cmd_tunnel_start() {
         say "лог openconnect превысил предел — прежний сохранён как $(basename "$LOG").1"
     fi
 
+    # Замок — до запуска: openconnect зовёт vpnc-скрипт, и тот ждёт замок,
+    # пока openconnect не ушёл в фон, — взаимная блокировка.
+    state_unlock
     say "запускаю openconnect ($mode) → $url"
     # setsid обязателен. Без него openconnect остаётся в задаче launchd, из
     # которой его позвал супервизор, и `launchctl bootout` (в том числе внутри
@@ -666,16 +740,19 @@ cmd_tunnel_stop() {
     # текущий, и общее состояние не трогает.
     stop_strays
     local p; p=$(live_pid)
+    # Выхода openconnect ждём без замка: его vpnc disconnect берёт замок сам.
     if [ -n "$p" ]; then
         say "останавливаю openconnect (pid $p)"
         run kill -INT "$p"
         local i=0
         while [ "$DRY_RUN" = 0 ] && is_openconnect "$p" && [ $i -lt 20 ]; do sleep 0.5; i=$((i+1)); done
+        state_lock_or_die
         if [ "$DRY_RUN" = 0 ] && is_openconnect "$p"; then
             say "не вышел за 10 с — SIGKILL"; kill -KILL "$p" 2>/dev/null || true
             vpnc_disconnect   # vpnc-script не отработал — убираем сами
         fi
     else
+        state_lock_or_die
         say "openconnect не запущен"
         # Мог умереть сам — убрать хвосты.
         vpnc_disconnect
@@ -819,6 +896,11 @@ cmd_vpnc() {
             return 0
         fi ;;
     esac
+    # Замок ждём, но не отказываем: без vpnc-скрипта openconnect не поднимет
+    # и не опустит туннель, а держать замок дольше пары секунд некому.
+    case "${reason:-}" in connect|reconnect|disconnect)
+        state_lock 20 || say "vpnc: блокировку держит pid $(cat "$LOCK/pid" 2>/dev/null || echo ?) дольше 20 с — продолжаю без неё" ;;
+    esac
     case "${reason:-}" in
         pre-init) ;;
         connect|reconnect) vpnc_connect ;;
@@ -947,7 +1029,9 @@ cmd_cleanup() {
         say "прошлая настройка не доведена до конца (STATE=applying) — убираю её следы"
     fi
     local did=0
+    # Лишние — до замка, как в tunnel-start: их vpnc-скрипт ждёт замок.
     if [ -n "$(stray_pids)" ]; then stop_strays; did=1; fi
+    state_lock_or_die
     if ! tunnel_alive; then
         if [ "$(manifest_zones | grep -c .)" -gt 0 ]; then clear_zones; did=1; fi
         if [ -s "$ROUTES_STATE" ]; then clear_state_routes; did=1; fi
@@ -1014,6 +1098,12 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
     version|help|-h|--help|'') ;;
     *) require_secure_dirs ;;
+esac
+# Меняющие команды — под замком. tunnel-start, tunnel-stop, cleanup и vpnc
+# берут его сами: им нельзя держать замок, пока выходит openconnect.
+case "$cmd" in
+    suspend|resume|route-add|route-del|zone-add|zone-del|dns-apply|dns-clear|socks-set|socks-clear)
+        state_lock_or_die ;;
 esac
 case "$cmd" in
     tunnel-start) cmd_tunnel_start "$@" ;;
