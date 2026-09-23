@@ -259,6 +259,7 @@ NOPASSWD на хелпер есть	NOPASSWD for the helper is set
 {} — root, без записи для других	{} — root, not writable by others
 {} — хелпер откажется писать; chown root:wheel, chmod go-w, затем sudo ocbar install	{} — the helper will refuse to write; chown root:wheel, chmod go-w, then sudo ocbar install
 Каталог состояния	State directory
+Каталог копии openconnect	openconnect copy directory
 старый путь {} — sudo ocbar install перенесёт в {}	old path {} — sudo ocbar install will move it to {}
 Профили	Profiles
 {} в {}, default={}	{} in {}, default={}

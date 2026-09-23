@@ -190,6 +190,22 @@ def cli_quoted(line: str, i: int) -> tuple[str, int]:
     return line[i + 1:], len(line)
 
 
+# Сообщение целиком из переменной скан не видит, и оно остаётся русским
+# (так было с «Каталог копии openconnect» в doctor до 0.17.3).
+CLI_VAR_MSG = re.compile(r'"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"(?:\s|;|$)')
+
+
+def cli_var_messages() -> list[str]:
+    out = []
+    for n, line in enumerate(CLI.read_text(encoding="utf-8").split("\n"), 1):
+        if line.lstrip().startswith("#"):
+            continue
+        for m in CLI_NAME.finditer(line):
+            if CLI_VAR_MSG.match(line, m.end()):
+                out.append(f"bin/ocbar:{n}: {line.strip()}")
+    return out
+
+
 def cli_keys() -> list[str]:
     found: dict[str, None] = {}
     for line in CLI.read_text(encoding="utf-8").split("\n"):
@@ -234,8 +250,11 @@ def cli_check() -> int:
         print(f"ocbar: лишний перевод (сообщения в коде нет): {k}")
     for k in bad:
         print(f"ocbar: перевод не сходится с шаблоном (подстановки или кириллица): {k}")
+    var_msgs = cli_var_messages()
+    for v in var_msgs:
+        print(f"ocbar: сообщение из переменной — скан его не видит, пишите литерал: {v}")
     print(f"сообщений клиента: {len(keys)}, переведено: {len(keys) - len(missing)}")
-    return 1 if missing or extra or bad else 0
+    return 1 if missing or extra or bad or var_msgs else 0
 
 
 if __name__ == "__main__":
