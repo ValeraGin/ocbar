@@ -11,7 +11,7 @@ and a SwiftUI menu bar app. Installed from source through a Homebrew tap.
 
 ![ocbar menu](assets/menu.png)
 
-**Status:** 0.4 — a single-author tool used daily on a real AnyConnect gateway
+**Status:** a single-author tool used daily on a real AnyConnect gateway
 with a Keycloak identity provider. The user interface and CLI messages are in
 Russian; this README and the command reference are the English entry point.
 Version history is in [CHANGELOG.md](CHANGELOG.md).
