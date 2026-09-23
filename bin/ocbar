@@ -2814,16 +2814,16 @@ cmd_doctor() {
         [ "$cur" = "$deepest" ] || _doctor_path_secure "$cur"
         return 0
     }
-    local d why label
-    for d in "$STATE_DIR" "$LIBDIR"; do
-        if [ "$d" = "$STATE_DIR" ]; then
-            [ -z "${OCBAR_STATE_DIR:-}" ] || continue
-            label="Каталог состояния"
-        else label="Каталог копии openconnect"; fi
-        why=$(_doctor_path_secure "$d")
-        if [ -z "$why" ]; then ok "$label" "$d — root, без записи для других"
-        else bad "$label" "$why — хелпер откажется писать; chown root:wheel, chmod go-w, затем sudo ocbar install"; issues=$((issues+1)); fi
-    done
+    # Подписи — литералами в каждом вызове: из переменной их не видит i18n-scan.
+    local why
+    if [ -z "${OCBAR_STATE_DIR:-}" ]; then
+        why=$(_doctor_path_secure "$STATE_DIR")
+        if [ -z "$why" ]; then ok "Каталог состояния" "$STATE_DIR — root, без записи для других"
+        else bad "Каталог состояния" "$why — хелпер откажется писать; chown root:wheel, chmod go-w, затем sudo ocbar install"; issues=$((issues+1)); fi
+    fi
+    why=$(_doctor_path_secure "$LIBDIR")
+    if [ -z "$why" ]; then ok "Каталог копии openconnect" "$LIBDIR — root, без записи для других"
+    else bad "Каталог копии openconnect" "$why — хелпер откажется писать; chown root:wheel, chmod go-w, затем sudo ocbar install"; issues=$((issues+1)); fi
     if [ -z "${OCBAR_STATE_DIR:-}" ] && [ "$STATE_DIR" = "$STATE_DIR_OLD" ] && [ -d "$STATE_DIR_OLD" ]; then
         warn "Каталог состояния" "старый путь $STATE_DIR_OLD — sudo ocbar install перенесёт в $STATE_DIR_ROOT"
     fi
