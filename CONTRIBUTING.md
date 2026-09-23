@@ -54,7 +54,7 @@ breaks. Prove it: temporarily revert your fix and show the check failing.
 |---|---|---|
 | `bin/ocbar` | CLI, bash, runs as the user | `ocbar status --json` is the machine-readable state the app reads; `--short` is `key=value` lines for scripts and SwiftBar; exit codes: 5 — a human must log in, 6 — network/gateway, other non-zero — failure |
 | `libexec/ocbar-*.py`, `ocbar-selftest.sh` | helpers the CLI runs: state as JSON, merged logs, report redaction, password-group login, the CLI self-test | found next to `ocbar` or in the Homebrew `libexec`; they are code, not strings inside the shell script |
-| `libexec/ocbar-helper` | everything that needs root | fixed subcommands, every argument validated, state only under `/var/db/ocbar`, touches only what it created |
+| `libexec/ocbar-helper` | everything that needs root | fixed subcommands, every argument validated, state only under `/var/db/ocbar`, touches only what it created; any change bumps its `VERSION` (`tools/helper-version-check.sh`, run by `release.sh`), or an outdated installed copy looks current |
 | `auth/` | `ocbar-auth`: login window, autofill, TOTP | fills only over HTTPS on hosts of the login chain; password twice, code once per login |
 | `app/` | SwiftUI menu bar app, no privileges | reads `status --json`, acts by calling `ocbar`; profile parsing must match the CLI (checked in `ocbar-app --selftest`) |
 
