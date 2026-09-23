@@ -937,6 +937,28 @@ tunnel_alive() {
     local p; p=$(tunnel_pid); [ -n "$p" ] || return 1
     case "$(ps -p "$p" -o comm= 2>/dev/null)" in *openconnect) return 0 ;; *) return 1 ;; esac
 }
+# Сколько секунд живёт openconnect текущей сессии (прокси или туннель);
+# пусто — не знаем. Время запуска — из ps: переживает перезапуск супервизора.
+session_age() {
+    local p ls t
+    if proxy_alive; then p=$(proxy_pid); else p=$(tunnel_pid); fi
+    [ -n "$p" ] || return 0
+    ls=$(LC_ALL=C ps -p "$p" -o lstart= 2>/dev/null | awk '{$1=$1; print}')
+    [ -n "$ls" ] || return 0
+    t=$(LC_ALL=C date -j -f '%a %b %d %T %Y' "$ls" '+%s' 2>/dev/null) || return 0
+    printf '%s\n' $(( $(date +%s) - t ))
+}
+# Сети, чей маршрут идёт не через utun туннеля: «сеть→интерфейс» через
+# пробел. 21.09 tunnel.env говорил utun5, а маршруты шли через utun6 лишней
+# сессии — супервизор «восстанавливал» их каждые 5 с, doctor молчал.
+routes_elsewhere() {
+    local dev net via; dev=$(env_get TUNDEV); [ -n "$dev" ] || return 0
+    while read -r net; do
+        [ -n "$net" ] || continue
+        via=$(route_via "$net")
+        [ "$via" = "$dev" ] || printf '%s→%s ' "$net" "${via:-?}"
+    done <<< "$(active_networks)"
+}
 # Лишние сессии туннеля: наши openconnect (с нашим --pid-file), кроме
 # записанного в pidfile. Шлюз закрывает такую по простою, и хелпер до 0.17.1
 # снимал при этом маршруты и зоны текущей. Гасит их хелпер (cleanup,
@@ -1011,6 +1033,9 @@ tunnel_iface() {
 # в default (ядро трактует .0 особо), а `route get 172.16.0.1` отвечает
 # верно. Проверено на живой таблице.
 route_via() { # cidr → интерфейс
+    # Самопроверка подставляет таблицу маршрутов (OCBAR_SELFTEST_ROUTE):
+    # маршруты «не через тот utun» на живой машине не устроить.
+    if [ -n "${OCBAR_SELFTEST_ROUTE:-}" ]; then "$OCBAR_SELFTEST_ROUTE" "$1"; return 0; fi
     local base="${1%%/*}" len="${1#*/}" probe
     if [ "$len" = 32 ]; then
         probe="$base"
@@ -2852,6 +2877,12 @@ cmd_doctor() {
         starting) warn "Туннель" "запускается" ;;
         down) if [ -z "$(stray_tunnels)" ] && pgrep -x openconnect >/dev/null; then skip "Туннель" "чужой openconnect работает (не наш pidfile)"; else skip "Туннель" "не поднят"; fi ;;
     esac
+    # На паузе маршрутов нет по замыслу, у прокси их нет вовсе.
+    if [ "$(tunnel_state)" = connected ] && [ "$(session_kind)" = tunnel ]; then
+        local elsewhere; elsewhere=$(routes_elsewhere)
+        if [ -n "$elsewhere" ]; then bad "Маршруты туннеля" "не через $(env_get TUNDEV): ${elsewhere% } — ocbar cleanup, затем ocbar connect"; issues=$((issues+1))
+        else ok "Маршруты туннеля" "через $(env_get TUNDEV)"; fi
+    fi
     info "----------------------------------------"; info "Мусор от прошлых сессий"
     local n; n=$(services_with_localhost_dns | grep -c . || true)
     # ocbar системный DNS не ставит, и cleanup его больше не трогает (хелпер
@@ -3009,7 +3040,10 @@ cmd_supervise() {
         *) if [ "$_now" -ge "$_ws" ] && [ $((_now - _ws)) -lt 3600 ]; then logins_win_start=$_ws; logins=$_lg; fi ;;
     esac
     local last_wake last_iface backoff=5 next_try=0 n=0 desired st now wake iface
-    local probe_bad_since=0 last_probe_log=0 no_net=0
+    local probe_bad_since=0 last_probe_log=0 no_net=0 last_miss="" last_miss_log=0
+    # Сколько openconnect может висеть в «запускается»: дольше — завис
+    # (шлюз не ответил на CONNECT, vpnc-скрипт не дошёл до connect).
+    local starting_limit="${OCBAR_STARTING_LIMIT:-90}"
     last_wake=$(wake_ts); last_iface=$(primary_iface)
     [ -n "$last_iface" ] || no_net=1
 
@@ -3139,7 +3173,16 @@ cmd_supervise() {
                     # маршруты могли слететь при пересоздании utun
                     local dev miss; dev=$(env_get TUNDEV); miss=""
                     while read -r net; do [ -n "$net" ] && [ "$(route_via "$net")" != "$dev" ] && miss="$miss $net"; done <<< "$(active_networks)"
-                    if [ -n "$miss" ]; then log "маршруты пропали:$miss — восстанавливаю"; for net in $miss; do priv route-add "$net" || true; done; fi
+                    if [ -n "$miss" ]; then
+                        # Восстанавливаем каждый круг, а пишем — когда набор
+                        # сменился или раз в 5 минут: 21.09 одна и та же
+                        # строка заняла журнал тысячами повторов.
+                        if [ "$miss" != "$last_miss" ] || [ $((now - last_miss_log)) -ge 300 ]; then
+                            log "маршруты пропали:$miss — восстанавливаю"; last_miss_log=$now
+                        fi
+                        for net in $miss; do priv route-add "$net" || true; done
+                    fi
+                    last_miss="$miss"
                     if [ "$probe_bad_since" != 0 ]; then
                         log "связь восстановилась сама за $((now - probe_bad_since)) с — вход не потребовался"
                         notify "ocbar: связь восстановлена" "openconnect поднял сессию сам, без повторного входа" events
@@ -3170,7 +3213,14 @@ cmd_supervise() {
                     fi
                 fi
             elif [ "$st" = starting ]; then
-                :
+                # Раньше здесь не делалось ничего: повисший openconnect
+                # держал «подключается» бесконечно, и автопопыток не было.
+                local age; age=$(session_age)
+                if [ -n "$age" ] && [ "$age" -ge "$starting_limit" ]; then
+                    log "openconnect запускается уже $age с — завис, останавливаю; следующая попытка через $backoff с"
+                    session_stop >>"$SUP_LOG" 2>&1 || true
+                    next_try=$((now + backoff)); backoff=$((backoff * 2)); [ $backoff -gt 300 ] && backoff=300
+                fi
             elif is_paused; then
                 # Туннель умер, но человек просил «как будто выключен».
                 # Молча поднимать и отменять его решение — нельзя.
