@@ -212,7 +212,7 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
                 if pending == 0 {
                     self.checkVerify { self.checkSteps { self.checkRootClick { self.checkPrefill { self.checkAlways {
                         self.checkTeach { self.checkClick { self.checkLearnIsolation { self.checkCaptchaLimits {
-                            self.checkHostGuard { self.checkPopups { self.finish() } } } } } } } } } } }
+                            self.checkHostGuard { self.checkPopups { self.checkPageSummary { self.finish() } } } } } } } } } } } }
                 }
             }
         }
@@ -932,6 +932,32 @@ final class LearnCheck: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - снимок страницы при отказе входа
+
+    /// При отказе окно входа пишет в журнал, что было на странице. Видимые
+    /// сообщения — да, скрытые — нет; значения полей и логин — никогда.
+    private func checkPageSummary(_ then: @escaping () -> Void) {
+        eval("""
+        document.getElementById('username').value = 'alice';
+        document.getElementById('password').value = 'СекретныйПароль1';
+        var w = document.createElement('span'); w.id = 'whoami'; w.className = 'kc-feedback-text';
+        w.textContent = 'Вход как alice'; document.body.prepend(w);
+        var h = document.createElement('div'); h.id = 'hiddenerr'; h.className = 'alert-error';
+        h.style.display = 'none'; h.textContent = 'скрытая ошибка'; document.body.prepend(h);
+        'ok'
+        """) { _ in
+            self.engine(WebAuth.pageSummaryScript) { v in
+                let line = WebAuth.pageSummaryLine(v, login: "alice")
+                self.ok("снимок страницы: видимое сообщение формы попало", line.contains("Неверный пароль"), line)
+                self.ok("снимок страницы: скрытый блок ошибки не попал", !line.contains("скрытая ошибка"), line)
+                self.ok("снимок страницы: поле пароля — «заполнено», значения нет",
+                        line.contains("password[password]=заполнено") && !line.contains("СекретныйПароль1"), line)
+                self.ok("снимок страницы: логин заменён", !line.contains("alice") && line.contains("‹логин›"), line)
+                self.eval("document.getElementById('whoami').remove(); document.getElementById('hiddenerr').remove(); document.getElementById('username').value = ''; document.getElementById('password').value = ''; 'ok'") { _ in then() }
             }
         }
     }
