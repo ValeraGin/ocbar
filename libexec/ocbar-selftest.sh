@@ -799,6 +799,17 @@ STUB
     # Выйти совсем: сначала отключение, потом сброс сессий окна входа.
     has "logout: отключение и сброс сессий окна входа" "--forget-sessions" "$(run logout --dry-run 2>&1 || true)"
     has "logout: есть в справке" "ocbar logout" "$(run --help 2>&1 || true)"
+    # Каждая команда разбора аргументов — в справке на обоих языках: status
+    # --json, state, logs и profile-check в неё не попали и жили только в README.
+    local cmds c hru hen miss=""
+    cmds=$(sed -n '/^case "\${1:-}" in$/,/^esac$/p' "$SELF" | grep -oE '^    [a-z][a-z-]*(\|[a-z-]+)*\)' | tr -d ' )' | tr '|' '\n')
+    hru=$(OCBAR_LANG=ru run --help 2>&1 || true); hen=$(OCBAR_LANG=en run --help 2>&1 || true)
+    for c in $cmds; do
+        printf '%s' "$hru" | grep -Eq "ocbar $c( |$)" || miss="$miss ru:$c"
+        printf '%s' "$hen" | grep -Eq "ocbar $c( |$)" || miss="$miss en:$c"
+    done
+    is "справка: каждая команда описана на обоих языках" "" "${miss# }"
+    is "справка: команда status --json описана" 2 "$(printf '%s\n%s' "$hru" "$hen" | grep -c 'status \[--short|--json\]')"
 
     # Подключение в процессе: живой процесс — да, мёртвый — нет и отметка
     # убрана, мусор — нет. И супервизор при отметке не вмешивается.
