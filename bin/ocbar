@@ -3804,7 +3804,13 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
                                       туннель и вход оставить живыми
   ocbar resume                        вернуть маршруты и зоны (мгновенно, без входа)
   ocbar toggle                        pause ↔ resume
-  ocbar status [--short]              состояние; --short — машинный вид для меню
+  ocbar status [--short|--json]       состояние; --short — «ключ=значение» для скриптов,
+                                      --json — то же JSON-ом (его читает приложение)
+  ocbar state [--json]                файлы состояния разом: профиль, автоподключение, флаги
+  ocbar logs [-f] [-n строк] [источник…]
+                                      журналы одной лентой по времени (supervisor,
+                                      openconnect, proxy, auth, app)
+  ocbar profile-check <файл>          примет ли клиент профиль (редактор спрашивает перед записью)
   ocbar profiles                      список профилей
   ocbar profiles order [имя…]         порядок профилей в меню; без имён — текущий
   ocbar import <файл> [имя]           добавить профиль: .ocbar или профиль Cisco (.xml —
@@ -3882,7 +3888,13 @@ ocbar — OpenConnect for macOS: SSO, split DNS, split tunneling, a supervisor.
                                       tunnel and the sign-in alive
   ocbar resume                        bring routes and zones back (instantly, no sign-in)
   ocbar toggle                        pause ↔ resume
-  ocbar status [--short]              state; --short — machine-readable, for the menu
+  ocbar status [--short|--json]       state; --short — key=value lines for scripts,
+                                      --json — the same as JSON (the app reads it)
+  ocbar state [--json]                the state files at once: profile, auto-connect, flags
+  ocbar logs [-f] [-n lines] [source…]
+                                      all logs merged by time (supervisor, openconnect,
+                                      proxy, auth, app)
+  ocbar profile-check <file>          will the client accept a profile (the editor asks before saving)
   ocbar profiles                      list profiles
   ocbar profiles order [name…]        profile order in the menu; without names — current
   ocbar import <file> [name]          add a profile: .ocbar or a Cisco profile (.xml —
