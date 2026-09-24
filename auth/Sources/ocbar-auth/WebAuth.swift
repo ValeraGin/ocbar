@@ -144,6 +144,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
     enum WebAuthError: Error, CustomStringConvertible {
         case cancelled, timeout, needsHuman(String), errorCookie(String), stopped(String), navigation(String)
         case network(String)
+        var isCancelled: Bool { if case .cancelled = self { return true }; return false }
         var description: String {
             switch self {
             case .cancelled: return "окно закрыто пользователем"
@@ -403,10 +404,79 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         guard !finished else { return }
         finished = true
         [pollTimer, showTimer, timeoutTimer, fillTimer].forEach { $0?.invalidate() }
+        // Отказ — сначала снимок страницы в журнал: 2026-09-23 портал после
+        // смены сети дважды показал форму пароля без видимой ошибки, и по
+        // журналу нельзя было понять, что он ответил. Окно закрыл человек —
+        // он страницу видел сам.
+        if case .failure(let e) = r, !e.isCancelled, webView.url != nil {
+            logPage { [weak self] in self?.close(r) }
+        } else {
+            close(r)
+        }
+    }
+
+    private func close(_ r: Result<String, WebAuthError>) {
         webView.stopLoading()
         window.delegate = nil
         window.orderOut(nil)
         done(r)
+    }
+
+    /// Снимок страницы: заголовок, видимые заголовки и сообщения, поля (только
+    /// «заполнено/пусто», значения — никогда) и кнопки. Не дольше секунды:
+    /// повисшая страница не должна задерживать отказ.
+    private func logPage(_ then: @escaping () -> Void) {
+        var called = false
+        let once = { if !called { called = true; then() } }
+        let login = opts.creds.username
+        webView.evaluateJavaScript(Self.pageSummaryScript, in: nil, in: Self.world) { res in
+            if case .success(let v) = res { Log.info("страница при отказе: " + Self.pageSummaryLine(v, login: login)) }
+            else { Log.info("страница при отказе: снимок не получился") }
+            once()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: once)
+    }
+
+    /// Выполняется в изолированном мире окна входа: DOM страницы виден, её
+    /// переопределения встроенных функций — нет.
+    static let pageSummaryScript = """
+    (() => {
+      const vis = e => { const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+      const txt = e => (e.innerText || e.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160);
+      const uniq = a => a.filter((x, i) => x && a.indexOf(x) === i);
+      const pick = (sel, n) => uniq(Array.from(document.querySelectorAll(sel)).filter(vis).map(txt)).slice(0, n);
+      const fields = Array.from(document.querySelectorAll('input, select, textarea'))
+        .filter(e => e.type !== 'hidden' && vis(e))
+        .filter(e => !['submit', 'button', 'image', 'reset'].includes(e.type))
+        .map(e => (e.type || e.tagName.toLowerCase()) + (e.name ? '[' + e.name + ']' : e.id ? '#' + e.id : '')
+                  + ((e.type === 'checkbox' || e.type === 'radio') ? (e.checked ? '=отмечено' : '=не отмечено')
+                     : (e.value ? '=заполнено' : '=пусто')))
+        .slice(0, 8);
+      const buttons = uniq(Array.from(document.querySelectorAll('button, input[type=submit], input[type=button], [role=button]'))
+        .filter(vis).map(e => e.tagName === 'INPUT' ? String(e.value || '').slice(0, 60) : txt(e))).slice(0, 5);
+      return {
+        title: String(document.title || '').slice(0, 120),
+        heads: pick('h1, h2, legend, #kc-page-title', 3),
+        msgs: pick('[role=alert], [aria-live], .alert, .kc-feedback-text, .error, .errors, [class*=error], [class*=Error], [id*=error], [id*=Error], .message, .notice', 5),
+        fields: fields, buttons: buttons
+      };
+    })()
+    """
+
+    /// Одна строка журнала из снимка. Логин в тексте страницы (Keycloak
+    /// пишет его над формой пароля) заменяется словом: журнал уходит в отчёт.
+    static func pageSummaryLine(_ v: Any?, login: String?) -> String {
+        let d = v as? [String: Any] ?? [:]
+        func list(_ k: String) -> String { (d[k] as? [String] ?? []).joined(separator: " | ") }
+        var parts: [String] = []
+        if let t = d["title"] as? String, !t.isEmpty { parts.append("«\(t)»") }
+        for (k, name) in [("heads", "заголовки"), ("msgs", "сообщения"), ("fields", "поля"), ("buttons", "кнопки")] {
+            let l = list(k); if !l.isEmpty { parts.append("\(name): \(l)") }
+        }
+        var line = parts.isEmpty ? "пусто" : parts.joined(separator: " · ")
+        if let login, login.count >= 2 { line = line.replacingOccurrences(of: login, with: "‹логин›") }
+        return line
     }
 
     // MARK: - признаки завершения
