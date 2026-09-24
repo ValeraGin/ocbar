@@ -14,8 +14,9 @@
 каждый день. Вход через SSO, туннель, split DNS, маршруты и зоны на лету,
 пауза, супервизор и приложение меню-бара проверены на реальном шлюзе
 AnyConnect с провайдером входа Keycloak. Установка системного SOCKS в прокси-режиме
-проверена только холостым прогоном. История версий — [CHANGELOG.md](CHANGELOG.md),
-как поставить — [INSTALL.md](INSTALL.md).
+проверена только холостым прогоном. Приложение, окна входа и сообщения CLI
+говорят на языке системы — русском или английском. История версий —
+[CHANGELOG.md](CHANGELOG.md), как поставить — [INSTALL.md](INSTALL.md).
 
 ## Как это устроено
 
@@ -48,7 +49,7 @@ brew trust ValeraGin/ocbar            # tap не из homebrew-core: без эт
 brew install ocbar                    # собирает из исходников у вас; --HEAD — с main
 sudo ocbar install                    # один раз: хелпер, sudoers, агент
 
-mkdir -p ~/.config/ocbar/profiles     # без профиля не работает ни одна команда
+mkdir -p ~/.config/ocbar/profiles     # без профиля нечего подключать
 cp "$(brew --prefix ocbar)"/share/ocbar/examples/example.ocbar ~/.config/ocbar/profiles/main.ocbar
 $EDITOR ~/.config/ocbar/profiles/main.ocbar
 
@@ -66,7 +67,9 @@ mkdir -p ~/.config/ocbar/profiles && cp etc/example.ocbar ~/.config/ocbar/profil
 sudo ./bin/ocbar install
 ```
 
-`brew upgrade ocbar` — это и есть автообновление. Почему формула, а не
+Обновление — `brew upgrade ocbar`; если в выпуске изменился хелпер, после
+него ещё раз `sudo ocbar install` (`ocbar doctor` скажет, что хелпер
+отстал). Почему формула, а не
 готовый бинарь: без Apple Developer ID собранное локально не получает
 карантина, и Gatekeeper не мешает.
 
@@ -384,7 +387,7 @@ ocbar ui-lab --live     # подложить снимок реального с�
 ## Меню-бар
 
 Приложение [app/](app/) — SwiftUI, `MenuBarExtra`, macOS 13+. Читает
-`ocbar status --short`, действия делает вызовами `ocbar`; собственных
+`ocbar status --json`, действия делает вызовами `ocbar`; собственных
 привилегий у него нет.
 
 ```bash

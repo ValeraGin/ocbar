@@ -12,9 +12,10 @@ and a SwiftUI menu bar app. Installed from source through a Homebrew tap.
 ![ocbar menu](assets/menu.png)
 
 **Status:** a single-author tool used daily on a real AnyConnect gateway
-with a Keycloak identity provider. The user interface and CLI messages are in
-Russian; this README and the command reference are the English entry point.
-Version history is in [CHANGELOG.md](CHANGELOG.md).
+with a Keycloak identity provider. The app, the sign-in windows and the CLI
+follow the system language (English or Russian); the longer guides,
+[INSTALL.md](INSTALL.md) and [TROUBLESHOOTING.md](TROUBLESHOOTING.md), are in
+Russian. Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 > Not affiliated with Cisco. "AnyConnect" is used only to describe protocol
 > compatibility.
@@ -68,15 +69,18 @@ directories, and it only touches what it created itself. See
 - **Pause**: remove routes and zones without dropping the session, resume
   instantly without logging in again (⌥⌘P).
 - **Supervisor**: reconnects after sleep, network changes and dropped links;
+  stops a connection attempt that hangs for 90 seconds and tries again;
   never opens a login window on its own; caps logins per hour.
 - **Proxy mode**: `openconnect --script-tun` + `ocproxy` gives a local SOCKS
   proxy with no routes, no DNS changes and no root at all.
-- **English and Russian**: the app follows the system language; the CLI speaks
-  Russian for now.
+- **English and Russian**: the app, the sign-in windows and CLI messages
+  follow the system language.
 - **Menu bar app**: a status card with the profile, its address and one action
-  button (Connect, Disconnect, Sign in, Resume), traffic, network and zone
-  toggles on a second page; profiles are chosen and switched in Settings, profile editor, diagnostics, logs, notification settings, and a
-  first-run wizard (system component → profile → first login).
+  button (Connect, Disconnect, Sign in, Resume), traffic, and network and zone
+  toggles on a second page. Settings hold the profiles (chosen and switched
+  there), the profile editor, notification settings and diagnostics with
+  logs; a first-run wizard walks through system component → profile → first
+  login.
 
 ## Try it without a VPN
 
@@ -108,8 +112,9 @@ ocbar app start && ocbar app autostart on
 ```
 
 Why a source build: without a Developer ID a prebuilt app is quarantined by
-Gatekeeper, while a locally built one is not. `brew upgrade ocbar` is the
-update mechanism. Uninstall in this order: `sudo ocbar uninstall`, then
+Gatekeeper, while a locally built one is not. `brew upgrade ocbar` updates
+it; when a release changes the privileged helper, run `sudo ocbar install`
+once more (`ocbar doctor` says when the helper is behind). Uninstall in this order: `sudo ocbar uninstall`, then
 `brew uninstall ocbar` — otherwise the root helper and its sudoers rule stay
 behind. Details (in Russian): [INSTALL.md](INSTALL.md).
 
@@ -196,7 +201,7 @@ ocbar learn [profile] [--probe] [--out <file>]    record login form rules by cli
 ocbar rules show|import <file>|clear [profile]
 ocbar app start|stop|status | autostart on|off | devmode on|off
 ocbar supervisor status|start|stop|restart
-ocbar doctor                          diagnostics, changes nothing
+ocbar doctor                          diagnostics, changes nothing: parts, leftovers, stray sessions, routes
 ocbar cleanup                         remove leftovers after a crash (only ours)
 ocbar selftest
 sudo ocbar install [--trust] | uninstall
@@ -210,6 +215,7 @@ use "Run Shell Script" in Shortcuts, or call it from anything else:
 
 ```bash
 ocbar connect work && ocbar status --short   # key=value lines, easy to parse
+ocbar status --json                          # the same state as JSON (what the app reads)
 ocbar pause; ocbar resume
 ocbar autoconnect manual                     # stop the supervisor from logging in
 ```
@@ -229,6 +235,7 @@ tools/helper-selftest.sh        # privileged helper on --dry-run with stubs
 ocbar-auth --selftest           # TOTP (RFC 6238), XML, fill scope, limits, cookies
 ocbar-auth --learn-selftest     # form recording and autofill on sample pages
 ocbar-app --selftest            # profile read/write parity with the CLI, UI state
+tools/i18n-scan.py --check      # every string a person sees has its English
 ```
 
 They run in CI on every push.

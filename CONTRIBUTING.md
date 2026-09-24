@@ -7,8 +7,8 @@ is kept small on purpose. Small, well-tested changes are welcome.
 
 - Open an issue first for anything bigger than a fix. It may already be a
   deliberate "no" (see below).
-- Русский тоже подходит — и в обсуждениях, и в коде: интерфейс и комментарии
-  сейчас на русском.
+- Русский тоже подходит — и в обсуждениях, и в коде: комментарии и журналы
+  на русском, интерфейс — на двух языках (см. «UI text» ниже).
 
 ## Build and test
 
@@ -54,7 +54,7 @@ breaks. Prove it: temporarily revert your fix and show the check failing.
 |---|---|---|
 | `bin/ocbar` | CLI, bash, runs as the user | `ocbar status --json` is the machine-readable state the app reads; `--short` is `key=value` lines for scripts and SwiftBar; exit codes: 5 — a human must log in, 6 — network/gateway, other non-zero — failure |
 | `libexec/ocbar-*.py`, `ocbar-selftest.sh` | helpers the CLI runs: state as JSON, merged logs, report redaction, password-group login, the CLI self-test | found next to `ocbar` or in the Homebrew `libexec`; they are code, not strings inside the shell script |
-| `libexec/ocbar-helper` | everything that needs root | fixed subcommands, every argument validated, state only under `/var/db/ocbar`, touches only what it created; any change bumps its `VERSION` (`tools/helper-version-check.sh`, run by `release.sh`), or an outdated installed copy looks current |
+| `libexec/ocbar-helper` | everything that needs root | fixed subcommands, every argument validated, state only under `/var/db/ocbar`, touches only what it created and records it before making the change; changing subcommands run one at a time (`/var/db/ocbar/lock`); any change bumps its `VERSION` (`tools/helper-version-check.sh`, run by `release.sh`), or an outdated installed copy looks current |
 | `auth/` | `ocbar-auth`: login window, autofill, TOTP | fills only over HTTPS on hosts of the login chain; password twice, code once per login |
 | `app/` | SwiftUI menu bar app, no privileges | reads `status --json`, acts by calling `ocbar`; profile parsing must match the CLI (checked in `ocbar-app --selftest`) |
 
@@ -69,8 +69,8 @@ build, so a new screen cannot ship half-translated. It treats every Cyrillic
 string literal in the app outside `L("…")` as a mistake, except log lines
 (`AppLog.write`, `print`), comparisons with the client's output
 (`contains`, `hasPrefix`…) and lines marked `// i18n: не интерфейс`. The
-app's `--selftest` always runs in Russian: its checks compare Russian text. The sign-in windows (`auth/`) use
-the same `L("…")`; `ocbar-auth` has no bundle, so its English lives in
+app's `--selftest` always runs in Russian: its checks compare Russian text.
+The sign-in windows (`auth/`) use the same `L("…")`; `ocbar-auth` has no bundle, so its English lives in
 `auth/Sources/ocbar-auth/Translations.swift`, checked by the same scan. Log
 lines and messages the CLI parses stay in Russian.
 
@@ -79,7 +79,8 @@ notifications look the finished message up in `libexec/ocbar-en.tsv`
 (Russian template, tab, English; `{}` stands for `$var`, `${…}` or `$(…)`,
 `{1}`, `{2}`… when the order changes). Write messages as before; the scan
 lists new ones without a translation. Do not build a message in a variable
-and pass it on — the scan cannot see it. Anything the app or a script parses
+and pass it on — the scan cannot see its text, and fails on a message passed
+as a bare `"$var"`. Anything the app or a script parses
 must not depend on the language: use exit codes or `--json`. Strings that are compared
 against output of the CLI, or written into files, are not UI text and stay
 unwrapped.
