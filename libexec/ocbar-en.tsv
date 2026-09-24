@@ -396,3 +396,5 @@ pid {} работает по коду от {}, файл правился в {} �
 Лишние сессии	Stray sessions
 openconnect: {} — ocbar cleanup погасит их, текущую не тронет	openconnect: {} — ocbar cleanup stops them and leaves the current one alone
 нет	none
+# Сообщения хелпера, которые клиент показывает человеку (i18n-scan сверяет с libexec/ocbar-helper).
+на «{}» включён чужой SOCKS {}:{} — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле	«{}» already has someone else's SOCKS {}:{} — not overwriting it. Turn it off yourself or remove SystemProxy from the profile
