@@ -3,6 +3,15 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.8 — 2026-09-24
+
+- When the gateway refuses the connection after a successful sign-in, the
+  reason is shown in its own words. A refusal at the top of the reply
+  (for example "Cisco Secure Desktop not installed on the client" for groups
+  that require a device check) used to surface as "no session-token in the
+  reply". ocbar does not perform Cisco Secure Desktop checks; such groups
+  need Cisco Secure Client.
+
 ## 0.17.7 — 2026-09-24
 
 - When the sign-in window gives up (a person is needed, a timeout, an error
