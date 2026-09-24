@@ -14,8 +14,8 @@ import Foundation
 ///
 /// Контракт вызова — как у openconnect, чтобы штатные скрипты работали без
 /// правок: окружение CSD_HOSTNAME, CSD_TOKEN, CSD_SHA256; аргументы
-/// `-ticket <ticket> -stub 0 -group <tunnel-group> -certhash <hash>
-///  -url https://<host>/+CSCOE+/sdesktop/ -langselen en-US`.
+/// `<stub> -ticket <ticket> -stub 0 -group <tunnel-group> -certhash <hash>
+///  -url https://<host><host-scan-base-uri> -langselen en-US`.
 enum CSD {
     struct Params {
         let wrapper: String        // путь к скрипту (профиль CsdWrapper)
