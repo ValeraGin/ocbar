@@ -351,8 +351,9 @@ struct MenuView: View {
     // как работающие сети.
     private var counts: String {
         if s.paused { return L("не применяются") }
-        return L("сети %@/%@ · DNS %@/%@", "\(s.routesOn.count)", "\(s.routes.count)",
-                 "\(s.zones.filter { $0.enabled }.count)", "\(s.zones.count)")
+        // Без слова «сети»: заголовок строки его уже говорит, а с ним на
+        // английском и шестью зонами обрезались и заголовок, и сводка.
+        return "\(s.routesOn.count)/\(s.routes.count) · DNS \(s.zones.filter { $0.enabled }.count)/\(s.zones.count)"
     }
 
     private var networksLink: some View {
@@ -364,9 +365,10 @@ struct MenuView: View {
         }) {
             IconTile(symbol: s.isProxySession ? "arrow.left.arrow.right" : "globe", color: Palette.violet)
             Text(s.isProxySession ? L("Прокси SOCKS") : L("Сети и DNS"))
-            Spacer()
+                .lineLimit(1).fixedSize()
+            Spacer(minLength: 8)
             if !s.isProxySession {
-                Text(counts).font(.system(size: 12)).opacity(0.6)
+                Text(counts).font(.system(size: 12)).opacity(0.6).lineLimit(1)
             }
             Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).opacity(0.5)
         }

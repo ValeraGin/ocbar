@@ -37,11 +37,11 @@ enum LogReader {
         var snap = Snapshot()
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else {
-            snap.problem = "файла нет: \(path)"
+            snap.problem = L("файла нет: %@", path)
             return snap
         }
         guard let handle = FileHandle(forReadingAtPath: path) else {
-            snap.problem = "нет доступа на чтение: \(path)"
+            snap.problem = L("нет доступа на чтение: %@", path)
             return snap
         }
         defer { try? handle.close() }
@@ -66,7 +66,7 @@ enum LogReader {
         }
         if lines.count > maxLines { lines.removeFirst(lines.count - maxLines) }
         if lines.isEmpty {
-            snap.problem = needle.isEmpty ? "журнал пуст" : "ни одной строки с «\(filter)»"
+            snap.problem = needle.isEmpty ? L("журнал пуст") : L("ни одной строки с «%@»", filter)
         }
         snap.lines = lines
         return snap
@@ -113,7 +113,7 @@ extension LogReader {
             let tag = r.tag.padding(toLength: width, withPad: " ", startingAt: 0)
             lines.append(Line(id: lines.count, text: "\(time)  \(tag)  \(r.text)"))
         }
-        if lines.isEmpty { snap.problem = needle.isEmpty ? "журналы пусты" : "ни одной строки с «\(filter)»" }
+        if lines.isEmpty { snap.problem = needle.isEmpty ? L("журналы пусты") : L("ни одной строки с «%@»", filter) }
         snap.lines = lines
         return snap
     }

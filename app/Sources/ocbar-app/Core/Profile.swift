@@ -254,8 +254,8 @@ struct ProfileDoc {
     func render(dated: Date = Date()) -> String {
         let df = DateFormatter()
         df.dateFormat = "yyyy-MM-dd"
-        var out = "# Профиль ocbar, записан \(df.string(from: dated))\n"
-        out += "# Секретов здесь нет и быть не должно — только ссылки на хранилище.\n"
+        var out = "# Профиль ocbar, записан \(df.string(from: dated))\n"  // i18n: не интерфейс
+        out += "# Секретов здесь нет и быть не должно — только ссылки на хранилище.\n"  // i18n: не интерфейс
         out += keptLines("")
         out += "\n[Connection]\n"
         out += keptLines("Connection")
@@ -426,125 +426,125 @@ enum ProfileCheck {
         func warn(_ t: String) { issues.append(Issue(level: .warning, text: t)) }
 
         if !validFileName(d.fileName) {
-            err("имя файла «\(d.fileName)»: буквы, цифры, точка, дефис и подчёркивание, начинается с буквы или цифры")
+            err(L("имя файла «%@»: буквы, цифры, точка, дефис и подчёркивание, начинается с буквы или цифры", d.fileName))
         }
-        if d.url.trimmed.isEmpty { err("не задан Url — без него профиль не подключится") }
-        else if d.url.contains(" ") { err("в Url есть пробел: \(d.url)") }
+        if d.url.trimmed.isEmpty { err(L("не задан Url — без него профиль не подключится")) }
+        else if d.url.contains(" ") { err(L("в Url есть пробел: %@", d.url)) }
         else if !d.url.contains("/") {
-            warn("в Url нет группы (host/group) — шлюз обычно её ждёт")
+            warn(L("в Url нет группы (host/group) — шлюз обычно её ждёт"))
         }
-        if d.name.trimmed.isEmpty { warn("не задано Name — в меню будет имя файла") }
+        if d.name.trimmed.isEmpty { warn(L("не задано Name — в меню будет имя файла")) }
         let ua = d.userAgent.trimmed
         if !ua.isEmpty, !validUserAgent(ua) {
-            err("User-Agent содержит недопустимые символы — хелпер такой не пропустит")
+            err(L("User-Agent содержит недопустимые символы — хелпер такой не пропустит"))
         }
         for dup in d.duplicates {
-            warn("ключ \(dup) указан дважды — действует первое значение, повтор при сохранении уберётся")
+            warn(L("ключ %@ указан дважды — действует первое значение, повтор при сохранении уберётся", dup))
         }
 
         var seenRoutes = Set<String>()
         for r in d.routeNets {
-            if !validCIDR(r) { err("сеть «\(r)» — не CIDR вида 10.0.0.0/8"); continue }
-            if !seenRoutes.insert(r).inserted { warn("сеть \(r) указана дважды") }
+            if !validCIDR(r) { err(L("сеть «%@» — не CIDR вида 10.0.0.0/8", r)); continue }
+            if !seenRoutes.insert(r).inserted { warn(L("сеть %@ указана дважды", r)) }
             if let len = prefixLength(r), len < 8 {
-                warn("сеть \(r) уводит в туннель почти весь трафик — интернет пойдёт через шлюз")
+                warn(L("сеть %@ уводит в туннель почти весь трафик — интернет пойдёт через шлюз", r))
             }
         }
         if d.routeNets.isEmpty {
-            warn("ни одной сети: в туннель не пойдёт ничего")
+            warn(L("ни одной сети: в туннель не пойдёт ничего"))
         }
 
         var seenZones = Set<String>()
         for z in d.zones where !z.zone.trimmed.isEmpty {
             let zone = z.zone.trimmed, resolver = z.resolver.trimmed
-            if !validZone(zone) { err("зона «\(zone)» — недопустимое имя") }
-            else if !seenZones.insert(zone).inserted { warn("зона \(zone) указана дважды") }
-            if resolver.isEmpty { err("у зоны \(zone) не указан резолвер (адрес или vpn)") }
+            if !validZone(zone) { err(L("зона «%@» — недопустимое имя", zone)) }
+            else if !seenZones.insert(zone).inserted { warn(L("зона %@ указана дважды", zone)) }
+            if resolver.isEmpty { err(L("у зоны %@ не указан резолвер (адрес или vpn)", zone)) }
             else if resolver != "vpn", !validIP(resolver) {
-                err("у зоны \(zone) резолвер «\(resolver)» — нужен адрес IPv4 или слово vpn")
+                err(L("у зоны %@ резолвер «%@» — нужен адрес IPv4 или слово vpn", zone, resolver))
             }
             if !z.port.trimmed.isEmpty, !validPort(z.port.trimmed) {
-                err("у зоны \(zone) порт «\(z.port)» — число от 1 до 65535")
+                err(L("у зоны %@ порт «%@» — число от 1 до 65535", zone, z.port))
             }
         }
 
         let alg = d.totpAlgorithm.uppercased()
         if !ProfileDoc.totpAlgorithms.contains(alg) {
-            err("алгоритм кода «\(d.totpAlgorithm)» — бывает SHA1, SHA256 или SHA512")
+            err(L("алгоритм кода «%@» — бывает SHA1, SHA256 или SHA512", d.totpAlgorithm))
         }
         if !["6", "7", "8"].contains(d.totpDigits.trimmed) {
-            err("цифр в коде «\(d.totpDigits)» — бывает 6, 7 или 8")
+            err(L("цифр в коде «%@» — бывает 6, 7 или 8", d.totpDigits))
         }
         // Как check_totp_params: только цифры, 10–300. «+30» CLI не примет.
         let period = d.totpPeriod.trimmed
         if !(digits(period, 1...3) && (10...300).contains(Int(period) ?? 0)) {
-            err("период кода «\(d.totpPeriod)» — число секунд от 10 до 300")
+            err(L("период кода «%@» — число секунд от 10 до 300", d.totpPeriod))
         }
         let customCode = alg != "SHA1" || d.totpDigits.trimmed != "6" || d.totpPeriod.trimmed != "30"
         if customCode && ["keepassxc", "command", "off", "sms"].contains(d.totp) {
-            warn("параметры кода нужны только секрету в связке ключей — KeePassXC и команда отдают готовый код")
+            warn(L("параметры кода нужны только секрету в связке ключей — KeePassXC и команда отдают готовый код"))
         }
         switch d.totp {
         case "sms":
-            warn("код приходит по SMS и вводится руками — молчаливое переподключение работать не будет")
+            warn(L("код приходит по SMS и вводится руками — молчаливое переподключение работать не будет"))
         case "command" where d.totpCommand.trimmed.isEmpty:
-            err("Totp = command, но TotpCommand пуст")
+            err(L("Totp = command, но TotpCommand пуст"))
         case "keepassxc" where d.keepassEntry.trimmed.isEmpty:
-            err("Totp = keepassxc, но не указана запись KeepassEntry")
+            err(L("Totp = keepassxc, но не указана запись KeepassEntry"))
         default: break
         }
         switch d.password {
         case "command" where d.passwordCommand.trimmed.isEmpty:
-            err("Password = command, но PasswordCommand пуст")
+            err(L("Password = command, но PasswordCommand пуст"))
         case "keepassxc" where d.keepassEntry.trimmed.isEmpty:
-            err("Password = keepassxc, но не указана запись KeepassEntry")
+            err(L("Password = keepassxc, но не указана запись KeepassEntry"))
         case "ask":
-            warn("пароль вводит человек: молчаливое переподключение работать не будет")
+            warn(L("пароль вводит человек: молчаливое переподключение работать не будет"))
         default: break
         }
         if !ProfileDoc.passwordSources.contains(d.password) {
-            err("источник пароля «\(d.password)» — бывает " + ProfileDoc.passwordSources.joined(separator: ", "))
+            err(L("источник пароля «%@» — бывает ", d.password) + ProfileDoc.passwordSources.joined(separator: ", "))
         }
         if d.mode != "tunnel" && d.mode != "proxy" {
-            err("режим «\(d.mode)» — бывает tunnel или proxy")
+            err(L("режим «%@» — бывает tunnel или proxy", d.mode))
         }
         // MTU и DTLS: клиент такой профиль не загрузит, поэтому редактор
         // не должен давать его сохранить.
         let mtu = d.extras.first { $0.section == "Connection" && $0.key.lowercased() == "mtu" }?.value.trimmed ?? ""
         if !mtu.isEmpty, Int(mtu).map({ $0 < 576 || $0 > 9000 }) ?? true {
-            err("Mtu «\(mtu)» — число от 576 до 9000")
+            err(L("Mtu «%@» — число от 576 до 9000", mtu))
         }
         let dtls = d.extras.first { $0.section == "Connection" && $0.key.lowercased() == "dtls" }?.value.trimmed.lowercased() ?? ""
         if !dtls.isEmpty, !["on", "off"].contains(dtls) {
-            err("Dtls «\(dtls)» — on или off")
+            err(L("Dtls «%@» — on или off", dtls))
         }
         if d.mode == "proxy" {
-            warn("прокси-режим: нужен ocproxy (brew install ocproxy); маршруты и зоны из профиля не применяются, ходят только программы, которым указан SOCKS")
+            warn(L("прокси-режим: нужен ocproxy (brew install ocproxy); маршруты и зоны из профиля не применяются, ходят только программы, которым указан SOCKS"))
         }
         let port = d.proxyPort.trimmed
         if !port.isEmpty {
             if digits(port, 1...5), let n = Int(port) {
-                if n < 1024 || n > 65535 { err("порт SOCKS \(n) вне диапазона 1024-65535") }
-                if n == 10808 { warn("порт 10808 — SOCKS v2ray/Xray по умолчанию, часто занят — лучше другой") }
+                if n < 1024 || n > 65535 { err(L("порт SOCKS %@ вне диапазона 1024-65535", n)) }
+                if n == 10808 { warn(L("порт 10808 — SOCKS v2ray/Xray по умолчанию, часто занят — лучше другой")) }
             } else {
-                err("порт SOCKS «\(port)» — не число")
+                err(L("порт SOCKS «%@» — не число", port))
             }
         }
         let sys = d.systemProxyValue.trimmed
         if !sys.isEmpty, sys != "on", sys != "off" {
-            warn("SystemProxy = «\(sys)» — ocbar включает системный SOCKS только при on, так что сейчас это off")
+            warn(L("SystemProxy = «%@» — ocbar включает системный SOCKS только при on, так что сейчас это off", sys))
         }
         if d.systemProxy && d.mode != "proxy" {
-            warn("системный SOCKS имеет смысл только в прокси-режиме")
+            warn(L("системный SOCKS имеет смысл только в прокси-режиме"))
         }
         if !d.csdWrapper.isEmpty, d.csdWrapper.contains(" ") {
-            warn("путь CsdWrapper с пробелом — хелпер берёт только имя файла из своего каталога")
+            warn(L("путь CsdWrapper с пробелом — хелпер берёт только имя файла из своего каталога"))
         }
         for rule in d.autofill.map({ ProfileDoc.cliTrim($0) }) where !rule.isEmpty && !ProfileDoc.isComment(rule) {
-            if !validRule(rule) { err("правило «\(rule)» — бывает stop <сел>, fill username|password|totp|manual <сел>, click <сел>, click! <сел>") }
+            if !validRule(rule) { err(L("правило «%@» — бывает stop <сел>, fill username|password|totp|manual <сел>, click <сел>, click! <сел>", rule)) }
         }
         if !d.autofill.isEmpty, !d.rulesFile.trimmed.isEmpty {
-            warn("в профиле есть [Autofill] — файл из Rules при этом не читается")
+            warn(L("в профиле есть [Autofill] — файл из Rules при этом не читается"))
         }
         return issues
     }

@@ -37,7 +37,7 @@ struct ProfileEditorView: View {
     // Разметка идёт через общий store: пока идёт любое действие (в том числе
     // разметка, запущенная из меню), вторую не запустить.
     private var learnDisabled: Bool { store.busy != nil || doc.fileName.trimmed.isEmpty || !errors.isEmpty }
-    private var learning: Bool { store.busy?.hasPrefix("Идёт разметка") == true }
+    private var learning: Bool { store.busy == StatusStore.learnTitle }
     static var probeLearnEnabled: Bool?
     // Для пробы: сколько раз редактор сверялся с диском и чем кончилась
     // последняя сверка — без этого провал «не перечитал» не объяснить.
@@ -128,7 +128,7 @@ struct ProfileEditorView: View {
 
     private var alertTitle: String {
         switch alert {
-        case .unsaved: return L("Несохранённые правки в «%@»", doc.fileName.isEmpty ? "новый профиль" : doc.fileName)
+        case .unsaved: return L("Несохранённые правки в «%@»", doc.fileName.isEmpty ? L("новый профиль") : doc.fileName)
         case .changedOnDisk: return L("Файл профиля изменился на диске")
         case .exists(let name): return L("Профиль «%@» уже есть", name)
         case .none: return ""
@@ -1053,10 +1053,10 @@ struct ProfileEditorView: View {
 
     /// Имя файла из названия: латиница, цифры и дефис.
     static func slug(_ text: String) -> String {
-        let map: [Character: String] = ["а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
-            "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",
-            "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch",
-            "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya"]
+        let map: [Character: String] = ["а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",  // i18n: не интерфейс
+            "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",  // i18n: не интерфейс
+            "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch",  // i18n: не интерфейс
+            "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya"]  // i18n: не интерфейс
         var out = ""
         for ch in text.lowercased() {
             if let t = map[ch] { out += t }
@@ -1132,12 +1132,12 @@ struct ProfileEditorView: View {
     // перечитать; с правками — предупредить, сохранение спросит.
     private func checkDisk() {
         Self.probeDiskChecks += 1
-        guard let name = loadedName, let known = disk else { Self.probeDiskNote = "нет открытого файла"; return }
-        let m = ProfileStore.mtime(name)
-        if m != nil, m == known.mtime { Self.probeDiskNote = "время не изменилось"; return }
-        let now = ProfileStore.stamp(name)
-        if now == known { disk = now; Self.probeDiskNote = "текст тот же"; return }
-        Self.probeDiskNote = dirty ? "изменён, есть правки" : "изменён, перечитан"
+        guard let name = loadedName, let known = disk else { Self.probeDiskNote = "нет открытого файла"; return }  // i18n: не интерфейс
+        let m = ProfileStore.mtime(name)  // i18n: не интерфейс
+        if m != nil, m == known.mtime { Self.probeDiskNote = "время не изменилось"; return }  // i18n: не интерфейс
+        let now = ProfileStore.stamp(name)  // i18n: не интерфейс
+        if now == known { disk = now; Self.probeDiskNote = "текст тот же"; return }  // i18n: не интерфейс
+        Self.probeDiskNote = dirty ? "изменён, есть правки" : "изменён, перечитан"  // i18n: не интерфейс
         if now.text == nil {
             loadedName = nil
             disk = nil

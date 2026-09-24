@@ -140,14 +140,14 @@ enum Notifier {
         }
         let given = items.first { $0.name == "token" }?.value ?? ""
         guard let expected, !expected.isEmpty, !given.isEmpty, sameBytes(given, expected) else {
-            return .rejected(given.isEmpty ? "без токена" : "с чужим токеном")
+            return .rejected(given.isEmpty ? "без токена" : "с чужим токеном")  // i18n: не интерфейс
         }
         var title = items.first { $0.name == "title" }?.value ?? ""
         let body = items.first { $0.name == "body" }?.value ?? ""
         for prefix in ["ocbar: ", "ocbar:"] where title.hasPrefix(prefix) {
             title = String(title.dropFirst(prefix.count)); break
         }
-        guard !title.isEmpty || !body.isEmpty else { return .rejected("пустое") }
+        guard !title.isEmpty || !body.isEmpty else { return .rejected("пустое") }  // i18n: не интерфейс
         return .show(title: title.isEmpty ? "ocbar" : title, body: body)
     }
 

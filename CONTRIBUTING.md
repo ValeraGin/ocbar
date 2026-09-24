@@ -65,7 +65,11 @@ key means: CLI parser, app parser, validation in both, example file, docs.
 UI text: every string the person sees goes through `L("…")` with the Russian
 text as the key, and `app/Resources/en.lproj/Localizable.strings` holds the
 English. `tools/i18n-scan.py --check` lists what is missing and fails the
-build, so a new screen cannot ship half-translated. The sign-in windows (`auth/`) use
+build, so a new screen cannot ship half-translated. It treats every Cyrillic
+string literal in the app outside `L("…")` as a mistake, except log lines
+(`AppLog.write`, `print`), comparisons with the client's output
+(`contains`, `hasPrefix`…) and lines marked `// i18n: не интерфейс`. The
+app's `--selftest` always runs in Russian: its checks compare Russian text. The sign-in windows (`auth/`) use
 the same `L("…")`; `ocbar-auth` has no bundle, so its English lives in
 `auth/Sources/ocbar-auth/Translations.swift`, checked by the same scan. Log
 lines and messages the CLI parses stay in Russian.

@@ -132,9 +132,9 @@ final class StatusStore: ObservableObject {
             if v.isEmpty {
                 warning = nil
             } else if v["helper_path"] == nil {
-                warning = "Хелпер не установлен: действия из меню не сработают — sudo ocbar install"
+                warning = L("Хелпер не установлен: действия из меню не сработают — sudo ocbar install")
             } else if v["helper_nopasswd"] != "1" {
-                warning = "Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — sudo ocbar install"
+                warning = L("Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — sudo ocbar install")
             } else {
                 warning = nil
             }
@@ -254,15 +254,15 @@ final class StatusStore: ObservableObject {
                 case .ok(let text):
                     // Итог разметки стоит показать: правила лежат в файле, и
                     // без этой строки не понять, состоялась ли она.
-                    if title.hasPrefix("Идёт разметка") { self.note(text, failed: false) }
+                    if title == Self.learnTitle { self.note(text, failed: false) }
                 case .needsLogin:
-                    self.note("Молча войти не удалось — нужен вход", failed: true)
+                    self.note(L("Молча войти не удалось — нужен вход"), failed: true)
                     AppLog.write("действие «\(title)»: нужен вход (код 5)")
                 case .cancelled:
-                    self.note("«\(title.trimmingCharacters(in: CharacterSet(charactersIn: "…")))» отменено", failed: false)
+                    self.note(L("«%@» отменено", title.trimmingCharacters(in: CharacterSet(charactersIn: "…"))), failed: false)
                     AppLog.write("действие «\(title)»: отменено")
                 case .failed(let code, let message):
-                    self.note(message.isEmpty ? "не получилось" : message, failed: true)
+                    self.note(message.isEmpty ? L("не получилось") : message, failed: true)
                     AppLog.write("действие «\(title)»: код \(code) — \(message)")
                 }
                 completion?(result)
@@ -298,7 +298,7 @@ final class StatusStore: ObservableObject {
     }
 
     func connect(profile: String? = nil, show: Bool = false, teach: Bool = false) {
-        perform(teach ? "Вход с запоминанием…" : "Подключаюсь…", cancel: "Отменить подключение", disconnects: true) {
+        perform(teach ? L("Вход с запоминанием…") : L("Подключаюсь…"), cancel: L("Отменить подключение"), disconnects: true) {
             OcbarClient.shared.connect(profile: profile, show: show, teach: teach, cancel: $0)
         }
     }
@@ -316,39 +316,43 @@ final class StatusStore: ObservableObject {
 
     private func runDisconnect() {
         let body = disconnectBody
-        perform("Отключаю…") { body($0) }
+        perform(L("Отключаю…")) { body($0) }
     }
 
-    func pause() { perform("Ставлю на паузу…") { _ in OcbarClient.shared.pause() } }
-    func resume() { perform("Возобновляю…") { _ in OcbarClient.shared.resume() } }
+    func pause() { perform(L("Ставлю на паузу…")) { _ in OcbarClient.shared.pause() } }
+    func resume() { perform(L("Возобновляю…")) { _ in OcbarClient.shared.resume() } }
     func toggleRoute(_ net: String, to newValue: Bool) {
         guard busy == nil else { return }
         pendingRoutes[net] = newValue
-        perform("Переключаю \(net)…") { _ in OcbarClient.shared.toggleRoute(net) }
+        perform(L("Переключаю %@…", net)) { _ in OcbarClient.shared.toggleRoute(net) }
     }
     func toggleZone(_ zone: String, to newValue: Bool) {
         guard busy == nil else { return }
         pendingZones[zone] = newValue
-        perform("Переключаю \(zone)…") { _ in OcbarClient.shared.toggleZone(zone) }
+        perform(L("Переключаю %@…", zone)) { _ in OcbarClient.shared.toggleZone(zone) }
     }
 
     // Разметка формы входа: окно ocbar-auth живёт, пока человек не нажмёт
     // «Готово», поэтому ждём долго; правила ложатся в сам профиль. Одна на
     // всё приложение — и из меню, и из редактора профиля идёт сюда.
+    /// Подпись разметки — по ней редактор узнаёт, что идёт разметка. Сравнение
+    /// с переведённой константой, а не с русским началом строки: в английском
+    /// интерфейсе «Идёт разметка» в подписи нет.
+    static var learnTitle: String { L("Идёт разметка формы…") }
     func learn(profile: String, completion: ((OcbarClient.ActionResult) -> Void)? = nil) {
-        perform("Идёт разметка формы…", cancel: "Отменить разметку", {
+        perform(Self.learnTitle, cancel: L("Отменить разметку"), {
             let r = OcbarClient.shared.learn(profile: profile, cancel: $0)
             if case .ok(let text) = r {
-                return .ok((text.contains("отменена") || text.contains("cancelled")) ? "разметка отменена — профиль не тронут" : "правила записаны в профиль «\(profile)»")
+                return .ok((text.contains("отменена") || text.contains("cancelled")) ? L("разметка отменена — профиль не тронут") : L("правила записаны в профиль «%@»", profile))
             }
             return r
         }, completion: completion)
     }
     func routeIsOn(_ r: RouteEntry) -> Bool { pendingRoutes[r.net] ?? r.enabled }
     func zoneIsOn(_ z: ZoneEntry) -> Bool { pendingZones[z.zone] ?? z.enabled }
-    func cleanup() { perform("Убираю следы…") { _ in OcbarClient.shared.cleanup() } }
+    func cleanup() { perform(L("Убираю следы…")) { _ in OcbarClient.shared.cleanup() } }
     /// Выйти совсем (режим разработчика): отключиться и забыть сессии входа.
-    func logout() { perform("Выхожу совсем…") { _ in OcbarClient.shared.logout() } }
+    func logout() { perform(L("Выхожу совсем…")) { _ in OcbarClient.shared.logout() } }
 
     /// Пауза и возобновление одной клавишей: смысл действия зависит от того,
     /// что сейчас. Отключение сюда не входит намеренно — случайное нажатие
