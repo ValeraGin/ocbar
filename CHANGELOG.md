@@ -3,6 +3,15 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.7 — 2026-09-24
+
+- When the sign-in window gives up (a person is needed, a timeout, an error
+  on the form), `auth.log` now records what the page showed: its title,
+  visible headings and messages, the fields (only "filled" or "empty" —
+  never their values) and the buttons. The username in the page text is
+  replaced with a placeholder. On 2026-09-23 the portal showed the password
+  form twice after a network change and nothing in the logs said why.
+
 ## 0.17.6 — 2026-09-24
 
 - The English interface is English throughout. Action captions
