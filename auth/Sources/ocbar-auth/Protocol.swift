@@ -136,7 +136,10 @@ enum VPNProtocol {
         do { doc = try parse(data) }
         catch { throw ProtocolError.badXML(error.localizedDescription) }
 
-        if let err = text(doc, "//auth/error"), !err.isEmpty {
+        // Отказ бывает и в корне ответа, <config-auth><error>, а не только в
+        // <auth>: так шлюз говорит, что группа требует проверку устройства
+        // (Cisco Secure Desktop). Без этого человек видел «нет session-token».
+        if let err = text(doc, "//auth/error") ?? text(doc, "/config-auth/error"), !err.isEmpty {
             throw ProtocolError.serverError(err)
         }
         guard let token = text(doc, "//session-token"), !token.isEmpty else {

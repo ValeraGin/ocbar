@@ -342,6 +342,20 @@ if args.selfTest {
         out("  разбор complete: token=\(c.sessionToken) hash=\(c.serverCertHash)  \(ok ? "OK" : "FAIL")")
         if !ok { failed += 1 }
     } catch { out("  FAIL: \(error)"); failed += 1 }
+    // Отказ шлюза в корне ответа — словами шлюза, а не «нет session-token».
+    let refused = """
+    <config-auth client="vpn" type="complete" aggregate-auth-version="2">
+    <error id="13" param1="" param2="">Unable to complete connection: Cisco Secure Desktop not installed on the client</error>
+    </config-auth>
+    """
+    do {
+        _ = try VPNProtocol.parseComplete(Data(refused.utf8))
+        out("  FAIL: отказ шлюза в корне complete не замечен"); failed += 1
+    } catch {
+        let ok = "\(error)".contains("Cisco Secure Desktop not installed")
+        out("  отказ шлюза в корне complete — его словами  \(ok ? "OK" : "FAIL: \(error)")")
+        if !ok { failed += 1 }
+    }
     failed += AuthSelfTest.run()
     // Справка: каждый флаг из parseArgs описан, и описан правдиво. Новый
     // флаг — сюда же.
