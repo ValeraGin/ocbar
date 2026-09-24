@@ -20,6 +20,7 @@ prev=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
 python3 tools/i18n-scan.py --check >/dev/null || { python3 tools/i18n-scan.py --check; echo "release: интерфейс переведён не весь" >&2; exit 1; }
 swift build -c release --package-path auth >/dev/null
 auth/.build/release/ocbar-auth --selftest >/dev/null
+python3 tools/hostscan-sequence-test.py >/dev/null
 auth/.build/release/ocbar-auth --learn-selftest >/dev/null
 tools/helper-selftest.sh >/dev/null
 OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" bin/ocbar selftest >/dev/null

@@ -24,6 +24,17 @@ struct AuthComplete {
     let serverCertHash: String
 }
 
+/// Данные HostScan/CSD из ответа init: шлюз требует «проверку соответствия»
+/// перед входом. ticket и token отдаются скрипту-обёртке (как openconnect
+/// отдаёт их csd-wrapper). Сам ocbar-auth отчёт не формирует и не отправляет —
+/// это делает пользовательский скрипт, который приносит человек.
+struct HostScan {
+    let ticket: String
+    let token: String
+    let startURI: String
+    let waitURI: String
+}
+
 enum ProtocolError: Error, CustomStringConvertible {
     case badXML(String)
     case missing(String)
@@ -129,6 +140,23 @@ enum VPNProtocol {
             message: text(doc, "//auth/message") ?? "",
             error: nil
         )
+    }
+
+    /// tunnel-group из <opaque> ответа init — некоторым обёрткам нужна.
+    static func tunnelGroup(_ data: Data) -> String? {
+        guard let doc = try? parse(data) else { return nil }
+        return text(doc, "//tunnel-group")
+    }
+
+    /// <host-scan> из ответа init, если шлюз его прислал. Нет — nil, обычный
+    /// вход без проверки устройства.
+    static func parseHostScan(_ data: Data) -> HostScan? {
+        guard let doc = try? parse(data),
+              let ticket = text(doc, "//host-scan/host-scan-ticket"), !ticket.isEmpty,
+              let token = text(doc, "//host-scan/host-scan-token"), !token.isEmpty,
+              let startURI = text(doc, "//host-scan/host-scan-base-uri"), !startURI.isEmpty,
+              let waitURI = text(doc, "//host-scan/host-scan-wait-uri"), !waitURI.isEmpty else { return nil }
+        return HostScan(ticket: ticket, token: token, startURI: startURI, waitURI: waitURI)
     }
 
     static func parseComplete(_ data: Data) throws -> AuthComplete {

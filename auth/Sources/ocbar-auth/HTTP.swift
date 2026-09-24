@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import CryptoKit
 
 /// URLSession сам превращает POST в GET при 302 и теряет тело.
 /// Шлюзы Cisco за балансировщиком отвечают редиректом именно на POST,
@@ -9,9 +10,12 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
     private let userAgent: String
     private let insecure: Bool
     private let maxRedirects = 5
+    private var hostScanCookie: (host: String, token: String)?
 
     /// Отпечаток сертификата сервера (SHA-256 DER, hex) — для диагностики.
     private(set) var serverCertSHA256: String?
+    private(set) var serverPublicKeyPin: String?
+    private(set) var serverCertMD5: String?
 
     init(userAgent: String, insecure: Bool) {
         self.userAgent = userAgent
@@ -41,6 +45,8 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
         if let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate], let leaf = chain.first {
             let der = SecCertificateCopyData(leaf) as Data
             serverCertSHA256 = TOTP.sha256hex(der)
+            serverPublicKeyPin = Self.publicKeyPin(der)
+            serverCertMD5 = Insecure.MD5.hash(data: der).map { String(format: "%02X", $0) }.joined()
         }
         if insecure {
             Log.debug("TLS: сертификат принят без проверки (--insecure)")
@@ -48,6 +54,41 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
         } else {
             completionHandler(.performDefaultHandling, nil)
         }
+    }
+
+    /// cURL --pinnedpubkey ждёт SHA-256 от DER SubjectPublicKeyInfo, а не
+    /// отпечаток всего сертификата. У openconnect CSD_SHA256 — именно этот pin.
+    static func publicKeyPin(_ certificate: Data) -> String? {
+        let bytes = [UInt8](certificate)
+        func element(_ offset: inout Int) -> (tag: UInt8, start: Int, content: Int, end: Int)? {
+            guard offset + 2 <= bytes.count else { return nil }
+            let start = offset
+            let tag = bytes[offset]
+            offset += 1
+            let lengthByte = Int(bytes[offset]); offset += 1
+            var length = lengthByte
+            if lengthByte & 0x80 != 0 {
+                let count = lengthByte & 0x7f
+                guard (1...4).contains(count), offset + count <= bytes.count else { return nil }
+                length = 0
+                for _ in 0..<count { length = (length << 8) | Int(bytes[offset]); offset += 1 }
+            }
+            guard length <= bytes.count - offset else { return nil }
+            let result = (tag, start, offset, offset + length)
+            offset += length
+            return result
+        }
+        var pos = 0
+        guard let cert = element(&pos), cert.tag == 0x30 else { return nil }
+        pos = cert.content
+        guard let tbs = element(&pos), tbs.tag == 0x30 else { return nil }
+        pos = tbs.content
+        guard pos < bytes.count else { return nil }
+        if bytes[pos] == 0xa0 { guard element(&pos) != nil else { return nil } }
+        for _ in 0..<5 { guard element(&pos) != nil else { return nil } } // serial, signature, issuer, validity, subject
+        guard let spki = element(&pos), spki.tag == 0x30, spki.end <= tbs.end else { return nil }
+        let digest = SHA256.hash(data: Data(bytes[spki.start..<spki.end]))
+        return Data(digest).base64EncodedString()
     }
 
     struct Reply {
@@ -89,6 +130,9 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
         req.setValue("1", forHTTPHeaderField: "X-Aggregate-Auth")
         req.setValue("1", forHTTPHeaderField: "X-Transcend-Version")
         req.setValue("true", forHTTPHeaderField: "X-Support-HTTP-Auth")
+        if let c = hostScanCookie, req.url?.host == c.host {
+            req.setValue("sdesktop=\(c.token)", forHTTPHeaderField: "Cookie")
+        }
     }
 
     /// Шаг 1 протокола: GET, чтобы балансировщик увёл на конкретный узел.
@@ -112,6 +156,34 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
             return (target, hops)
         }
         throw ProtocolError.badXML("слишком много редиректов на GET")
+    }
+
+    /// После обёртки шлюз считает отчёт через wait URI. Openconnect шлёт
+    /// Cookie: sdesktop=<host-scan-token>, ждёт завершения и заново делает init.
+    func waitForHostScan(_ postURL: URL, uri: String, token: String) throws {
+        guard postURL.scheme == "https", let host = postURL.host,
+              uri.hasPrefix("/"), !uri.hasPrefix("//"),
+              let waitURL = URL(string: uri, relativeTo: postURL)?.absoluteURL,
+              waitURL.host == host, waitURL.scheme == "https" else {
+            throw ProtocolError.badXML("неверный host-scan-wait-uri")
+        }
+        hostScanCookie = (host, token)
+        for _ in 0..<30 {
+            var req = URLRequest(url: waitURL)
+            req.httpMethod = "GET"
+            headers(&req)
+            let r = try once(req)
+            Log.debug("GET HostScan wait → \(r.status)")
+            if (300...399).contains(r.status) { return }
+            guard r.status == 200 else { throw ProtocolError.http(r.status) }
+            let body = String(decoding: r.body, as: UTF8.self)
+            if body.hasPrefix("<?xml") { return }
+            guard body.range(of: "http-equiv=[\"']refresh", options: [.caseInsensitive, .regularExpression]) != nil else {
+                throw ProtocolError.badXML("HostScan wait: неизвестный ответ шлюза")
+            }
+            Thread.sleep(forTimeInterval: 1)
+        }
+        throw ProtocolError.badXML("HostScan wait: время ожидания истекло")
     }
 
     /// POST с ручной обработкой редиректов. Возвращает тело и адрес, на котором

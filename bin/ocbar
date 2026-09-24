@@ -1495,6 +1495,7 @@ authenticate() { # печатает "token hash post_url"
         args+=(--rules "$USER_STATE/rules/$P_NAME.rules")
     fi
     [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
+    [ -n "${P_CSD:-}" ] && [ -f "$P_CSD" ] && [ -x "$P_CSD" ] && [[ "$P_CSD" = /* ]] && args+=(--csd-wrapper "$P_CSD")
     [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
     # «Запомнить, как я вхожу»: галочка в окне входа для профиля одним
     # файлом. После входа окно спросит, что сохранить; итог без секретов

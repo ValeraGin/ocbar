@@ -20,6 +20,7 @@ struct Args {
     var selfTest = false
     var json = false
     var insecure = false
+    var csdWrapper: String?   // скрипт HostScan/CSD (профиль CsdWrapper)
     var verbose = false
     var rulesFile: String?
     var timeout: TimeInterval = 300
@@ -135,6 +136,8 @@ func usage() -> String {
                             и куда человек перешёл сам. Всегда только по https
       --device-id ID        значение <device-id> (по умолчанию mac-intel)
       --useragent UA        User-Agent (по умолчанию AnyConnect Windows 4.10.06079)
+      --csd-wrapper SCRIPT  скрипт HostScan/CSD, если группа требует проверку
+                            устройства (как --csd-wrapper у openconnect)
       --version V           версия клиента в <version> (по умолчанию 4.10.06079)
       --timeout SEC         сколько ждать SSO (300)
       --show-after SEC      показать окно, если за SEC секунд не прошло молча (2)
@@ -170,6 +173,7 @@ func parseArgs() -> Args {
     while let arg = it.next() {
         switch arg {
         case "--url": a.url = next(arg)
+        case "--csd-wrapper": a.csdWrapper = next(arg)
         case "--useragent": a.userAgent = next(arg)
         case "--version": a.version = next(arg)
         case "--device-id": a.deviceID = next(arg)
@@ -357,12 +361,54 @@ if args.selfTest {
         if !ok { failed += 1 }
     }
     failed += AuthSelfTest.run()
+    // HostScan/CSD: парсер <host-scan> и запуск обёртки. Настоящий шлюз не
+    // трогаем — скрипт-заглушка записывает argv и окружение.
+    out("HostScan/CSD:")
+    let initNoHS = "<config-auth type=\"auth-request\"><auth id=\"main\"><sso-v2-login>x</sso-v2-login></auth></config-auth>"
+    let hsNone = VPNProtocol.parseHostScan(Data(initNoHS.utf8))
+    out("  без <host-scan> → nil  \(hsNone == nil ? "OK" : "FAIL")")
+    if hsNone != nil { failed += 1 }
+    let initHS = "<config-auth><auth id=\"main\"><host-scan><host-scan-ticket>TICKET42</host-scan-ticket><host-scan-token>TOK99</host-scan-token><host-scan-base-uri>/+CSCOE+/sdesktop/</host-scan-base-uri><host-scan-wait-uri>/+CSCOE+/sdesktop/wait.html</host-scan-wait-uri></host-scan></auth><opaque is-for=\"sg\"><tunnel-group>TG-TEST</tunnel-group></opaque></config-auth>"
+    let hs = VPNProtocol.parseHostScan(Data(initHS.utf8))
+    out("  <host-scan> → ticket/token  \((hs?.ticket == "TICKET42" && hs?.token == "TOK99") ? "OK" : "FAIL")")
+    if hs?.ticket != "TICKET42" || hs?.token != "TOK99" { failed += 1 }
+    out("  tunnel-group из init  \(VPNProtocol.tunnelGroup(Data(initHS.utf8)) == "TG-TEST" ? "OK" : "FAIL")")
+    if VPNProtocol.tunnelGroup(Data(initHS.utf8)) != "TG-TEST" { failed += 1 }
+    do {
+        let dir = NSTemporaryDirectory() + "ocbar-csd-\(getpid())"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let script = dir + "/wrap.sh", rec = dir + "/rec"
+        // Заглушка вместо csd-post.sh: пишет свои argv и нужные переменные.
+        let body = "#!/bin/bash\nprintf '%s\\n' \"$*\" > \"\(rec)\"\nprintf 'HOST=%s TOKEN=%s SHA=%s\\n' \"$CSD_HOSTNAME\" \"$CSD_TOKEN\" \"$CSD_SHA256\" >> \"\(rec)\"\nexit 0\n"
+        try body.write(toFile: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
+        let res = CSD.run(.init(wrapper: script, host: "vpn.example.test", ticket: "TICKET42",
+                                token: "TOK99", group: "TG-TEST", certHash: "SERVERMD5:", pinSHA256: "PIN256", timeout: 10, startURI: "/+CSCOE+/sdesktop/"))
+        let got = (try? String(contentsOfFile: rec, encoding: .utf8)) ?? ""
+        let okRun: Bool = { if case .ok = res { return true }; return false }()
+        out("  запуск обёртки: код 0  \(okRun ? "OK" : "FAIL: \(res)")")
+        if !okRun { failed += 1 }
+        let argsOK = got.contains("-ticket TICKET42") && got.contains("-stub 0") && got.contains("-group TG-TEST")
+        out("  argv как у openconnect (-ticket -stub -group)  \(argsOK ? "OK" : "FAIL: \(got)")")
+        if !argsOK { failed += 1 }
+        let envOK = got.contains("HOST=vpn.example.test") && got.contains("TOKEN=TOK99") && got.contains("SHA=PIN256")
+        out("  окружение CSD_HOSTNAME/TOKEN/SHA256  \(envOK ? "OK" : "FAIL: \(got)")")
+        if !envOK { failed += 1 }
+        // Нет исполняемого скрипта — понятный отказ, не падение.
+        let bad = CSD.run(.init(wrapper: dir + "/нет", host: "h", ticket: "t", token: "k",
+                                group: "g", certHash: nil, pinSHA256: nil, timeout: 5, startURI: "/+CSCOE+/sdesktop/"))
+        let badOK: Bool = { if case .failed = bad { return true }; return false }()
+        out("  нет скрипта → отказ, не падение  \(badOK ? "OK" : "FAIL")")
+        if !badOK { failed += 1 }
+        try? FileManager.default.removeItem(atPath: dir)
+    }
     // Справка: каждый флаг из parseArgs описан, и описан правдиво. Новый
     // флаг — сюда же.
     out("Справка --help:")
     let help = usage()
     let flags = ["--url", "--useragent", "--version", "--device-id", "--rules", "--timeout", "--show-after",
                  "--always-show", "--no-window", "--no-autofill", "--fill-hosts", "--probe", "--dump-script",
+                 "--csd-wrapper",
                  "--selftest", "--import-qr", "--print-secret", "--print-params", "--list", "--totp-now",
                  "--print-all", "--import-otp", "--import-camera", "--qr-png", "--screen-access", "--camera-access",
                  "--learn", "--learn-selftest", "--learn-probe", "--teach-out", "--teach-on",
@@ -726,8 +772,26 @@ var webAuth: WebAuth?
 
 DispatchQueue.global().async {
     do {
-        let r = try runInit(args, http: http)
+        var r = try runInit(args, http: http)
         Log.info("шлюз: \(r.methods.joined(separator: ", ")), cookie \(r.request.tokenCookieName)")
+        // Проверка соответствия устройства: если шлюз прислал <host-scan> и в
+        // профиле задан скрипт-обёртка, зовём её ДО входа — как openconnect
+        // зовёт --csd-wrapper. Отчёт формирует и шлёт сам скрипт.
+        if let hs = VPNProtocol.parseHostScan(r.raw) {
+            if let wrapper = args.csdWrapper, !wrapper.isEmpty {
+                Log.info("шлюз требует проверку устройства (HostScan) — запускаю \(wrapper)")
+                let res = CSD.run(.init(wrapper: wrapper, host: r.postURL.host ?? "",
+                                        ticket: hs.ticket, token: hs.token,
+                                        group: VPNProtocol.tunnelGroup(r.raw) ?? "",
+                                        certHash: http.serverCertMD5.map { "\($0):" },
+                                        pinSHA256: http.serverPublicKeyPin, timeout: 60, startURI: hs.startURI))
+                if case .failed(let why) = res { Log.info("CSD: \(why) — продолжаю, шлюз решит сам") }
+                try http.waitForHostScan(r.postURL, uri: hs.waitURI, token: hs.token)
+                r = try runInit(args, http: http)
+            } else {
+                Log.info("шлюз требует проверку устройства (HostScan), а CsdWrapper в профиле не задан — вход не пройдёт")
+            }
+        }
         var opts = WebAuth.Options()
         opts.showAfter = args.showAfter
         opts.alwaysShow = args.alwaysShow
