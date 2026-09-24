@@ -2130,9 +2130,11 @@ socks_apply() {
         log "системный SOCKS включён: $svc → 127.0.0.1:$(proxy_port)"
         ok "Системный SOCKS" "включён на «${svc}»"
     else
-        local why; why=$(sed 's/^ocbar-helper: //' "$err" | head -1)
+        # Причину пишет хелпер (по-русски): в меню, уведомление и вывод она
+        # идёт на языке человека, в журнал — как есть.
+        local raw why; raw=$(sed 's/^ocbar-helper: //' "$err" | head -1); why=$(T "$raw")
         printf '%s\n' "$why" > "$PROXY_ENV.socks-refused"
-        log "системный SOCKS не включён: $why"
+        log "системный SOCKS не включён: $raw"
         warn "Системный SOCKS" "$why"
         notify "ocbar: системный SOCKS не включён" "$why" problems
     fi

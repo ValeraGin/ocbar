@@ -281,8 +281,24 @@ def cli_keys() -> list[str]:
     return list(found)
 
 
+HELPER = ROOT / "libexec/ocbar-helper"
+HELPER_MSG = re.compile(r'(?:^|[;&|{(\s])(?:die|say)\s+(?=")')
+
+
+def helper_templates() -> set[str]:
+    """Сообщения хелпера: клиент переводит те из них, что показывает человеку
+    (например, отказ socks-set) — их шаблоны в каталоге не «лишние»."""
+    out: set[str] = set()
+    for line in HELPER.read_text(encoding="utf-8").split("\n"):
+        for m in HELPER_MSG.finditer(line):
+            raw, _ = cli_quoted(line, m.end())
+            out.add(cli_template(raw))
+    return out
+
+
 def cli_check() -> int:
     keys = cli_keys()
+    from_helper = helper_templates()
     table: dict[str, str] = {}
     bad: list[str] = []
     if CLI_TABLE.exists():
@@ -301,7 +317,7 @@ def cli_check() -> int:
             if CYRILLIC.search(re.sub(r"\{\d*\}", "", en)):
                 bad.append(ru)
     missing = [k for k in keys if k not in table]
-    extra = [k for k in table if k not in keys]
+    extra = [k for k in table if k not in keys and k not in from_helper]
     for k in missing:
         print(f"ocbar: нет перевода: {k}")
     for k in extra:

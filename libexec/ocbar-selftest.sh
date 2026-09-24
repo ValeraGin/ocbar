@@ -23,7 +23,10 @@ printf '%s\n' "$*" >> "$OCBAR_STATE_DIR/helper.log"
 m="$OCBAR_STATE_DIR/socks.state"
 case "${1:-}" in
     version)     echo "ocbar-helper selftest" ;;
-    socks-set)   printf '%s %s\n' "$2" "$3" >> "$m" ;;
+    socks-set)   if [ -n "${OCBAR_STUB_SOCKS_REFUSE:-}" ]; then
+                     echo "ocbar-helper: на «$2» включён чужой SOCKS 127.0.0.1:10808 — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле" >&2; exit 1
+                 fi
+                 printf '%s %s\n' "$2" "$3" >> "$m" ;;
     socks-clear) if [ "${OCBAR_STUB_KEEP_SOCKS:-0}" != 1 ] && [ -f "$m" ]; then grep -Fv "$2 " "$m" > "$m.tmp" || true; mv "$m.tmp" "$m"; fi ;;
 esac
 exit 0
@@ -367,6 +370,12 @@ STUB
     run _selftest-fn socks_clear_all >/dev/null || true
     has "системный SOCKS: socks-clear снимает свой" "socks-clear Selftest LAN" "$(cat "$tmp/var/helper.log")"
     is "системный SOCKS: в манифесте пусто" "" "$(cat "$tmp/var/socks.state" 2>/dev/null)"
+    # Отказ хелпера (чужой SOCKS на сервисе) доходит до меню и уведомления —
+    # на языке человека; в журнал — как сказал хелпер.
+    OCBAR_STUB_SOCKS_REFUSE=1 OCBAR_LANG=en OCBAR_SELFTEST_SERVICE="Selftest LAN" run _selftest-fn socks_apply >/dev/null || true
+    has "системный SOCKS: отказ хелпера для меню — по-английски" "already has someone else's SOCKS" "$(cat "$tmp/state/proxy.env.socks-refused" 2>/dev/null)"
+    has "системный SOCKS: отказ хелпера в журнале — как сказал хелпер" "не перезаписываю" "$(grep 'не включён' "$tmp/logs/supervisor.log" | tail -1)"
+    rm -f "$tmp/state/proxy.env.socks-refused"
     OCBAR_SELFTEST_SERVICE="Selftest LAN" run _selftest-fn socks_apply >/dev/null || true
     : > "$tmp/var/helper.log"
     run _selftest-fn proxy_stop >/dev/null || true
