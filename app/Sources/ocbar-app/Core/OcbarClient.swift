@@ -26,7 +26,7 @@ final class OcbarClient: @unchecked Sendable {
         if let explicit = ProcessInfo.processInfo.environment["OCBAR_BIN"], !explicit.isEmpty {
             binary = Shell.firstExecutable([explicit])
             lookupNote = binary == nil
-                ? "Переменная OCBAR_BIN указывает на \(explicit) — там нет исполняемого файла."
+                ? L("Переменная OCBAR_BIN указывает на %@ — там нет исполняемого файла.", explicit)
                 : ""
             return
         }
@@ -45,7 +45,7 @@ final class OcbarClient: @unchecked Sendable {
         candidates += ["/opt/homebrew/bin/ocbar", "/usr/local/bin/ocbar"]
         binary = Shell.firstExecutable(candidates)
         if binary == nil {
-            lookupNote = "Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN."
+            lookupNote = L("Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN.")
         }
     }
 
@@ -81,12 +81,12 @@ final class OcbarClient: @unchecked Sendable {
         let r = Shell.run(binary, ["status", "--json"], timeout: 10)
         guard r.code == 0 else {
             var s = Status()
-            s.error = r.err.isEmpty ? "ocbar status вернул \(r.code)" : r.err.trimmed
+            s.error = r.err.isEmpty ? L("ocbar status вернул %@", r.code) : r.err.trimmed
             return s
         }
         guard var s = Status.parse(json: r.out) else {
             var bad = Status()
-            bad.error = "ocbar status --json вернул не JSON"
+            bad.error = L("ocbar status --json вернул не JSON")
             return bad
         }
         // MTU в `status --short` нет, а показать его хочется: берём из той
@@ -133,14 +133,14 @@ final class OcbarClient: @unchecked Sendable {
     func profileRejection(_ text: String, name: String) -> String? {
         guard let binary else { return nil }
         let dir = NSTemporaryDirectory() + "ocbar-check-\(getpid())"
-        let path = dir + "/" + (name.isEmpty ? "профиль" : name) + ".ocbar"
+        let path = dir + "/" + (name.isEmpty ? L("профиль") : name) + ".ocbar"
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: dir) }
         guard (try? text.write(toFile: path, atomically: true, encoding: .utf8)) != nil else { return nil }
         let r = Shell.run(binary, ["profile-check", path], timeout: 15)
         guard r.code != 0 else { return nil }
         let why = (r.err.isEmpty ? r.out : r.err).trimmed
-        return why.isEmpty ? "клиент не принял профиль (код \(r.code))" : why
+        return why.isEmpty ? L("клиент не принял профиль (код %@)", r.code) : why
     }
 
     // --- действия --------------------------------------------------------
@@ -153,13 +153,13 @@ final class OcbarClient: @unchecked Sendable {
     }
 
     func action(_ args: [String], timeout: TimeInterval = 60, cancel: CancelToken? = nil) -> ActionResult {
-        guard let binary else { return .failed(127, "ocbar не найден") }
+        guard let binary else { return .failed(127, L("ocbar не найден")) }
         let r = Shell.run(binary, args, timeout: timeout, cancel: cancel)
         if r.code == Shell.cancelledCode { return .cancelled }
         if r.code == 0 { return .ok(r.out.trimmed) }
         if r.code == 5 { return .needsLogin }
         let message = r.err.trimmed.isEmpty ? r.out.trimmed : r.err.trimmed
-        return .failed(r.code, message.isEmpty ? "код возврата \(r.code)" : message)
+        return .failed(r.code, message.isEmpty ? L("код возврата %@", r.code) : message)
     }
 
     // Вход может занять минуты, и приложение не должно обрывать его раньше
@@ -227,10 +227,10 @@ final class OcbarClient: @unchecked Sendable {
     }
 
     func doctor() -> String {
-        guard let binary else { return "ocbar не найден" }
+        guard let binary else { return L("ocbar не найден") }
         let r = Shell.run(binary, ["doctor"], timeout: 60)
         let text = (r.out + (r.err.isEmpty ? "" : "\n" + r.err)).trimmed
-        return text.isEmpty ? "ocbar doctor ничего не напечатал (код \(r.code))" : text
+        return text.isEmpty ? L("ocbar doctor ничего не напечатал (код %@)", r.code) : text
     }
 
     // --- версии для окна «о программе» -----------------------------------

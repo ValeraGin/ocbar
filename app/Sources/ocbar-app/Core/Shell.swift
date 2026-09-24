@@ -20,9 +20,9 @@ enum Shell {
                     timeout: TimeInterval = 30,
                     cancel: CancelToken? = nil) -> Result {
         guard FileManager.default.isExecutableFile(atPath: path) else {
-            return Result(code: 127, out: "", err: "нет такой программы: \(path)")
+            return Result(code: 127, out: "", err: L("нет такой программы: %@", path))
         }
-        if cancel?.isCancelled == true { return Result(code: cancelledCode, out: "", err: "отменено") }
+        if cancel?.isCancelled == true { return Result(code: cancelledCode, out: "", err: L("отменено")) }
         let task = Process()
         task.executableURL = URL(fileURLWithPath: path)
         task.arguments = args
@@ -74,7 +74,7 @@ enum Shell {
             terminateTree(task)
             _ = group.wait(timeout: .now() + 2)
             return Result(code: cancelled ? cancelledCode : -1, out: String(decoding: outData, as: UTF8.self),
-                          err: cancelled ? "отменено" : "команда не ответила за \(Int(timeout)) с")
+                          err: cancelled ? L("отменено") : L("команда не ответила за %@ с", Int(timeout)))
         }
         task.waitUntilExit()
         _ = group.wait(timeout: .now() + 5)

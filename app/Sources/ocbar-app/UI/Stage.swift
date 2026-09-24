@@ -118,7 +118,7 @@ enum Fixture {
         s.socks = "127.0.0.1:11080"; s.socksUp = socksUp
         s.systemProxy = true
         s.systemSocksOn = refused || !socksUp ? [] : ["USB 10/100/1G/2.5G LAN"]
-        s.systemSocksRefused = refused ? "на «USB 10/100/1G/2.5G LAN» уже включён чужой SOCKS 127.0.0.1:10808 — не перезаписываю" : ""
+        s.systemSocksRefused = refused ? L("на «USB 10/100/1G/2.5G LAN» уже включён чужой SOCKS 127.0.0.1:10808 — не перезаписываю") : ""
         if !socksUp { s.linkLostSince = Date().addingTimeInterval(-6) }
         return s
     }
@@ -133,8 +133,8 @@ enum Fixture {
     static func many() -> Status {
         var s = status(.connected)
         s.profiles = (1...9).map {
-            ProfileEntry(name: "p\($0)", title: "Профиль \($0)", auth: $0 == 9 ? "password" : "",
-                         descr: $0 % 2 == 0 ? "описание профиля номер \($0)" : "")
+            ProfileEntry(name: "p\($0)", title: L("Профиль %@", $0), auth: $0 == 9 ? "password" : "",
+                         descr: $0 % 2 == 0 ? L("описание профиля номер %@", $0) : "")
         }
         s.profile = "p1"
         return s
@@ -212,9 +212,9 @@ struct StageWindowsView: View {
 
 struct StageView: View {
     private let cases: [(String, Presentation)] = [
-        ("подключено", .connected), ("связь пропала", .lost), ("пауза", .paused),
-        ("подключается", .starting), ("нужен вход", .needsLogin),
-        ("отключено", .down), ("чужой туннель", .foreign), ("ocbar не найден", .missing),
+        ("подключено", .connected), ("связь пропала", .lost), ("пауза", .paused),  // i18n: не интерфейс
+        ("подключается", .starting), ("нужен вход", .needsLogin),  // i18n: не интерфейс
+        ("отключено", .down), ("чужой туннель", .foreign), ("ocbar не найден", .missing),  // i18n: не интерфейс
     ]
 
     var body: some View {
@@ -222,27 +222,27 @@ struct StageView: View {
             row(Array(cases[0..<4]))
             row(Array(cases[4..<8]))
             HStack(alignment: .top, spacing: 18) {
-                card("подключено · подробности", .connected, expandDetails: true)
-                card("подключено · профили", .connected, expandProfiles: true)
-                card("пауза · подробности", .paused, expandDetails: true)
+                card("подключено · подробности", .connected, expandDetails: true)  // i18n: не интерфейс
+                card("подключено · профили", .connected, expandProfiles: true)  // i18n: не интерфейс
+                card("пауза · подробности", .paused, expandDetails: true)  // i18n: не интерфейс
                 Spacer()
             }
             // Высота меню не должна меняться, пока идёт действие: иначе оно
             // прыгает под курсором ровно в момент нажатия на переключатель.
             HStack(alignment: .top, spacing: 18) {
-                card("подключено", .connected)
-                card("подключено · идёт действие", .connected, busy: "Переключаю 10.0.0.0/8…")
-                card("подключено · не получилось", .connected,
-                     note: "ocbar: сеть 11.0.0.0/8 не включилась — хелпер вернул 1")
-                card("после сна", Fixture.woke())
+                card("подключено", .connected)  // i18n: не интерфейс
+                card("подключено · идёт действие", .connected, busy: L("Переключаю %@…", "10.0.0.0/8"))  // i18n: не интерфейс
+                card("подключено · не получилось", .connected,  // i18n: не интерфейс
+                     note: "ocbar: " + L("сеть %@ не включилась", "11.0.0.0/8"))
+                card("после сна", Fixture.woke())  // i18n: не интерфейс
                 Spacer()
             }
             HStack(alignment: .top, spacing: 18) {
-                card("прокси · подробности", Fixture.proxy(), expandDetails: true)
-                card("прокси · чужой системный SOCKS", Fixture.proxy(refused: true))
-                card("прокси · SOCKS не отвечает", Fixture.proxy(socksUp: false), expandDetails: true)
-                card("девять профилей · смена", Fixture.many(), expandProfiles: true,
-                     switchTo: ProfileEntry(name: "p4", title: "Профиль 4", auth: "", descr: ""))
+                card("прокси · подробности", Fixture.proxy(), expandDetails: true)  // i18n: не интерфейс
+                card("прокси · чужой системный SOCKS", Fixture.proxy(refused: true))  // i18n: не интерфейс
+                card("прокси · SOCKS не отвечает", Fixture.proxy(socksUp: false), expandDetails: true)  // i18n: не интерфейс
+                card("девять профилей · смена", Fixture.many(), expandProfiles: true,  // i18n: не интерфейс
+                     switchTo: ProfileEntry(name: "p4", title: L("Профиль %@", 4), auth: "", descr: ""))
                 Spacer()
             }
         }

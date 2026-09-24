@@ -21,14 +21,14 @@ struct OcbarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Настройка ocbar", id: WindowID.settings) { SettingsWindow() }
-        Window("Первый запуск ocbar", id: WindowID.setup) { SetupView() }
+        Window(L("Настройка ocbar"), id: WindowID.settings) { SettingsWindow() }
+        Window(L("Первый запуск ocbar"), id: WindowID.setup) { SetupView() }
             .defaultSize(width: 740, height: 560)
 
-        Window("Журналы ocbar", id: WindowID.logs) { LogsView() }
+        Window(L("Журналы ocbar"), id: WindowID.logs) { LogsView() }
             .defaultSize(width: 880, height: 540)
 
-        Window("Диагностика ocbar", id: WindowID.diagnostics) { DiagnosticsView() }
+        Window(L("Диагностика ocbar"), id: WindowID.diagnostics) { DiagnosticsView() }
             .defaultSize(width: 760, height: 620)
     }
 }
@@ -75,8 +75,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if CommandLine.arguments.contains("--stage") { openStage() }
         else {
             AppLog.write("запуск \(AppInfo.version); ocbar: "
-                + (OcbarClient.shared.binary ?? "не найден — " + OcbarClient.shared.lookupNote)
-                + "; ⌥⌘P: " + (GlobalHotkeys.shared.isRegistered("pause") ? "занята нами" : "не досталась"))
+                + (OcbarClient.shared.binary ?? "не найден — " + OcbarClient.shared.lookupNote)  // i18n: не интерфейс
+                + "; ⌥⌘P: " + (GlobalHotkeys.shared.isRegistered("pause") ? "занята нами" : "не досталась"))  // i18n: не интерфейс
         }
         // --shot <файл>: снять витрину в PNG и выйти. Нужен, чтобы смотреть
         // на интерфейс, не открывая меню руками, — и чтобы разницу между
@@ -117,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 60, y: 60), size: size),
                               styleMask: screenshot != nil ? [.borderless] : [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
-        window.title = "ocbar — витрина состояний"
+        window.title = "ocbar — витрина состояний"  // i18n: не интерфейс
         if CommandLine.arguments.contains("--light") {
             window.appearance = NSAppearance(named: .aqua)
         }

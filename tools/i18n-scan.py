@@ -30,12 +30,63 @@ STRINGS = ROOT / "app/Resources/en.lproj/Localizable.strings"
 # собираются ключи и ищутся места, где перевод забыли.
 CYRILLIC = re.compile(r"[а-яА-ЯёЁ]")
 KEY_RE = re.compile(r'(?<![\w.])L\(\s*"((?:[^"\\]|\\.)*)"')
-CALLS = [
-    "Text", "Button", "Toggle", "Picker", "Section", "LabeledContent",
-    "Footnote", "Label", "TextField", "navigationTitle", "field", "sourceRow",
-    "MenuRow", "pageTitle", "help", "accessibilityLabel",
-]
-UNWRAPPED_RE = re.compile(r"(?<![\w.])(?:" + "|".join(CALLS) + r")\(\s*\"((?:[^\"\\]|\\.)*)\"")
+# Строка интерфейса без L() остаётся русской и в английском интерфейсе. До
+# 0.17.6 скан искал её только в вызовах из списка (Text, Button…) и молчал о
+# подписях действий, ошибках, подсказках редактора и заголовках окон — а
+# найденное печатал, не останавливая сборку. Теперь любой кириллический
+# литерал вне L() — ошибка, кроме того, что человек не видит:
+UI_SKIP_FILES = {"SelfTest.swift", "SelfTestAudit.swift", "MenuProbe.swift"}
+# журнал и печать; сравнение с выводом клиента (он переводит сам);
+# строка, помеченная комментарием «i18n: не интерфейс».
+NOT_UI_LINE = re.compile(r"AppLog\.write|\bprint\(|fatalError\(|i18n: не интерфейс")
+COMPARE_BEFORE = re.compile(r"(?:contains|hasPrefix|hasSuffix|range\(of:|components\(separatedBy:|==|!=)\s*\(?\s*$")
+
+
+def swift_literals(line: str) -> list[tuple[int, str]]:
+    """Строковые литералы строки кода с позицией открывающей кавычки,
+    включая вложенные в интерполяцию \\( … ). Комментарий // — конец."""
+    out: list[tuple[int, str]] = []
+
+    def code(i: int, inner: bool) -> int:
+        # inner — внутри интерполяции \\( … ): её закрывающая скобка выходит.
+        depth = 1 if inner else 0
+        while i < len(line):
+            c = line[i]
+            if c == '"':
+                i = string(i)
+                continue
+            if line.startswith("//", i) and not inner:
+                return len(line)
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if inner and depth == 0:
+                    return i + 1
+            i += 1
+        return i
+
+    def string(i: int) -> int:
+        start, j, buf = i, i + 1, ""
+        while j < len(line):
+            c = line[j]
+            if c == "\\" and j + 1 < len(line) and line[j + 1] == "(":
+                j = code(j + 2, True)
+                buf += "{}"
+                continue
+            if c == "\\":
+                buf += line[j:j + 2]; j += 2; continue
+            if c == '"':
+                out.append((start, buf))
+                return j + 1
+            buf += c; j += 1
+        out.append((start, buf))
+        return j
+
+    code(0, False)
+    return out
+
+
 def keys(report_unwrapped: bool = False) -> list[str]:
     found: dict[str, None] = {}
     unwrapped: list[str] = []
@@ -43,19 +94,26 @@ def keys(report_unwrapped: bool = False) -> list[str]:
         for path in sorted(root.rglob("*.swift")):
             if path.name in {"SelfTest.swift", "SelfTestAudit.swift"}:
                 continue  # самопроверка человеку не показывается; витрина — да: из неё кадры README
-            for line in path.read_text(encoding="utf-8").split("\n"):
+            for n, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
                 if line.lstrip().startswith("//"):
                     continue
                 for raw in KEY_RE.findall(line):
                     if not CYRILLIC.search(raw):
                         continue
                     found.setdefault(raw.replace('\\"', '"'), None)
-                for raw in UNWRAPPED_RE.findall(line):
-                    if CYRILLIC.search(raw) and 'L("' not in line:
-                        unwrapped.append(f"{path.name}: {raw}")
+                if path.name in UI_SKIP_FILES or NOT_UI_LINE.search(line):
+                    continue
+                for pos, text in swift_literals(line):
+                    if not CYRILLIC.search(text):
+                        continue
+                    before = line[:pos].rstrip()
+                    if before.endswith("L(") or COMPARE_BEFORE.search(before):
+                        continue
+                    unwrapped.append(f"{path.name}:{n}: {text}")
     if report_unwrapped:
         for u in unwrapped:
             print("без перевода в коде: " + u)
+    keys.unwrapped = unwrapped
     return list(found)
 
 
@@ -92,7 +150,7 @@ def main() -> int:
     for k in extra:
         print(f"лишний перевод (строки в коде нет): {k}")
     print(f"строк интерфейса: {len(ks)}, переведено: {len(ks) - len(missing) - len(todo)}")
-    return 1 if missing or todo or extra else 0
+    return 1 if missing or todo or extra or getattr(keys, "unwrapped", []) else 0
 
 
 # --- ocbar-auth ------------------------------------------------------------
