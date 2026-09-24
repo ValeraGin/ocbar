@@ -23,8 +23,12 @@ password. That is the main attack surface, and it is kept narrow.
 - runs a root-owned copy of `openconnect` and checks the SHA-256 of it and of
   every linked library against a manifest written at install time;
 - only removes what it created: its own `/etc/resolver` files, routes through
-  its own `utun`, its own SOCKS settings; signals only a process that really
-  is `openconnect`;
+  its own `utun`, its own SOCKS settings; signals only its own `openconnect`
+  (checked by name and recorded start time);
+- records a route or a zone as its own before adding it, so an interrupted
+  run leaves nothing that cleanup does not know about; commands that change
+  its state run one at a time (`/var/db/ocbar/lock`, released when the owner
+  is gone);
 - refuses `--dry-run` as root; `--dry-run` never writes system state.
 
 **Known residual risk.** `openconnect`'s shared libraries stay in the
