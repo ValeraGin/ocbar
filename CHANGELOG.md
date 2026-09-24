@@ -3,6 +3,28 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.6 — 2026-09-24
+
+- The English interface is English throughout. Action captions
+  ("Connecting…", "Switching 10.0.0.0/8…", "Pausing…"), results
+  ("cancelled", "did not work"), the profile editor's hints, window titles,
+  the log viewer's messages and errors from the client were shown in
+  Russian: the translation check only looked at a fixed list of SwiftUI
+  calls and did not fail the build on what it found. It now treats every
+  Cyrillic string in the app outside `L("…")` as an error, except log lines
+  and comparisons with the client's output.
+- The reason the helper gives for not setting the system-wide SOCKS (someone
+  else's SOCKS is on) reaches the menu and the notification in the
+  interface language.
+- The menu row "Networks and DNS" no longer cuts off its title: the summary
+  is shorter ("3/3 · DNS 6/6").
+- `ocbar --help` lists `status --json`, `state`, `logs` and `profile-check`;
+  the self-test now checks that every command is in the help, in both
+  languages.
+- Docs: the interface language, updating when a release changes the helper,
+  new troubleshooting entries (routes not through the tunnel's interface, a
+  connection stuck in "Connecting…", "the helper is busy").
+
 ## 0.17.5 — 2026-09-23
 
 Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
