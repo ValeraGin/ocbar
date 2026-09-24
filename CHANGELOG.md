@@ -3,6 +3,15 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.17.9 — 2026-09-24
+
+- For sign-in groups that request a device check, ocbar-auth now runs the
+  executable `CsdWrapper` configured in the profile before SSO. The wrapper
+  supplies the report; ocbar waits for the gateway to finish processing it,
+  then refreshes the sign-in request. Groups without this request are unchanged.
+- The client checks the wrapper sequence against a local HTTPS gateway during
+  release validation.
+
 ## 0.17.8 — 2026-09-24
 
 - When the gateway refuses the connection after a successful sign-in, the
