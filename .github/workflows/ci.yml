@@ -22,14 +22,15 @@ jobs:
       - uses: actions/checkout@v5
       - name: Shell syntax
         run: |
-          for f in bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh; do
+          for f in bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh tools/server-lab/*.sh; do
             bash -n "$f"
           done
       - name: ShellCheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck >/dev/null
           shellcheck -S error bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh
-          python3 -m compileall -q libexec/*.py tools/*test.py
+          shellcheck -S error tools/server-lab/*.sh
+          python3 -m compileall -q libexec/*.py tools/*test.py tools/server-lab/*.py
       - name: Перевод интерфейса
         run: python3 tools/i18n-scan.py --check
       - name: Formula syntax
@@ -51,7 +52,7 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y openconnect
       - name: Build isolated ocserv
         run: docker build --build-arg BASE=debian:${{ matrix.debian }}-slim -t ocbar-test-ocserv:${{ matrix.debian }} tools/server-lab
-      - name: Password authentication against real ocserv
+      - name: Authentication and isolated tunnel against real ocserv
         run: python3 tools/ocserv-integration-test.py --image ocbar-test-ocserv:${{ matrix.debian }}
 
   test:

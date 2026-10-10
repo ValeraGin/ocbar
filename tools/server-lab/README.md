@@ -10,19 +10,27 @@ about GlobalProtect, Fortinet, Pulse, OpenVPN or WireGuard.
 | --- | --- | --- |
 | `tools/gateway-matrix-test.py` | Real ocbar-auth + WebKit against synthetic HTTPS gateways | SSO, custom cookie names, opaque round-trip, nested certificate hash, GET/POST/final-reply redirects (including host changes), client-certificate fallback, protocol/server/TLS errors |
 | `tools/hostscan-sequence-test.py` | Real ocbar-auth + external wrapper against a synthetic HTTPS gateway | Report submission, waiting, original HostScan token, wrapper failures, paths with spaces, non-default port |
-| `tools/ocserv-integration-test.py` | Production password driver + real OpenConnect + real ocserv | Stored/manual password, wrong password then cancellation, initial cancellation, rejection of an untrusted certificate |
+| `tools/ocserv-integration-test.py` | Production password driver + real OpenConnect + real ocserv | Stored/manual password, wrong password then cancellation, initial cancellation, untrusted server certificate, groups, password + TOTP, client certificate, isolated CSTP tunnel with HTTP and DNS |
 
 The first two are protocol fixtures, **not certified emulations of Cisco
-firmware**. The third uses actual servers. These suites obtain authentication
-sessions; they do not start the host VPN, test routed traffic, DNS or DTLS.
-Helper routing tests remain in `tools/helper-selftest.sh`.
+firmware**. The third uses actual servers and a second disposable container
+as a VPN client. It obtains a session through the production password driver,
+passes the cookie to OpenConnect over stdin, checks that the route uses its TUN
+interface, fetches an HTTP resource, and queries the DNS address supplied by
+ocserv. None of these tests starts the host VPN. DTLS is disabled in the tunnel
+test; it verifies CSTP over TLS. Helper routing tests remain in
+`tools/helper-selftest.sh`.
 
 The ocserv runner supplies `--cafile` directly to OpenConnect and exercises
 `ocbar-pwauth.py`, not the complete profile-to-tunnel workflow. The current
 profile/CLI does not expose a CA file, `--authgroup` or a client certificate.
-Those configurations are therefore not declared supported by this suite.
-Real OTP, client-certificate auth, group selection and routed end-to-end traffic
-remain separate coverage gaps; a passing password-driver test cannot cover them.
+Those configurations are therefore not declared supported through profiles by
+this suite. Groups are tested both with explicit selection and with the expected
+refusal when selection is missing. TOTP checks a real code and cancellation;
+certificate authentication checks presence and absence of a client certificate.
+The tunnel uses a minimal Linux route script, not the production macOS helper.
+System DNS configuration on macOS, DTLS, and the complete profile-to-tunnel
+workflow remain separate coverage gaps.
 
 All credentials are synthetic. The scripts do not load personal profiles or
 Keychain entries. TLS fixtures bind only to loopback and use temporary
@@ -61,9 +69,13 @@ python3 tools/ocserv-integration-test.py --image ocbar-test-ocserv:trixie
 ```
 
 Use `--openconnect /absolute/path/to/openconnect` if it is not on PATH.
+Use `--mode password`, `--mode groups`, `--mode otp` or `--mode certificate`
+to run one part (repeat the flag to combine parts). The default runs all 12
+scenarios per server; `password` includes the container tunnel test.
 The runner publishes a random port on `127.0.0.1`, creates a disposable account,
-trusts only its generated lab certificate and removes its container in `finally`.
-The container gets NET_ADMIN and a TUN device for ocserv; it is not privileged
+trusts only its generated lab certificate and removes its containers and Docker
+network in `finally`. The server and tunnel client get NET_ADMIN and a TUN device;
+neither is privileged
 and cannot modify host routes. Image build needs Debian package repositories.
 Images are cached for later runs, containers are disposable.
 

@@ -26,7 +26,8 @@ python3 tools/hostscan-sequence-test.py        # external CSD wrapper handshake
 
 [Server compatibility lab](tools/server-lab/README.md) also runs the real
 OpenConnect password driver against two ocserv releases in disposable Docker
-containers. The gateway fixtures bind only to localhost; neither suite changes
+containers: passwords, groups, TOTP, client certificates, and a separate client
+container with routed HTTP and VPN DNS. The gateway fixtures bind only to localhost; neither suite changes
 the host VPN or routes. Local TLS tests need networking and WebKit outside the
 brew sandbox. Real ocserv tests run in a separate Linux CI job.
 
