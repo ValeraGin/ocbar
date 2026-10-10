@@ -262,6 +262,12 @@ STUB
           OCBAR_PROMPT_CMD='if [ -n "$OCBAR_PROMPT_SECRET" ]; then echo secret-pw; else echo 424242; fi' \
           run _selftest-fn pw_auth pw </dev/null || true)
     has "парольная группа: пароля нет — спрошен у человека, вход прошёл" "tok123" "$out"
+    out=$(run _selftest-fn auth_result 'webvpn=first; webvpnc=second pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= https://node.example.test/pw')
+    is "парольная группа: составная cookie целиком" 'webvpn=first; webvpnc=second' "$(printf '%s\n' "$out" | head -1)"
+    is "парольная группа: хеш отделён от cookie" 'pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' "$(printf '%s\n' "$out" | sed -n '2p')"
+    is "парольная группа: URL без фрагментов cookie" 'https://node.example.test/pw' "$(printf '%s\n' "$out" | tail -1)"
+    out=$(run _selftest-fn auth_result 'tok123 hash https://node.example.test/pw')
+    is "SSO: простой токен разобран как прежде" 'tok123' "$(printf '%s\n' "$out" | head -1)"
     # Дальше проверки рассчитаны на единственный профиль t.
     rm -f "$tmp/profiles/pw.ocbar"
     out=$status_out

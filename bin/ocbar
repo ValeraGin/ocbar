@@ -1745,6 +1745,16 @@ build_spec() { # cookie → stdin для tunnel-start
     active_zones    | sed 's/^/zone /'
 }
 
+parse_auth_result() { # строка authenticate → token, hash, post_url вызывающей функции
+    # Cookie OpenConnect может содержать несколько пар с пробелами после ;.
+    # Хеш и URL пробелов не содержат: отделяем два последних поля справа.
+    local rest
+    post_url=${1##* }
+    rest=${1% *}
+    hash=${rest##* }
+    token=${rest% *}
+}
+
 do_connect() { # профиль уже загружен
     # Тем же профилем — уже подключён, делать нечего. Другим — переключение:
     # отключить и подключить заново, с записью в журнал. Раньше здесь было
@@ -1797,7 +1807,7 @@ do_connect() { # профиль уже загружен
         human|network) rm -f "$CONNECTING"; return "$rc" ;;
     esac
     [ "$rc" = 0 ] || { rm -f "$CONNECTING"; return "$rc"; }
-    read -r token hash post_url <<< "$out"
+    parse_auth_result "$out"
     [ -n "$token" ] || die "аутентификация не вернула токен"
     # КРИТИЧНО: подключаться надо к тому узлу, что выдал cookie. Балансировщик
     # увёл SSO на конкретный узел (post_url), и session-token/servercert — его.
@@ -4011,6 +4021,7 @@ case "${1:-}" in
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
             app_sync_copy) app_sync_copy "${2:-}" ;;
             auth_rc_action) auth_rc_action "${2:-}" ;;
+            auth_result) parse_auth_result "${2:-}"; printf '%s\n' "$token" "$hash" "$post_url" ;;
             report_redact) report_redact ;;
             autoconnect_policy) autoconnect_policy ;;
             captive_portal) captive_portal && echo portal || echo no ;;
