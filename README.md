@@ -2,12 +2,16 @@
 
 **English** · [Русский](README.ru.md)
 
-A Cisco AnyConnect–compatible VPN client for macOS built on
-[OpenConnect](https://www.infradead.org/openconnect/): SAML single sign-on in
-a WebKit window with form autofill and TOTP, split DNS via `/etc/resolver`,
-split tunneling you can change on a live connection, a supervisor that
-reconnects after sleep and network changes, an unprivileged SOCKS proxy mode,
-and a SwiftUI menu bar app. Installed from source through a Homebrew tap.
+**Your work VPN, in your Mac’s menu bar.**
+
+An open-source, Cisco AnyConnect–compatible client built on
+[OpenConnect](https://www.infradead.org/openconnect/). Sign in with SSO,
+choose which networks go through the tunnel, and pause or resume from a
+native macOS menu. The supervisor reconnects after sleep and network changes.
+
+Free under the MIT license. Install through Homebrew, which builds the app
+on your Mac. Requires macOS 13+ and access to your own compatible VPN gateway;
+ocbar does not provide VPN servers.
 
 ![ocbar menu](assets/menu.png)
 

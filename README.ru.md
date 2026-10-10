@@ -2,11 +2,16 @@
 
 [English](README.md) · **Русский**
 
-Клиент Cisco AnyConnect (OpenConnect) для macOS: SSO через WKWebView с
-автозаполнением и TOTP, split DNS через `/etc/resolver`, split tunneling с
-переключением сетей на лету, супервизор (реконнект, сон, смена интерфейса),
-прокси-режим без привилегий (`openconnect --script-tun` + `ocproxy`),
-приложение меню-бара на SwiftUI, раздача через Homebrew tap.
+**Рабочий VPN в строке меню вашего Mac.**
+
+Открытый клиент с поддержкой Cisco AnyConnect на основе
+[OpenConnect](https://www.infradead.org/openconnect/). Войдите через SSO,
+выберите сети для туннеля, ставьте подключение на паузу и возвращайтесь
+из меню macOS. Супервизор восстанавливает соединение после сна и смены сети.
+
+Бесплатно, под лицензией MIT. Homebrew собирает приложение на вашем Mac.
+Нужны macOS 13+ и доступ к совместимому VPN-шлюзу: своих серверов ocbar
+не предоставляет.
 
 ![Меню ocbar](assets/ru/menu.png)
 

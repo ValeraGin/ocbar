@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ocbar — OpenConnect VPN in your Mac’s menu bar</title>
+  <meta name="description" content="An open-source, AnyConnect-compatible VPN client for macOS. SAML sign-in, split tunneling, split DNS and a native menu bar app. Install with Homebrew.">
+  <meta name="theme-color" content="#f7f8fa">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ocbar — OpenConnect VPN in your Mac’s menu bar">
+  <meta property="og:description" content="An open-source, AnyConnect-compatible VPN client for macOS. SAML sign-in, split tunneling, split DNS and a native menu bar app. Install with Homebrew.">
+  <meta property="og:image" content="assets/social-card.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="assets/mark.svg">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="header wrap">
+    <a class="brand" href="./" aria-label="ocbar"><img src="assets/mark.svg" width="34" height="34" alt="">ocbar<span class="brand-descriptor">/ macOS</span></a>
+    <nav aria-label="Main navigation"><a href="#why">Why ocbar</a><a href="#app">The app</a><a href="https://github.com/ValeraGin/ocbar" class="github">GitHub ↗</a></nav>
+    <div class="languages" aria-label="Language"><a href="index.html" lang="en" aria-current="page">EN</a><span>/</span><a href="ru/" lang="ru" >RU</a></div>
+  </header>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="hero-copy"><div class="eyebrow"><span class="status-dot"></span>A little more Mac. A lot less VPN friction.</div>
+        <h1>Your work VPN.<br><span>Back in its place.</span></h1>
+        <p class="lead">An AnyConnect-compatible VPN client that lives in your Mac’s menu bar. Sign in with SSO, choose what goes through the tunnel, and get on with your day.</p>
+        <div class="actions"><a class="button primary" href="#install">Install with Homebrew <span aria-hidden="true">↗</span></a><a class="text-link" href="#app">Take a look <span aria-hidden="true">↓</span></a></div>
+        <p class="micro">Free &amp; open source · macOS 13+ · Builds on your Mac</p>
+      </div>
+      <div class="hero-visual">
+        <img class="hero-art" src="assets/routing-art.jpg" width="1536" height="1024" alt="" fetchpriority="high">
+        <div class="mac-bar" aria-hidden="true"><span>●</span><span>ocbar</span><span class="mac-right">◉ &nbsp; ◒ &nbsp; 09:41</span></div>
+        <div class="menu-crop"><img src="assets/menu-en.png" width="1560" height="1221" alt="Real ocbar interface with a connected demo profile, traffic chart, network switches and DNS zones"></div>
+        <span class="visual-caption">Native app · example profile</span>
+        <div class="connection-note"><span class="status-dot"></span><span>Your work connection. At hand.</span><span class="note-line"></span></div>
+      </div>
+    </section>
+    <div class="proof wrap"><span>Native SwiftUI app</span><span>Powered by OpenConnect</span><span>MIT licensed</span><span>No app telemetry</span></div>
+    <section class="section split-section wrap" id="why">
+      <div class="section-copy"><p class="eyebrow">01 / A connection with boundaries</p><h2>Work goes through.<br>The rest stays yours.</h2><p>Send selected networks through your work VPN. Keep everything else on your usual connection. Change routes and DNS zones without reconnecting.</p><p class="quiet">Need a moment off the work network? Pause removes ocbar’s routes and DNS zones while keeping the session alive. Resume without another sign-in while that session remains valid.</p><a class="text-link" href="https://github.com/ValeraGin/ocbar#features">Explore all features ↗</a></div>
+      <div class="routing-demo">
+        <div class="demo-heading"><span class="mono">Your routes. Your choice.</span><span class="demo-badge">Interactive illustration</span></div>
+        <div class="route-row"><span class="route-icon">⌘</span><div><strong>Work services</strong><code>10.0.0.0/8</code></div><span class="route-destination" data-destination>Via VPN</span><button class="switch" type="button" role="switch" aria-checked="true" aria-label="Send work services through VPN" data-route><span></span></button></div>
+        <div class="route-row"><span class="route-icon">⌁</span><div><strong>Development network</strong><code>172.16.0.0/12</code></div><span class="route-destination" data-destination>Via VPN</span><button class="switch" type="button" role="switch" aria-checked="true" aria-label="Send development network through VPN" data-route><span></span></button></div>
+        <div class="route-row personal"><span class="route-icon">↗</span><div><strong>Everything else</strong><span>Your usual internet connection</span></div><span class="direct">Direct</span><span class="direct-dot"></span></div>
+        <div class="path-map" aria-hidden="true"><span>Your Mac</span><div class="path-lines"><i></i><i></i></div><div><span class="map-vpn">Work network</span><span>Internet</span></div></div>
+        <p class="demo-foot" aria-live="polite" data-demo-summary>2 example networks selected. Try the switches. This does not change your connection.</p>
+      </div>
+    </section>
+    <section class="app-section" id="app"><div class="wrap">
+      <div class="section-top"><div><p class="eyebrow">02 / Made for the menu bar</p><h2>A small window.<br>A clear picture.</h2></div><p>Connection status, traffic and network controls, right where you expect them. Open the menu, check what matters, get back to work.</p></div>
+      <div class="showcase-controls" role="group" aria-label="App screenshots"><button class="selected" type="button" aria-pressed="true" data-screen="menu">Connection &amp; networks</button><button type="button" aria-pressed="false" data-screen="profile">Profile settings</button><span>Real interface. Demo data.</span></div>
+      <div class="app-stage"><img id="app-screenshot" src="assets/menu-en.png" width="1560" height="1221" loading="lazy" alt="Real ocbar interface with a connected demo profile, traffic chart, network switches and DNS zones" data-menu-alt="Real ocbar interface with a connected demo profile, traffic chart, network switches and DNS zones" data-profile-alt="Real ocbar profile settings with gateway, networks and DNS configuration"></div>
+      <div class="features"><article><span class="feature-number">01</span><h3>Sign in your way.</h3><p>SAML sign-in in a WebKit window, with optional form autofill and TOTP. A valid saved sign-in session can keep the window out of your way.</p></article><article><span class="feature-number">02</span><h3>Back after a break.</h3><p>The supervisor reconnects after sleep, network changes and dropped links. If your login expires, the app asks you to sign in.</p></article><article><span class="feature-number">03</span><h3>Your secrets stay with you.</h3><p>Use macOS Keychain, KeePassXC or your own command. Profiles hold references to credentials, not the credentials themselves.</p></article></div>
+    </div></section>
+    <section class="section install-section wrap" id="install"><div class="section-copy"><p class="eyebrow">03 / Make yourself at home</p><h2>A few commands.<br>Then, the menu bar.</h2><p>ocbar builds from source on your Mac through Homebrew. After installation, the setup wizard helps you add your gateway and sign in.</p><div class="requirements"><span>macOS 13 or newer</span><span>Homebrew + Command Line Tools</span><span>Your own compatible VPN gateway</span></div><a class="text-link" href="https://github.com/ValeraGin/ocbar/blob/main/INSTALL.md">Full setup guide (Russian) ↗</a></div>
+      <div class="install-steps"><article class="install-step"><span class="step-no">1</span><div><h3>Install from the Homebrew tap</h3><div class="terminal"><div class="terminal-top"><span>Terminal</span><button type="button" id="copy-install">Copy</button></div><pre><code id="install-code">brew tap ValeraGin/ocbar
+brew trust ValeraGin/ocbar
+brew install ocbar</code></pre></div><p>The tap is a third-party source. Review it before granting trust. Homebrew compiles the app locally.</p></div></article><article class="install-step"><span class="step-no">2</span><div><h3>Set up the helper and open ocbar</h3><pre class="simple-code"><code>sudo ocbar install
+ocbar app start</code></pre><p>Tunnel mode needs the privileged helper. The first command asks for your Mac administrator password in Terminal.</p></div></article><article class="install-step"><span class="step-no">3</span><div><h3>Add your work profile</h3><p>Follow the setup wizard: enter your gateway and group, add the networks and DNS zones you need, then sign in. Ask your VPN administrator for these settings if needed.</p></div></article><p class="copy-status" id="copy-status" role="status"></p></div>
+    </section>
+    <section class="faq-section wrap"><div><p class="eyebrow">Before you connect</p><h2>Good to know.</h2></div><div class="faq-list">
+      <details><summary>Is this a VPN subscription?<span aria-hidden="true">+</span></summary><p>No. ocbar is a client for a VPN gateway you already have access to, such as your company’s AnyConnect-compatible gateway. It does not provide VPN servers or an anonymity service.</p></details>
+      <details><summary>Will it work with my gateway and Mac?<span aria-hidden="true">+</span></summary><p>The author uses it daily on macOS 26 with Apple Silicon, an AnyConnect gateway and Keycloak SSO. macOS 13–25 and Intel Macs are expected to work but are not verified. Gateway policies and sign-in flows vary; compatibility with every deployment is not guaranteed.</p></details>
+      <details><summary>Why is there no one-click download?<span aria-hidden="true">+</span></summary><p>The app is currently distributed as a Homebrew source build, not a signed and notarized download. You need Command Line Tools; the full Xcode app is not required. Update with brew upgrade ocbar. If the helper changes, run sudo ocbar install again.</p></details>
+      <details><summary>Can I use it without changing system routes?<span aria-hidden="true">+</span></summary><p>Yes. The optional SOCKS proxy mode uses OpenConnect with ocproxy, without root, system routes or DNS changes. Install ocproxy separately and configure apps to use the local proxy. IPv6 routes inside tunnel mode are not currently supported.</p></details>
+      <details><summary>Who maintains it, and what data does it collect?<span aria-hidden="true">+</span></summary><p>ocbar is a single-author project by Valery Ignatkovich, released under the MIT license. The app has no analytics, crash reporting or automatic update checks. It talks to your gateway and identity provider and keeps local logs. The source and security model are available on GitHub.</p></details>
+    </div></section>
+    <section class="closing wrap"><img src="assets/mark.svg" width="50" height="50" alt=""><h2>Less tending to your VPN.<br>More getting things done.</h2><p>Made for a real workday. Open for you to inspect, use and improve.</p><a class="button primary" href="https://github.com/ValeraGin/ocbar">Explore ocbar on GitHub ↗</a></section>
+  </main>
+  <footer class="footer wrap"><div class="footer-top"><a class="brand" href="./">ocbar<span class="brand-descriptor">/ OpenConnect, at hand.</span></a><div><a href="https://github.com/ValeraGin/ocbar/blob/main/SECURITY.md">Security</a><a href="https://github.com/ValeraGin/ocbar/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/ValeraGin/ocbar/issues">Report an issue</a></div></div><div class="footer-bottom"><span>Made by Valery Ignatkovich · MIT license</span><span>Not affiliated with Cisco. AnyConnect describes protocol compatibility.</span></div></footer>
+</body>
+</html>

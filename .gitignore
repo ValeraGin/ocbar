@@ -14,3 +14,6 @@ tools/ui-lab/state.json
 .claude/
 
 __pycache__/
+
+# Local browser verification artifacts
+.playwright-mcp/

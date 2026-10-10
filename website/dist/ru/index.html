@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ocbar — OpenConnect VPN в строке меню macOS</title>
+  <meta name="description" content="Открытый VPN-клиент для macOS, совместимый с AnyConnect. Вход через SSO, выборочные маршруты, split DNS и приложение в строке меню. Установка через Homebrew.">
+  <meta name="theme-color" content="#f7f8fa">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ocbar — OpenConnect VPN в строке меню macOS">
+  <meta property="og:description" content="Открытый VPN-клиент для macOS, совместимый с AnyConnect. Вход через SSO, выборочные маршруты, split DNS и приложение в строке меню. Установка через Homebrew.">
+  <meta property="og:image" content="../assets/social-card.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="../assets/mark.svg">
+  <link rel="stylesheet" href="../style.css">
+  <script src="../site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Перейти к содержимому</a>
+  <header class="header wrap">
+    <a class="brand" href="./" aria-label="ocbar"><img src="../assets/mark.svg" width="34" height="34" alt="">ocbar<span class="brand-descriptor">/ macOS</span></a>
+    <nav aria-label="Главная навигация"><a href="#why">Зачем ocbar</a><a href="#app">Приложение</a><a href="https://github.com/ValeraGin/ocbar" class="github">GitHub ↗</a></nav>
+    <div class="languages" aria-label="Язык"><a href="../index.html" lang="en" >EN</a><span>/</span><a href="../ru/" lang="ru" aria-current="page">RU</a></div>
+  </header>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="hero-copy"><div class="eyebrow"><span class="status-dot"></span>Больше привычного Mac. Меньше забот о VPN.</div>
+        <h1>Рабочий VPN.<br><span>На своём месте.</span></h1>
+        <p class="lead">Клиент с поддержкой AnyConnect в строке меню Mac. Войдите через SSO, выберите сети для туннеля и возвращайтесь к своим делам.</p>
+        <div class="actions"><a class="button primary" href="#install">Установить через Homebrew <span aria-hidden="true">↗</span></a><a class="text-link" href="#app">Посмотреть <span aria-hidden="true">↓</span></a></div>
+        <p class="micro">Бесплатно · Открытый код · macOS 13+</p>
+      </div>
+      <div class="hero-visual">
+        <img class="hero-art" src="../assets/routing-art.jpg" width="1536" height="1024" alt="" fetchpriority="high">
+        <div class="mac-bar" aria-hidden="true"><span>●</span><span>ocbar</span><span class="mac-right">◉ &nbsp; ◒ &nbsp; 09:41</span></div>
+        <div class="menu-crop"><img src="../assets/menu-ru.png" width="1560" height="1221" alt="Интерфейс ocbar: подключённый демонстрационный профиль, график трафика, переключатели сетей и зон DNS"></div>
+        <span class="visual-caption">Нативное приложение · пример профиля</span>
+        <div class="connection-note"><span class="status-dot"></span><span>Рабочая сеть. Под рукой.</span><span class="note-line"></span></div>
+      </div>
+    </section>
+    <div class="proof wrap"><span>Приложение на SwiftUI</span><span>На основе OpenConnect</span><span>Лицензия MIT</span><span>Без телеметрии в приложении</span></div>
+    <section class="section split-section wrap" id="why">
+      <div class="section-copy"><p class="eyebrow">01 / У каждой сети свой путь</p><h2>Работа через VPN.<br>Остальное как обычно.</h2><p>Направляйте в рабочий VPN только выбранные сети. Остальной трафик идёт через обычное подключение. Меняйте маршруты и зоны DNS без переподключения.</p><p class="quiet">Нужно ненадолго выйти из рабочей сети? Пауза убирает маршруты и зоны DNS ocbar, сохраняя сессию. Пока она действительна, можно вернуться без повторного входа.</p><a class="text-link" href="https://github.com/ValeraGin/ocbar#features">Все возможности ↗</a></div>
+      <div class="routing-demo">
+        <div class="demo-heading"><span class="mono">Вы выбираете маршрут.</span><span class="demo-badge">Интерактивная схема</span></div>
+        <div class="route-row"><span class="route-icon">⌘</span><div><strong>Рабочие сервисы</strong><code>10.0.0.0/8</code></div><span class="route-destination" data-destination>Через VPN</span><button class="switch" type="button" role="switch" aria-checked="true" aria-label="Направлять рабочие сервисы через VPN" data-route><span></span></button></div>
+        <div class="route-row"><span class="route-icon">⌁</span><div><strong>Среда разработки</strong><code>172.16.0.0/12</code></div><span class="route-destination" data-destination>Через VPN</span><button class="switch" type="button" role="switch" aria-checked="true" aria-label="Направлять среду разработки через VPN" data-route><span></span></button></div>
+        <div class="route-row personal"><span class="route-icon">↗</span><div><strong>Всё остальное</strong><span>Обычное подключение к интернету</span></div><span class="direct">Напрямую</span><span class="direct-dot"></span></div>
+        <div class="path-map" aria-hidden="true"><span>Ваш Mac</span><div class="path-lines"><i></i><i></i></div><div><span class="map-vpn">Рабочая сеть</span><span>Интернет</span></div></div>
+        <p class="demo-foot" aria-live="polite" data-demo-summary>Выбрано сетей: 2. Попробуйте переключатели. Схема не меняет ваше подключение.</p>
+      </div>
+    </section>
+    <section class="app-section" id="app"><div class="wrap">
+      <div class="section-top"><div><p class="eyebrow">02 / В строке меню</p><h2>Маленькое окно.<br>Всё перед глазами.</h2></div><p>Состояние подключения, трафик и управление сетями там, где вы их ожидаете. Откройте меню, проверьте нужное и продолжайте работу.</p></div>
+      <div class="showcase-controls" role="group" aria-label="Скриншоты приложения"><button class="selected" type="button" aria-pressed="true" data-screen="menu">Подключение и сети</button><button type="button" aria-pressed="false" data-screen="profile">Настройки профиля</button><span>Настоящий интерфейс. Демо-данные.</span></div>
+      <div class="app-stage"><img id="app-screenshot" src="../assets/menu-ru.png" width="1560" height="1221" loading="lazy" alt="Интерфейс ocbar: подключённый демонстрационный профиль, график трафика, переключатели сетей и зон DNS" data-menu-alt="Интерфейс ocbar: подключённый демонстрационный профиль, график трафика, переключатели сетей и зон DNS" data-profile-alt="Настройки профиля ocbar: адрес шлюза, сети и зоны DNS"></div>
+      <div class="features"><article><span class="feature-number">01</span><h3>Привычный вход.</h3><p>SAML SSO в окне WebKit, автозаполнение форм и TOTP по желанию. Если сохранённая сессия входа действует, окно может не понадобиться.</p></article><article><span class="feature-number">02</span><h3>Связь после перерыва.</h3><p>Супервизор восстанавливает соединение после сна, смены сети и обрыва связи. Если сессия входа истекла, приложение предложит войти снова.</p></article><article><span class="feature-number">03</span><h3>Пароли остаются у вас.</h3><p>Используйте Связку ключей macOS, KeePassXC или свою команду. В профиле хранятся ссылки на учётные данные, а не сами секреты.</p></article></div>
+    </div></section>
+    <section class="section install-section wrap" id="install"><div class="section-copy"><p class="eyebrow">03 / Начать пользоваться</p><h2>Несколько команд.<br>И можно в меню.</h2><p>Homebrew собирает ocbar из исходников на вашем Mac. После установки мастер поможет добавить шлюз и выполнить первый вход.</p><div class="requirements"><span>macOS 13 или новее</span><span>Homebrew + Command Line Tools</span><span>Доступ к совместимому VPN-шлюзу</span></div><a class="text-link" href="https://github.com/ValeraGin/ocbar/blob/main/INSTALL.md">Подробная инструкция ↗</a></div>
+      <div class="install-steps"><article class="install-step"><span class="step-no">1</span><div><h3>Установите из Homebrew tap</h3><div class="terminal"><div class="terminal-top"><span>Terminal</span><button type="button" id="copy-install">Копировать</button></div><pre><code id="install-code">brew tap ValeraGin/ocbar
+brew trust ValeraGin/ocbar
+brew install ocbar</code></pre></div><p>Это сторонний источник пакетов. Ознакомьтесь с ним перед подтверждением доверия. Homebrew соберёт приложение локально.</p></div></article><article class="install-step"><span class="step-no">2</span><div><h3>Установите помощник и откройте ocbar</h3><pre class="simple-code"><code>sudo ocbar install
+ocbar app start</code></pre><p>Для туннеля нужен помощник с привилегиями. Первая команда попросит пароль администратора Mac в Терминале.</p></div></article><article class="install-step"><span class="step-no">3</span><div><h3>Добавьте рабочий профиль</h3><p>Пройдите мастер настройки: укажите шлюз и группу, добавьте нужные сети и зоны DNS, затем войдите. Если настройки неизвестны, уточните их у администратора VPN.</p></div></article><p class="copy-status" id="copy-status" role="status"></p></div>
+    </section>
+    <section class="faq-section wrap"><div><p class="eyebrow">Перед подключением</p><h2>Что стоит знать.</h2></div><div class="faq-list">
+      <details><summary>Это подписка на VPN?<span aria-hidden="true">+</span></summary><p>Нет. ocbar подключается к VPN-шлюзу, к которому у вас уже есть доступ, например к рабочему шлюзу с поддержкой AnyConnect. Своих VPN-серверов и сервиса анонимизации у проекта нет.</p></details>
+      <details><summary>Подойдёт ли мой шлюз и Mac?<span aria-hidden="true">+</span></summary><p>Автор ежедневно использует ocbar на macOS 26 с Apple Silicon, шлюзом AnyConnect и Keycloak SSO. Работа на macOS 13–25 и Intel Mac ожидается, но не проверена. Политики шлюзов и способы входа различаются: совместимость с любой конфигурацией не гарантируется.</p></details>
+      <details><summary>Почему нет скачивания в один клик?<span aria-hidden="true">+</span></summary><p>Сейчас приложение распространяется через сборку из исходников в Homebrew, без подписанного и нотарифицированного установщика. Нужны Command Line Tools, полный Xcode не требуется. Обновление: brew upgrade ocbar. Если изменился помощник, повторите sudo ocbar install.</p></details>
+      <details><summary>Можно обойтись без системных маршрутов?<span aria-hidden="true">+</span></summary><p>Да. Дополнительный режим SOCKS использует OpenConnect и ocproxy без root, системных маршрутов и изменений DNS. Установите ocproxy отдельно и настройте нужные приложения на локальный прокси. Маршруты IPv6 внутри туннеля пока не поддерживаются.</p></details>
+      <details><summary>Кто развивает проект и какие данные он собирает?<span aria-hidden="true">+</span></summary><p>ocbar разрабатывает Валерий Игнаткович. Проект открыт под лицензией MIT. В приложении нет аналитики, отправки отчётов о сбоях и автоматической проверки обновлений. Оно обращается к вашему шлюзу и провайдеру входа, журналы хранит локально. Исходники и модель безопасности доступны на GitHub.</p></details>
+    </div></section>
+    <section class="closing wrap"><img src="../assets/mark.svg" width="50" height="50" alt=""><h2>Меньше забот о VPN.<br>Больше времени на работу.</h2><p>Сделано для обычного рабочего дня. Код открыт для изучения и улучшений.</p><a class="button primary" href="https://github.com/ValeraGin/ocbar">Открыть ocbar на GitHub ↗</a></section>
+  </main>
+  <footer class="footer wrap"><div class="footer-top"><a class="brand" href="./">ocbar<span class="brand-descriptor">/ OpenConnect, at hand.</span></a><div><a href="https://github.com/ValeraGin/ocbar/blob/main/SECURITY.md">Безопасность</a><a href="https://github.com/ValeraGin/ocbar/blob/main/CHANGELOG.md">История версий</a><a href="https://github.com/ValeraGin/ocbar/issues">Сообщить о проблеме</a></div></div><div class="footer-bottom"><span>Автор: Валерий Игнаткович · Лицензия MIT</span><span>Не связан с Cisco. AnyConnect обозначает совместимость протокола.</span></div></footer>
+</body>
+</html>
