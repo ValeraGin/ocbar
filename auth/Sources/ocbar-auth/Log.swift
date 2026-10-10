@@ -34,7 +34,7 @@ enum Log {
 /// с атрибутами у тега. Тело auth-reply содержит рабочий session-token, а
 /// супервизор пишет весь вывод в журнал, который живёт до ротации.
 func mask(_ s: String) -> String {
-    let pattern = "<(session-token|sso-token|session-id)(\\s[^>]*)?>(.*?)</\\1\\s*>"
+    let pattern = "<(session-token|sso-token|session-id|host-scan-token|host-scan-ticket)(\\s[^>]*)?>(.*?)</\\1\\s*>"
     guard let re = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators, .caseInsensitive]) else { return s }
     var out = s
     let ns = s as NSString

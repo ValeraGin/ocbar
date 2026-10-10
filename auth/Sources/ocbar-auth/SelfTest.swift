@@ -224,6 +224,9 @@ enum AuthSelfTest {
            !ma.contains("SECRETSSO") && !ma.contains("SID42") && !ma.contains("MULTI"), ma)
         ok("mask: пустой тег и прочее не трогает",
            mask("<session-token/><opaque>x</opaque>") == "<session-token/><opaque>x</opaque>")
+        let scan = mask("<host-scan-token>SCANSECRET</host-scan-token><host-scan-ticket>TICKETSECRET</host-scan-ticket>")
+        ok("mask: HostScan token и ticket скрыты",
+           !scan.contains("SCANSECRET") && !scan.contains("TICKETSECRET"), scan)
         let u = Log.redact("https://idp.example.test:8443/saml/login?SAMLRequest=abc&RelayState=zzz#frag")
         ok("адрес в журнале — без query и fragment",
            u == "https://idp.example.test:8443/saml/login?…" && !u.contains("SAMLRequest") && !u.contains("frag"), u)

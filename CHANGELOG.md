@@ -3,6 +3,18 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## Unreleased
+
+- Sign-in now returns the completed HostScan token in `auth-reply`, linking
+  the external script's report to the session. Previously a submitted report
+  could still end with "Cisco Secure Desktop not installed on the client".
+- A configured `CsdWrapper` is no longer silently skipped when its file is
+  missing or not executable. Sign-in stops with the script path and a useful
+  error; a failing wrapper also stops before HostScan polling and SSO.
+- HostScan wrappers receive the gateway's non-default port in `-url`. Local
+  HTTPS checks cover the report submission, paths with spaces, wrapper
+  failures, and groups that do not request HostScan.
+
 ## 0.17.9 — 2026-09-24
 
 - For sign-in groups that request a device check, ocbar-auth now runs the

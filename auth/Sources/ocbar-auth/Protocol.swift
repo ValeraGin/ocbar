@@ -71,7 +71,7 @@ enum VPNProtocol {
     }
 
     static func replyRequest(version: String, deviceID: String,
-                             opaqueXML: String, ssoToken: String) -> Data {
+                             opaqueXML: String, ssoToken: String, hostScanToken: String? = nil) -> Data {
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>
         <config-auth client="vpn" type="auth-reply" aggregate-auth-version="2">
@@ -83,6 +83,7 @@ enum VPNProtocol {
           <auth>
             <sso-token>\(esc(ssoToken))</sso-token>
           </auth>
+          \(hostScanToken.map { "<host-scan-token>\(esc($0))</host-scan-token>" } ?? "")
         </config-auth>
         """
         return Data(xml.utf8)

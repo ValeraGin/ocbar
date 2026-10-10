@@ -1495,7 +1495,11 @@ authenticate() { # печатает "token hash post_url"
         args+=(--rules "$USER_STATE/rules/$P_NAME.rules")
     fi
     [ -n "$P_FILL_HOSTS" ] && args+=(--fill-hosts "$P_FILL_HOSTS")
-    [ -n "${P_CSD:-}" ] && [ -f "$P_CSD" ] && [ -x "$P_CSD" ] && [[ "$P_CSD" = /* ]] && args+=(--csd-wrapper "$P_CSD")
+    if [ -n "${P_CSD:-}" ]; then
+        [[ "$P_CSD" = /* ]] || die "CsdWrapper: нужен абсолютный путь к скрипту: $P_CSD"
+        [ -f "$P_CSD" ] && [ -x "$P_CSD" ] || die "CsdWrapper: нет исполняемого файла: $P_CSD (проверьте путь и chmod u+x)"
+        args+=(--csd-wrapper "$P_CSD")
+    fi
     [ "${OCBAR_SHOW:-}" = 1 ] && args+=(--always-show)
     # «Запомнить, как я вхожу»: галочка в окне входа для профиля одним
     # файлом. После входа окно спросит, что сохранить; итог без секретов
@@ -4015,6 +4019,7 @@ case "${1:-}" in
             network_skipped) network_skipped && echo skip || echo no ;;
             connect_in_progress) connect_in_progress && echo yes || echo no ;;
             pw_auth) load_profile "${2:-}"; authenticate_password ;;
+            sso_auth) load_profile "${2:-}"; authenticate ;;
             *) die "_selftest-fn: socks_apply | socks_clear_all | proxy_stop | proxy_cleanup | app_sync_copy <бандл>" ;;
         esac ;;
     install)    shift; cmd_install "$@" ;;

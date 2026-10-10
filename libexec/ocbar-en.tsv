@@ -397,4 +397,6 @@ pid {} работает по коду от {}, файл правился в {} �
 openconnect: {} — ocbar cleanup погасит их, текущую не тронет	openconnect: {} — ocbar cleanup stops them and leaves the current one alone
 нет	none
 # Сообщения хелпера, которые клиент показывает человеку (i18n-scan сверяет с libexec/ocbar-helper).
+CsdWrapper: нужен абсолютный путь к скрипту: {}	CsdWrapper: an absolute script path is required: {}
+CsdWrapper: нет исполняемого файла: {} (проверьте путь и chmod u+x)	CsdWrapper: no executable file: {} (check the path and chmod u+x)
 на «{}» включён чужой SOCKS {}:{} — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле	«{}» already has someone else's SOCKS {}:{} — not overwriting it. Turn it off yourself or remove SystemProxy from the profile

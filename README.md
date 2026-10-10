@@ -178,6 +178,24 @@ curl --socks5-hostname 127.0.0.1:11080 https://wiki.example.com
 
 A full annotated example: [etc/example.ocbar](etc/example.ocbar).
 
+### External HostScan script
+
+For gateways that request a device report, set your script in the profile:
+
+```ini
+[Connection]
+CsdWrapper = ~/vpn/csd-post.sh
+```
+
+Make the file executable with `chmod u+x "$HOME/vpn/csd-post.sh"`. Paths
+with spaces work; do not put quotes around the value in the profile.
+The script runs as your user before SSO, using OpenConnect's wrapper
+arguments and `CSD_HOSTNAME`, `CSD_TOKEN`, `CSD_SHA256` environment variables.
+It submits the prepared report itself; stdout is diagnostic output, not a
+report for ocbar to submit. ocbar waits for the gateway, then resumes SSO.
+Missing files, execution errors and non-zero exit codes stop sign-in.
+Whether the report satisfies the device policy is decided by the gateway.
+
 ## Commands
 
 ```

@@ -15,11 +15,14 @@ import Foundation
 /// Контракт вызова — как у openconnect, чтобы штатные скрипты работали без
 /// правок: окружение CSD_HOSTNAME, CSD_TOKEN, CSD_SHA256; аргументы
 /// `<stub> -ticket <ticket> -stub 0 -group <tunnel-group> -certhash <hash>
-///  -url https://<host><host-scan-base-uri> -langselen en-US`.
+///  -url https://<host>[:<port>]<host-scan-base-uri> -langselen en-US`
+/// (порт — только когда шлюз не на 443: CSD_HOSTNAME держит только хост,
+/// а скрипту нужен адрес, по которому шлюз реально отвечает).
 enum CSD {
     struct Params {
         let wrapper: String        // путь к скрипту (профиль CsdWrapper)
         let host: String           // хост шлюза (CSD_HOSTNAME)
+        let port: Int?             // порт шлюза; не-443 попадает в -url
         let ticket: String
         let token: String
         let group: String          // tunnel-group, если известна
@@ -32,6 +35,10 @@ enum CSD {
     enum Result {
         case ok
         case failed(String)
+    }
+
+    struct Failure: Error, CustomStringConvertible {
+        let description: String
     }
 
     /// Запустить обёртку. Скрипт должен существовать и быть исполняемым;
@@ -47,13 +54,14 @@ enum CSD {
               !p.startURI.contains("\\") else { return .failed("неверный host-scan-base-uri") }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: p.wrapper)
+        let urlHost = (p.port != nil && p.port != 443) ? "\(p.host):\(p.port!)" : p.host
         proc.arguments = [
             "", // openconnect передаёт первым argv путь к загруженному stub; csd-post.sh делает shift
             "-ticket", p.ticket,
             "-stub", "0",
             "-group", p.group,
             "-certhash", p.certHash ?? "",
-            "-url", "https://\(p.host)\(p.startURI)",
+            "-url", "https://\(urlHost)\(p.startURI)",
             "-langselen", "en-US",
         ]
         var env = ProcessInfo.processInfo.environment

@@ -173,6 +173,40 @@ d=json.load(sys.stdin); print(d["profiles"][0]["title"])' 2>/dev/null || echo "�
        "$(printf '%s\n' "$merged" | grep -v '──' | paste -sd'|' -)"
     rm -f "$tmp/logs/supervisor.log" "$tmp/logs/auth.log"
     status_out=$out
+    # Скрипт из загрузок часто не исполняемый; его нельзя молча пропускать.
+    # Путь с пробелом должен доходить одним аргументом, даже без HostScan в тесте.
+    mkdir -p "$tmp/External Scripts"
+    printf '#!/bin/bash\nexit 0\n' > "$tmp/External Scripts/csd.sh"
+    cat > "$tmp/profiles/csd.ocbar" <<PROFILE
+[Connection]
+Url = vpn.example.test/group
+User = tester
+CsdWrapper = $tmp/External Scripts/csd.sh
+[Auth]
+Password = command
+PasswordCommand = printf test-password
+Totp = off
+PROFILE
+    cat > "$tmp/auth-stub" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$@" > "$OCBAR_CSD_ARGS"
+printf '%s\n' '{"session_token":"test-token","server_cert_hash":"test-hash","post_url":"https://vpn.example.test/group"}'
+STUB
+    chmod +x "$tmp/auth-stub"
+    out=$(OCBAR_AUTH="$tmp/auth-stub" OCBAR_CSD_ARGS="$tmp/csd-args" run _selftest-fn sso_auth csd; echo "rc=$?")
+    has "CSD: неисполняемый скрипт — ошибка" "rc=1" "$out"
+    has "CSD: причина указывает на право исполнения" "chmod u+x" "$out"
+    check "CSD: ошибка до вызова аутентификатора" test ! -f "$tmp/csd-args"
+    chmod +x "$tmp/External Scripts/csd.sh"
+    out=$(OCBAR_AUTH="$tmp/auth-stub" OCBAR_CSD_ARGS="$tmp/csd-args" run _selftest-fn sso_auth csd; echo "rc=$?")
+    has "CSD: исполняемый скрипт принят" "rc=0" "$out"
+    is "CSD: путь с пробелом — один аргумент" "$tmp/External Scripts/csd.sh" \
+        "$(sed -n '/^--csd-wrapper$/{n;p;}' "$tmp/csd-args")"
+    rm -f "$tmp/External Scripts/csd.sh"
+    out=$(OCBAR_AUTH="$tmp/auth-stub" OCBAR_CSD_ARGS="$tmp/csd-args" run _selftest-fn sso_auth csd; echo "rc=$?")
+    has "CSD: отсутствующий скрипт — ошибка" "rc=1" "$out"
+    rm -f "$tmp/profiles/csd.ocbar"
+
     # Парольная группа: подставной openconnect спрашивает пароль и код, как
     # шлюз; пароль ocbar берёт из профиля, код — у «человека» (команда).
     cat > "$tmp/profiles/pw.ocbar" <<'PROFILE'

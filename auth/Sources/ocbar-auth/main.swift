@@ -330,6 +330,12 @@ if args.selfTest {
         let replyOK = String(data: reply, encoding: .utf8)!.contains("<sso-token>T&lt;&amp;&gt;</sso-token>")
         out("  auth-reply экранирует токен и несёт <opaque> дословно  \(replyOK ? "OK" : "FAIL")")
         if !replyOK { failed += 1 }
+        let scanReply = VPNProtocol.replyRequest(version: "1", deviceID: "mac-intel",
+                                                opaqueXML: r.opaqueXML, ssoToken: "SSO", hostScanToken: "H<&>")
+        let scanOK = String(decoding: scanReply, as: UTF8.self).contains("<host-scan-token>H&lt;&amp;&gt;</host-scan-token>")
+            && !String(decoding: reply, as: UTF8.self).contains("<host-scan-token>")
+        out("  auth-reply: HostScan-токен экранирован и только при проверке  \(scanOK ? "OK" : "FAIL")")
+        if !scanOK { failed += 1 }
     } catch {
         out("  FAIL: \(error)"); failed += 1
     }
@@ -382,7 +388,8 @@ if args.selfTest {
         let body = "#!/bin/bash\nprintf '%s\\n' \"$*\" > \"\(rec)\"\nprintf 'HOST=%s TOKEN=%s SHA=%s\\n' \"$CSD_HOSTNAME\" \"$CSD_TOKEN\" \"$CSD_SHA256\" >> \"\(rec)\"\nexit 0\n"
         try body.write(toFile: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
-        let res = CSD.run(.init(wrapper: script, host: "vpn.example.test", ticket: "TICKET42",
+        let res = CSD.run(.init(wrapper: script, host: "vpn.example.test", port: 8443,
+                                ticket: "TICKET42",
                                 token: "TOK99", group: "TG-TEST", certHash: "SERVERMD5:", pinSHA256: "PIN256", timeout: 10, startURI: "/+CSCOE+/sdesktop/"))
         let got = (try? String(contentsOfFile: rec, encoding: .utf8)) ?? ""
         let okRun: Bool = { if case .ok = res { return true }; return false }()
@@ -391,11 +398,14 @@ if args.selfTest {
         let argsOK = got.contains("-ticket TICKET42") && got.contains("-stub 0") && got.contains("-group TG-TEST")
         out("  argv как у openconnect (-ticket -stub -group)  \(argsOK ? "OK" : "FAIL: \(got)")")
         if !argsOK { failed += 1 }
+        let urlOK = got.contains("-url https://vpn.example.test:8443/+CSCOE+/sdesktop/")
+        out("  -url с портом не-443  \(urlOK ? "OK" : "FAIL: \(got)")")
+        if !urlOK { failed += 1 }
         let envOK = got.contains("HOST=vpn.example.test") && got.contains("TOKEN=TOK99") && got.contains("SHA=PIN256")
         out("  окружение CSD_HOSTNAME/TOKEN/SHA256  \(envOK ? "OK" : "FAIL: \(got)")")
         if !envOK { failed += 1 }
         // Нет исполняемого скрипта — понятный отказ, не падение.
-        let bad = CSD.run(.init(wrapper: dir + "/нет", host: "h", ticket: "t", token: "k",
+        let bad = CSD.run(.init(wrapper: dir + "/нет", host: "h", port: nil, ticket: "t", token: "k",
                                 group: "g", certHash: nil, pinSHA256: nil, timeout: 5, startURI: "/+CSCOE+/sdesktop/"))
         let badOK: Bool = { if case .failed = bad { return true }; return false }()
         out("  нет скрипта → отказ, не падение  \(badOK ? "OK" : "FAIL")")
@@ -777,15 +787,20 @@ DispatchQueue.global().async {
         // Проверка соответствия устройства: если шлюз прислал <host-scan> и в
         // профиле задан скрипт-обёртка, зовём её ДО входа — как openconnect
         // зовёт --csd-wrapper. Отчёт формирует и шлёт сам скрипт.
-        if let hs = VPNProtocol.parseHostScan(r.raw) {
+        // После повторного init шлюз может прислать другие данные HostScan.
+        // В auth-reply возвращаем токен именно выполненной проверки.
+        let hostScan = VPNProtocol.parseHostScan(r.raw)
+        let hostScanToken = args.csdWrapper?.isEmpty == false ? hostScan?.token : nil
+        if let hs = hostScan {
             if let wrapper = args.csdWrapper, !wrapper.isEmpty {
                 Log.info("шлюз требует проверку устройства (HostScan) — запускаю \(wrapper)")
                 let res = CSD.run(.init(wrapper: wrapper, host: r.postURL.host ?? "",
+                                        port: r.postURL.port,
                                         ticket: hs.ticket, token: hs.token,
                                         group: VPNProtocol.tunnelGroup(r.raw) ?? "",
                                         certHash: http.serverCertMD5.map { "\($0):" },
                                         pinSHA256: http.serverPublicKeyPin, timeout: 60, startURI: hs.startURI))
-                if case .failed(let why) = res { Log.info("CSD: \(why) — продолжаю, шлюз решит сам") }
+                if case .failed(let why) = res { throw CSD.Failure(description: "CSD: \(why)") }
                 try http.waitForHostScan(r.postURL, uri: hs.waitURI, token: hs.token)
                 r = try runInit(args, http: http)
             } else {
@@ -834,7 +849,8 @@ DispatchQueue.global().async {
                     DispatchQueue.global().async {
                         do {
                             let body = VPNProtocol.replyRequest(version: args.version, deviceID: args.deviceID,
-                                                                opaqueXML: r.request.opaqueXML, ssoToken: token)
+                                                                opaqueXML: r.request.opaqueXML, ssoToken: token,
+                                                                hostScanToken: hostScanToken)
                             let (data, _) = try http.post(r.postURL, body: body)
                             if args.verbose, let s = String(data: data, encoding: .utf8) { Log.debug("ответ auth-reply:\n\(mask(s))") }
                             let c = try VPNProtocol.parseComplete(data)

@@ -54,6 +54,9 @@ jobs:
       - name: ocbar-auth self-test
         run: auth/.build/release/ocbar-auth --selftest
 
+      - name: HostScan wrapper sequence (local HTTPS gateway)
+        run: python3 tools/hostscan-sequence-test.py
+
       - name: ocbar-auth learn self-test (WebKit, offscreen)
         run: auth/.build/release/ocbar-auth --learn-selftest
 
