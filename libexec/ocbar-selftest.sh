@@ -224,7 +224,7 @@ PROFILE
 #!/bin/bash
 echo "POST https://vpn.example.test/pw"
 printf 'Password:'; IFS= read -r p
-printf 'Response:'; IFS= read -r c
+printf '%s' "${OCBAR_PWSTUB_CHALLENGE:-Response:}"; IFS= read -r c
 printf '%s %s %s\n' "$p" "$c" "$*" > "$OCBAR_PWSTUB_LOG"
 [ "$p" = secret-pw ] && [ "$c" = 424242 ] || { echo "Login failed."; exit 1; }
 echo "COOKIE='tok123'"
@@ -250,6 +250,12 @@ STUB
     has "парольная группа: отмена окна кода — вход отменён" "вход отменён" "$out"
     out=$(OCBAR_SILENT=1 OCBAR_OPENCONNECT="$tmp/ocpw" run _selftest-fn pw_auth pw </dev/null; echo "rc=$?")
     has "парольная группа: автоподключение не зовёт человека — код 5" "rc=5" "$out"
+    # Повторный Password — ручной защищённый ввод, а не окно SMS-кода.
+    out=$(OCBAR_OPENCONNECT="$tmp/ocpw" OCBAR_PWSTUB_LOG="$tmp/pwstub.log" OCBAR_PWSTUB_CHALLENGE='Password:' \
+          OCBAR_PROMPT_CMD='[ "$OCBAR_PROMPT_SECRET" = 1 ] && echo 424242' \
+          run _selftest-fn pw_auth pw </dev/null || true)
+    has "парольная группа: повторный пароль вводится скрыто" "tok123" "$out"
+    hasnt "парольная группа: ручной ответ не в выводе" "424242" "$out"
     # Пароля нет в источнике — его тоже спрашивают у человека, со звёздочками.
     sed -i '' 's/^PasswordCommand = echo secret-pw/PasswordCommand = true/' "$tmp/profiles/pw.ocbar"
     out=$(OCBAR_OPENCONNECT="$tmp/ocpw" OCBAR_PWSTUB_LOG="$tmp/pwstub.log" \

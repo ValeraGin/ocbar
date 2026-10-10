@@ -48,7 +48,8 @@ while True:
         log("сертификат шлюза не доверенный — отказываюсь (" + tail + ")"); os.write(fd, b"no\n"); stop(1)
     if low.startswith("group"):
         log("шлюз просит выбрать группу — укажите её в адресе профиля: " + tail); stop(1)
-    if ("password" in low or "парол" in low) and not sent_pw:
+    is_password = "password" in low or "парол" in low
+    if is_password and not sent_pw:
         sent_pw = True
         if not pw:
             # Пароля нет в связке — спросить человека (окно со звёздочками).
@@ -61,7 +62,9 @@ while True:
     humans += 1
     if humans > 3: log("шлюз спрашивает код в четвёртый раз — останавливаюсь"); stop(1)
     log("шлюз спрашивает: " + tail + " — вводит человек")
-    code, rc = ask(tail)
+    # Повторный Password может быть новым паролем или повтором после отказа.
+    # Не подставляем прежнее значение и не показываем его как SMS-код.
+    code, rc = ask(tail, secret=is_password)
     if not code:
         log("код не введён"); stop(rc if rc in (2, 3) else 3)
     secrets.add(code); os.write(fd, (code + "\n").encode())
