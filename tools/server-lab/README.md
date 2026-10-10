@@ -92,13 +92,38 @@ or CI. Use a separate lab account and a scoped route to a test resource.
 A successful authentication is not proof of a working tunnel: additionally
 check the assigned interface, route, DNS and actual request through it.
 
-Candidate services researched on 2026-10-10 (not yet tested with ocbar):
+For an authorized account, run the opt-in external test manually:
+
+```sh
+python3 tools/external-vpn-test.py de1.ocservvpn.com fr1.ocservvpn.com
+```
+
+It prompts for credentials without echo. `--credentials-stdin` accepts a JSON
+object with `username` and `password` from a secret-store pipeline. Credentials
+stay in process memory and container stdin; do not put them in shell arguments
+or files. The test authenticates through the production driver on the host,
+then independently authenticates and starts OpenConnect in a disposable Linux
+container. Only routes to `1.1.1.1` and VPN-supplied DNS servers are added there.
+It verifies HTTPS against Cloudflare's public trace endpoint with normal TLS
+validation and resolves `example.com` through VPN DNS. Host routes are untouched.
+The image must include `ca-certificates`; the route script applies the MTU
+supplied by the VPN. Container failure makes the command exit nonzero.
+
+On 2026-10-10, an authorized WorldVPN trial passed authentication on macOS and
+Linux, routed HTTPS, and VPN DNS on `de1.ocservvpn.com` and `fr1.ocservvpn.com`.
+The observed exit addresses matched the provider's published gateway addresses.
+MTU was 1472; retaining the interface default of 1500 had caused HTTPS handshake
+timeouts. Both runs used TLS for traffic; DTLS establishment was not observed.
+This still does not test the macOS production helper or system DNS changes.
+The external service is not part of unattended CI and trial credentials are
+not retained in this repository.
+
+Services researched on 2026-10-10:
 
 - [WorldVPN setup](https://www.worldvpn.net/how-to-setup-vpn) explicitly lists
   OpenConnect. Its [24-hour trial](https://www.worldvpn.net/free-trial) sends
-  credentials by email and uses shared IPs. Unauthenticated init probes to
-  two published gateways on 2026-10-10 reached a username form; successful
-  sign-in and tunnel traffic have not been verified. The free app allowance is a separate
+  credentials by email and uses shared IPs. Two gateways passed the external
+  checks above. The free app allowance is a separate
   offer and is not evidence that third-party clients can use it.
 - [Cisco DevNet Sandbox](https://developer.cisco.com/docs/sandbox/first-reservation-guide/)
   provides AnyConnect access to reservation labs. An account and reservation
@@ -106,8 +131,8 @@ Candidate services researched on 2026-10-10 (not yet tested with ocbar):
   [FAQ](https://developer.cisco.com/docs/sandbox/faqs/) says the service is free
   and that the formal IVT program is not supported.
 
-Public provider addresses alone are insufficient for a full test. No account
-has been registered, no trial requested and no subscription purchased by these
-scripts. For a repeatable internet-hosted lab, deploy the same ocserv config on
+Public provider addresses alone are insufficient for a full test. The trial
+was requested separately with the user's authorization; these test scripts do
+not register accounts or purchase subscriptions. For a repeatable internet-hosted lab, deploy the same ocserv config on
 a separately rented Linux VM with proper credentials and a trusted certificate;
 the disposable local lab configuration is not a production deployment template.
