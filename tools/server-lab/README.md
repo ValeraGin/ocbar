@@ -17,6 +17,13 @@ firmware**. The third uses actual servers. These suites obtain authentication
 sessions; they do not start the host VPN, test routed traffic, DNS or DTLS.
 Helper routing tests remain in `tools/helper-selftest.sh`.
 
+The ocserv runner supplies `--cafile` directly to OpenConnect and exercises
+`ocbar-pwauth.py`, not the complete profile-to-tunnel workflow. The current
+profile/CLI does not expose a CA file, `--authgroup` or a client certificate.
+Those configurations are therefore not declared supported by this suite.
+Real OTP, client-certificate auth, group selection and routed end-to-end traffic
+remain separate coverage gaps; a passing password-driver test cannot cover them.
+
 All credentials are synthetic. The scripts do not load personal profiles or
 Keychain entries. TLS fixtures bind only to loopback and use temporary
 certificates; accepting those self-signed certificates is limited to the test
