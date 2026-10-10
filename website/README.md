@@ -25,7 +25,32 @@ The original screenshots remain in the repository's `assets/` directory. When
 refreshing them, copy the English and Russian menu/profile files to `dist/assets/`
 and check the hero crop against the new dimensions. Do not use live customer data.
 
-## Publish with GitHub Pages
+## Publish with Cloudflare Pages
+
+Selected hosting platform. Connect the reviewed GitHub repository to Cloudflare
+Pages with these settings:
+
+- Framework preset: None.
+- Root directory: repository root.
+- Production branch: the branch approved for publication.
+- Build command: `python3 website/build.py --url "$SITE_URL" && python3 website/check.py`.
+- Build output directory: `website/dist`.
+- Build environment variable `SITE_URL`: the final public root URL, including `https://`.
+
+Use the actual assigned `pages.dev` address until a custom domain is registered
+and connected. Do not use a deployment-specific preview URL as the canonical URL.
+After connecting a custom domain in Pages, update `SITE_URL` and rebuild so the
+canonical URL, social card URLs and sitemap point to the new address.
+
+For the apex domain, add the domain to the Cloudflare account and use its assigned
+nameservers. The domain can be registered at Cloudflare or another registrar.
+Domain registration, account setup and deployment are separate actions; none is
+performed by the local build script.
+
+[Cloudflare static HTML guide](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/)
+and [custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/).
+
+## Optional GitHub Pages deployment
 
 The prepared workflow is manual; a push alone does not publish the site.
 
