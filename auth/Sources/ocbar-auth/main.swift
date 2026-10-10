@@ -851,7 +851,7 @@ DispatchQueue.global().async {
                             let body = VPNProtocol.replyRequest(version: args.version, deviceID: args.deviceID,
                                                                 opaqueXML: r.request.opaqueXML, ssoToken: token,
                                                                 hostScanToken: hostScanToken)
-                            let (data, _) = try http.post(r.postURL, body: body)
+                            let (data, sessionURL) = try http.post(r.postURL, body: body)
                             if args.verbose, let s = String(data: data, encoding: .utf8) { Log.debug("ответ auth-reply:\n\(mask(s))") }
                             let c = try VPNProtocol.parseComplete(data)
                             Log.info("сессия получена, server-cert-hash \(c.serverCertHash)")
@@ -859,8 +859,10 @@ DispatchQueue.global().async {
                                 "session_token": c.sessionToken,
                                 "server_cert_hash": c.serverCertHash,
                                 "url": r.groupURL.absoluteString,
-                                "post_url": r.postURL.absoluteString,
-                                "host": r.postURL.host ?? "",
+                                // Балансировщик может сменить узел на последнем
+                                // шаге: cookie принадлежит серверу, выдавшему её.
+                                "post_url": sessionURL.absoluteString,
+                                "host": sessionURL.host ?? "",
                             ]))
                             // Вход прошёл и сессия уже у клиента — теперь можно
                             // спросить, что сохранить на следующий раз. Токен

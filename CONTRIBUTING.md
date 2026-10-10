@@ -20,7 +20,15 @@ tools/helper-selftest.sh                       # privileged helper, dry-run with
 auth/.build/release/ocbar-auth --selftest      # TOTP, fill scope, autofill limits
 auth/.build/release/ocbar-auth --learn-selftest
 app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
+python3 tools/gateway-matrix-test.py           # local TLS gateways + real WebKit
+python3 tools/hostscan-sequence-test.py        # external CSD wrapper handshake
 ```
+
+[Server compatibility lab](tools/server-lab/README.md) also runs the real
+OpenConnect password driver against two ocserv releases in disposable Docker
+containers. The gateway fixtures bind only to localhost; neither suite changes
+the host VPN or routes. Local TLS tests need networking and WebKit outside the
+brew sandbox. Real ocserv tests run in a separate Linux CI job.
 
 The CLI and `ocbar-auth` self-tests also run inside the sandbox `brew test`
 uses (`tools/brew-sandbox.sb`: no screen, camera or system services, writes
@@ -31,9 +39,10 @@ machine's permissions fails before release, not after:
 TMPDIR=$(mktemp -d /private/tmp/ocbar-brewsb.XXXXXX) sandbox-exec -f tools/brew-sandbox.sb bin/ocbar selftest
 ```
 
-All of these run in CI on every push and must stay green. No network, no
-privileges, no VPN: configs are synthetic, state and logs go to a temporary
-directory, the helper is replaced by a stub.
+All of these run in CI on every push and must stay green. Unit self-tests use
+no network, privileges or VPN: configs are synthetic, state and logs go to a
+temporary directory, the helper is replaced by a stub. Integration suites use
+local TLS and disposable servers with synthetic accounts, never personal VPNs.
 
 What a person would do is replaced by stand-ins, so the checks run
 unattended: `OCBAR_SELFTEST_SECURITY` (the keychain — a script that records
