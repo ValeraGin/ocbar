@@ -34,7 +34,9 @@ jobs:
       - name: Перевод интерфейса
         run: python3 tools/i18n-scan.py --check
       - name: Live runner environment isolation (no network)
-        run: python3 tools/macos-vpn-test-selftest.py
+        run: |
+          python3 tools/macos-vpn-test-selftest.py
+          python3 tools/macos-path-test-selftest.py
       - name: Formula syntax
         run: ruby -c Formula/ocbar.rb
       - name: Markdown links

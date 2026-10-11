@@ -40,6 +40,9 @@ without changing host routes. External account credentials never belong in CI.
 against disposable local ocserv servers with synthetic credentials, including
 TLS 1.3/LZS, large HTTP/HTTPS responses, split DNS and reconnect. It changes one
 host route and one resolver temporarily and is also a manual opt-in test.
+`tools/macos-path-test.py --live --ssh-via HOST` compares an external gateway
+directly and through an authorized SSH host with the same native helper, plus a
+local-forward control. It restores the temporary routes, DNS and TCP listeners.
 
 The CLI and `ocbar-auth` self-tests also run inside the sandbox `brew test`
 uses (`tools/brew-sandbox.sb`: no screen, camera or system services, writes

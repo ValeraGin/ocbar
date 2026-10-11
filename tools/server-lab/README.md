@@ -226,6 +226,54 @@ including TLS 1.3 with LZS and the same interface MTU 1378. This rules out a
 blanket claim that these helper/transport combinations cannot carry traffic;
 it does not identify the cause on the external path or certify every server.
 
+## External gateway through another network (opt-in)
+
+```sh
+python3 tools/macos-path-test.py --live --ssh-via my-test-host fr1.ocservvpn.com de1.ocservvpn.com
+```
+
+Use an authorized SSH alias with TCP forwarding enabled. The test keeps the
+same installed macOS helper/OpenConnect and compares direct access, access
+through a temporary SSH local forward, then direct access again. Finally, a
+local TCP forward without SSH controls for the loopback endpoint/SNI rewrite.
+`--local-control-only` runs just that last check. No software, services or routes
+are changed on the SSH host; its outgoing TCP connection provides another
+network path. This tests TCP/TLS only, not DTLS or native UDP through that network.
+
+Credentials are prompted without echo and kept in memory. For forwarded
+authentication, OpenConnect's `--resolve` directs the real VPN hostname to the
+local listener while normal PKI validates the hostname. The helper then uses
+the verified pin for its loopback endpoint. Unexpected authentication redirects
+or missing pins are rejected. Five network-free checks in
+`tools/macos-path-test-selftest.py` cover that boundary and credential redaction.
+
+The runner requires a disconnected VPN, temporarily stops the supervisor and
+adds only `1.1.1.1/32`, `8.8.8.8/32` and the `example.com` resolver. Each path
+gets a fresh VPN session, direct and native DNS probes, and two HTTPS trace
+requests. Routes, resolver, forwarding listeners and supervisor are restored.
+Any failed traffic check makes the final exit code nonzero, including when
+failures are the expected result of a path comparison. An explicit proxy
+environment cannot silently affect authentication or the HTTPS probes.
+
+On 2026-10-11 both WorldVPN gateways showed the same pattern:
+
+| Path | France | Germany |
+| --- | --- | --- |
+| Direct, before SSH | Both HTTPS probes timed out | Both HTTPS probes timed out |
+| Through an independent VDS SSH connection | Both passed; exit 51.68.89.73 | Both passed; exit 116.203.253.222 |
+| Direct, after SSH | Both HTTPS probes timed out | Both HTTPS probes timed out |
+| Local TCP forward, without VDS | Both HTTPS probes timed out | Both HTTPS probes timed out |
+
+Authentication and both DNS probes passed on every path. All tunnels used
+helper 0.8.2/OpenConnect 9.21, TLS 1.3 + LZS, MTU 1378, with DTLS disabled.
+The independent VDS's own egress and direct routes to both gateways were checked
+before testing. The local-forward control reproduced the failure even with a
+loopback helper endpoint. This demonstrates path-dependent behavior and shows
+that the native helper can carry traffic to these external servers. It does
+not establish which intermediate device, filtering policy, packet behavior or
+server-side source-address policy causes the direct-path stall. SSH changes
+both the upstream source address and the encapsulation of the first network leg.
+
 ## Provider options
 
 Services researched on 2026-10-10:
