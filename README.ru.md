@@ -1,5 +1,7 @@
 # ocbar
 
+[Сайт](https://ocbar.pages.dev/ru/)
+
 [English](README.md) · **Русский**
 
 **Рабочий VPN в строке меню вашего Mac.**

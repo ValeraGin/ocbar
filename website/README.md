@@ -27,27 +27,31 @@ and check the hero crop against the new dimensions. Do not use live customer dat
 
 ## Publish with Cloudflare Pages
 
-Selected hosting platform. Connect the reviewed GitHub repository to Cloudflare
-Pages with these settings:
+Live since 2026-10-11: [English](https://ocbar.pages.dev/) ·
+[Русский](https://ocbar.pages.dev/ru/). Cloudflare Pages project: `ocbar`.
+The site uses the free `pages.dev` address; no custom domain was purchased.
 
-- Framework preset: None.
-- Root directory: repository root.
-- Production branch: the branch approved for publication.
-- Build command: `python3 website/build.py --url "$SITE_URL" && python3 website/check.py`.
-- Build output directory: `website/dist`.
-- Build environment variable `SITE_URL`: the final public root URL, including `https://`.
+The initial deployment used **Direct Upload** in the existing Cloudflare account.
+Git integration and automatic deployments are not configured. To update:
 
-Use the actual assigned `pages.dev` address until a custom domain is registered
-and connected. Do not use a deployment-specific preview URL as the canonical URL.
-After connecting a custom domain in Pages, update `SITE_URL` and rebuild so the
-canonical URL, social card URLs and sitemap point to the new address.
+```sh
+python3 website/build.py --url https://ocbar.pages.dev/
+python3 website/check.py
+```
 
-For the apex domain, add the domain to the Cloudflare account and use its assigned
-nameservers. The domain can be registered at Cloudflare or another registrar.
-Domain registration, account setup and deployment are separate actions; none is
-performed by the local build script.
+Open Workers & Pages → ocbar → Create deployment, select Production, upload the
+contents of `website/dist`, wait for every file to finish uploading, then deploy.
+Upload only this public directory, not the repository, source templates or local
+configuration. The first ZIP upload stalled at 0/15; selecting the `dist` folder
+completed all 15 files and deployment succeeded. Both language pages and language
+navigation were verified in Brave. An independent Python HTTP check received 403
+through the local proxy, so it was not used as evidence of deployment health.
 
-[Cloudflare static HTML guide](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/)
+Always build with the stable project URL, not a deployment-specific preview URL.
+`--url` generates canonical URLs, language alternates, social-card URLs, sitemap
+and robots.txt. If a custom domain is connected later, rebuild with that address.
+
+[Cloudflare Direct Upload guide](https://developers.cloudflare.com/pages/get-started/direct-upload/)
 and [custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/).
 
 ## Optional GitHub Pages deployment
