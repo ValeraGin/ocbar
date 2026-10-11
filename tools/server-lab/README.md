@@ -317,9 +317,31 @@ python3 tools/macos-vpn-test.py --live --mode proxy \
   --preserve-route 192.168.188.20 fr1.ocservvpn.com de1.ocservvpn.com
 ```
 
-The October 11, 2026 runs passed profile password login, remote DNS and HTTPS on
-both gateways with HTTP CONNECT and SOCKS5, with the VPN gateway as the reported
-exit address. It restored
-the supervisor and original routes after disconnect. A native `--mode tunnel`
+The October 11, 2026 user-mode runs passed profile password login, remote DNS
+and HTTPS on both gateways with HTTP CONNECT and SOCKS5, with the VPN gateway
+as the reported exit address. They restored the supervisor and original routes
+after disconnect. A native `--mode tunnel`
 run additionally requires installed helper 0.8.3; an old helper is rejected
 before authentication so it cannot silently ignore the upstream spec.
+
+After installing helper 0.8.3 on October 11, 2026, the same profile workflow
+also passed in native `--mode tunnel` with both HTTP CONNECT and SOCKS5:
+
+```sh
+python3 tools/macos-vpn-test.py --live --mode tunnel \
+  --upstream-proxy http://127.0.0.1:10808 \
+  --preserve-route 192.168.188.20 fr1.ocservvpn.com de1.ocservvpn.com
+# Repeat with --upstream-proxy socks5://127.0.0.1:10808.
+```
+
+All 12 native phases passed (two gateways × two upstream protocols × connect,
+resume and forced reconnect). Each phase checked utun routes, macOS resolution,
+direct VPN DNS and HTTPS through the native interface. HTTPS reported the
+expected gateway exit: France 51.68.89.73, Germany 116.203.253.222. The interface
+MTU was 1378, SSL/LZS was connected and DTLS remained disabled, even though the
+profile requested `Dtls = on`. Inherited proxy environment was cleared.
+Pause removed the test routes and split DNS; resume/reconnect restored them.
+Final disconnect removed the test resolver, restored baseline routes and
+restarted the original supervisor. The unrelated TV-lab route was preserved.
+These checks cover the tested external split-tunnel profiles; they do not
+certify every gateway or proxy implementation.
