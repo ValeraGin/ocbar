@@ -143,6 +143,13 @@ system routes/DNS. It never enables the system proxy.
 
 `--dtls off` and `--mtu 1300` allow transport comparisons in tunnel mode.
 `--preserve-route ADDRESS` adds an unrelated route to the before/after checks.
+By default, the runner removes uppercase and lowercase HTTP/HTTPS/ALL/NO_PROXY
+variables from the VPN process environment. User-mode OpenConnect may otherwise
+use an upstream proxy that the sudo helper does not inherit. For a separate
+proxy-mode comparison, use `--mode proxy --inherit-proxy-env`; this explicitly
+allows the existing proxy environment and is not equivalent to a direct tunnel
+test. Neither variant changes system proxy settings. The network-free
+`tools/macos-vpn-test-selftest.py` checks the environment passed to the CLI.
 These tests are manual, not part of unattended CI.
 
 Observed on the test Mac on 2026-10-11 (OpenConnect 9.21, helper 0.8.2):
@@ -159,10 +166,21 @@ Observed on the test Mac on 2026-10-11 (OpenConnect 9.21, helper 0.8.2):
   DNS was unreliable: the native resolver timed out in one run and a direct
   query to the VPN DNS timed out in another. The test now waits for a new
   completed reconnect recorded by the helper, not a fixed two-second delay.
-- Proxy profiles passed HTTPS and remote DNS on both gateways, and cleaned up
-  their listening ports. The Linux container control also passed on France
-  the same day. The cause of the system-tunnel HTTPS failure remains unresolved;
-  these results do not establish a regression or identify the faulty component.
+- Proxy profiles initially passed HTTPS and remote DNS on both gateways, and
+  cleaned up their listening ports. Those runs inherited a local upstream proxy,
+  so they were not an equal-path comparison with the system tunnel. Both gateways
+  subsequently failed in proxy mode with that environment removed (SOCKS request
+  failure, curl exit 97) and passed again when inheritance was explicitly enabled.
+  A socket inspection confirmed a direct connection to the Germany gateway
+  during its failing run. The Linux container control
+  also passed on France the same day, using a separate container network path.
+  These results do not establish a helper defect or a regression.
+- A scoped packet-header capture on France showed a successful TCP handshake
+  and bidirectional TLS traffic, followed by unacknowledged small packets and
+  unanswered new connection attempts. Checksums were valid. Disabling ECN on
+  the first test socket did not resolve the stall; a later TCP_NOOPT probe also
+  timed out. These were per-socket tests, not changes to macOS TCP settings.
+  The exact reason the direct network path stalls remains unresolved.
 
 Services researched on 2026-10-10:
 

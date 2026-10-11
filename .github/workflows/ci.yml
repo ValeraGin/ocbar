@@ -33,6 +33,8 @@ jobs:
           python3 -m compileall -q libexec/*.py tools/*test.py tools/server-lab/*.py
       - name: Перевод интерфейса
         run: python3 tools/i18n-scan.py --check
+      - name: Live runner environment isolation (no network)
+        run: python3 tools/macos-vpn-test-selftest.py
       - name: Formula syntax
         run: ruby -c Formula/ocbar.rb
       - name: Markdown links

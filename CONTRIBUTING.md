@@ -22,6 +22,7 @@ auth/.build/release/ocbar-auth --learn-selftest
 app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
 python3 tools/gateway-matrix-test.py           # local TLS gateways + real WebKit
 python3 tools/hostscan-sequence-test.py        # external CSD wrapper handshake
+python3 tools/macos-vpn-test-selftest.py       # live-runner setup, no network/privileges
 ```
 
 [Server compatibility lab](tools/server-lab/README.md) also runs the real

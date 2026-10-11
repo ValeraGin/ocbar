@@ -6,6 +6,8 @@ only routes to 1.1.1.1 and 8.8.8.8 plus the example.com split-DNS zone. Restores
 the supervisor and checks cleanup. Credentials are entered without echo and
 remain in memory. Tunnel mode requires the installed NOPASSWD ocbar-helper.
 Proxy mode tests SOCKS HTTPS/remote DNS without changing system routes or DNS.
+Proxy environment variables are removed unless explicitly opted in: otherwise
+user-mode OpenConnect and the sudo helper can use different upstream paths.
 """
 import argparse
 import getpass
@@ -25,6 +27,12 @@ HELPER = '/usr/local/libexec/ocbar-helper'
 ZONE = Path('/etc/resolver/example.com')
 STATE = Path('/var/db/ocbar')
 FAILURES = []
+
+
+def test_environment(source, inherit_proxy=False):
+    return {k: v for k, v in source.items()
+            if not k.startswith('OCBAR_') and
+            (inherit_proxy or k.lower() not in ('http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'))}
 
 
 def run(command, env=None, timeout=60, check=True):
@@ -97,9 +105,13 @@ def main():
     parser.add_argument('--dtls', choices=('on', 'off'), default='on')
     parser.add_argument('--mtu', type=int, help='Profile base MTU (576–9000)')
     parser.add_argument('--mode', choices=('tunnel', 'proxy'), default='tunnel')
+    parser.add_argument('--inherit-proxy-env', action='store_true',
+                        help='Proxy mode only: allow inherited upstream proxy variables (different network path)')
     parser.add_argument('--preserve-route', action='append', default=['9.9.9.9'],
                         help='Additional IPv4 address whose route must remain unchanged')
     args = parser.parse_args()
+    if args.inherit_proxy_env and args.mode != 'proxy':
+        parser.error('--inherit-proxy-env only applies to proxy mode; sudo does not preserve that environment')
     if args.mtu is not None and not 576 <= args.mtu <= 9000:
         parser.error('MTU must be 576–9000')
     if any(not re.fullmatch(r'[A-Za-z0-9.-]+', host) for host in args.hosts):
@@ -124,7 +136,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='ocbar-macos-live-') as directory:
         tmp = Path(directory)
         (tmp / 'profiles').mkdir()
-        env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
+        env = test_environment(os.environ, args.inherit_proxy_env)
         env.update(OCBAR_CONFIG_DIR=str(tmp), OCBAR_USER_STATE=str(tmp / 'user-state'),
                    OCBAR_LOG_DIR=str(tmp / 'logs'), OCBAR_NOTIFY='0',
                    OCBAR_TEST_PASSWORD=password, OCBAR_AUTH=str(ROOT / 'auth/.build/release/ocbar-auth'))
@@ -149,7 +161,8 @@ def main():
                                    '[Proxy]\nSystemProxy = off\nPort = %d\n' % port +
                                    '[Health]\nCheck = https://1.1.1.1/cdn-cgi/trace\n')
                 run([CLI, 'profile-check', str(profile)], env)
-                print(host + ': connecting through profile (%s)' % args.mode, flush=True)
+                path = 'inherited upstream proxy environment' if args.inherit_proxy_env else 'proxy environment removed'
+                print(host + ': connecting through profile (%s; %s)' % (args.mode, path), flush=True)
                 started = True
                 run([CLI, 'connect', 'live-test'], env, timeout=90)
                 if args.mode == 'proxy':
