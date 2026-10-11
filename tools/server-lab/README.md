@@ -10,15 +10,16 @@ about GlobalProtect, Fortinet, Pulse, OpenVPN or WireGuard.
 | --- | --- | --- |
 | `tools/gateway-matrix-test.py` | Real ocbar-auth + WebKit against synthetic HTTPS gateways | SSO, custom cookie names, opaque round-trip, nested certificate hash, GET/POST/final-reply redirects (including host changes), client-certificate fallback, protocol/server/TLS errors |
 | `tools/hostscan-sequence-test.py` | Real ocbar-auth + external wrapper against a synthetic HTTPS gateway | Report submission, waiting, original HostScan token, wrapper failures, paths with spaces, non-default port |
-| `tools/ocserv-integration-test.py` | Production password driver + real OpenConnect + real ocserv | Stored/manual password, wrong password then cancellation, initial cancellation, untrusted server certificate, groups, password + TOTP, client certificate, isolated CSTP tunnel with HTTP and DNS |
+| `tools/ocserv-integration-test.py` | Production password driver + real OpenConnect + real ocserv | Stored/manual password, wrong password then cancellation, initial cancellation, untrusted server certificate, groups, password + TOTP, client certificate, isolated CSTP and DTLS tunnels with HTTP and DNS |
 
 The first two are protocol fixtures, **not certified emulations of Cisco
 firmware**. The third uses actual servers and a second disposable container
 as a VPN client. It obtains a session through the production password driver,
 passes the cookie to OpenConnect over stdin, checks that the route uses its TUN
 interface, fetches an HTTP resource, and queries the DNS address supplied by
-ocserv. None of these tests starts the host VPN. DTLS is disabled in the tunnel
-test; it verifies CSTP over TLS. Helper routing tests remain in
+ocserv. None of these tests starts the host VPN. Separate cases force CSTP over
+TLS and require DTLS establishment before HTTP/DNS traffic; TLS fallback cannot
+pass the DTLS case. Helper routing tests remain in
 `tools/helper-selftest.sh`.
 
 The ocserv runner supplies `--cafile` directly to OpenConnect and exercises
@@ -29,8 +30,9 @@ this suite. Groups are tested both with explicit selection and with the expected
 refusal when selection is missing. TOTP checks a real code and cancellation;
 certificate authentication checks presence and absence of a client certificate.
 The tunnel uses a minimal Linux route script, not the production macOS helper.
-System DNS configuration on macOS, DTLS, and the complete profile-to-tunnel
-workflow remain separate coverage gaps.
+The complete profile-to-tunnel workflow and macOS split DNS are covered by the
+separate opt-in live test below, not by this container suite. DTLS remains a
+coverage gap on the external gateways tested so far.
 
 All credentials are synthetic. The scripts do not load personal profiles or
 Keychain entries. TLS fixtures bind only to loopback and use temporary
@@ -70,8 +72,8 @@ python3 tools/ocserv-integration-test.py --image ocbar-test-ocserv:trixie
 
 Use `--openconnect /absolute/path/to/openconnect` if it is not on PATH.
 Use `--mode password`, `--mode groups`, `--mode otp` or `--mode certificate`
-to run one part (repeat the flag to combine parts). The default runs all 12
-scenarios per server; `password` includes the container tunnel test.
+to run one part (repeat the flag to combine parts). The default runs all 13
+scenarios per server; `password` includes both container tunnel tests.
 The runner publishes a random port on `127.0.0.1`, creates a disposable account,
 trusts only its generated lab certificate and removes its containers and Docker
 network in `finally`. The server and tunnel client get NET_ADMIN and a TUN device;
@@ -117,6 +119,50 @@ timeouts. Both runs used TLS for traffic; DTLS establishment was not observed.
 This still does not test the macOS production helper or system DNS changes.
 The external service is not part of unattended CI and trial credentials are
 not retained in this repository.
+
+## Live macOS profile checks (opt-in)
+
+```sh
+python3 tools/macos-vpn-test.py --live de1.ocservvpn.com fr1.ocservvpn.com
+python3 tools/macos-vpn-test.py --live --mode proxy de1.ocservvpn.com fr1.ocservvpn.com
+```
+
+Unlike the container suites, tunnel mode changes live host routes and split
+DNS. It requires ocbar to be disconnected, the installed NOPASSWD helper,
+and an unused `/etc/resolver/example.com`. It temporarily stops the supervisor,
+uses disposable profiles/config/user-state, adds only two host routes and one
+resolver, then verifies removal and restores the supervisor. Personal profiles
+are not edited. Credentials are prompted without echo and remain in memory.
+
+The test checks route/interface MTU, native macOS name resolution, direct VPN
+DNS, HTTPS, pause/resume, reconnect without another login, and disconnect
+cleanup. HTTPS failures are recorded while the control checks continue, and
+produce a nonzero final exit status. Proxy mode checks HTTPS by IP, remote
+name resolution plus HTTPS, closed SOCKS port after disconnect, and unchanged
+system routes/DNS. It never enables the system proxy.
+
+`--dtls off` and `--mtu 1300` allow transport comparisons in tunnel mode.
+`--preserve-route ADDRESS` adds an unrelated route to the before/after checks.
+These tests are manual, not part of unattended CI.
+
+Observed on the test Mac on 2026-10-11 (OpenConnect 9.21, helper 0.8.2):
+
+- WorldVPN Germany/France: profile login, route installation, interface MTU,
+  macOS split-DNS resolution and direct VPN DNS passed.
+- HTTPS through the system tunnel timed out. Disabling DTLS and lowering the
+  profile base MTU to 1300 or 1000 did not resolve the France failure; disabling
+  DTLS also did not resolve the Germany failure. The gateway did not advertise
+  a DTLS address, so these were TLS connections.
+- France: pause, resume, reconnect and disconnect restored/removed routes and
+  split DNS correctly, including after failed HTTPS probes.
+- Germany: pause/resume and final cleanup passed. After a completed reconnect,
+  DNS was unreliable: the native resolver timed out in one run and a direct
+  query to the VPN DNS timed out in another. The test now waits for a new
+  completed reconnect recorded by the helper, not a fixed two-second delay.
+- Proxy profiles passed HTTPS and remote DNS on both gateways, and cleaned up
+  their listening ports. The Linux container control also passed on France
+  the same day. The cause of the system-tunnel HTTPS failure remains unresolved;
+  these results do not establish a regression or identify the faulty component.
 
 Services researched on 2026-10-10:
 

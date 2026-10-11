@@ -141,18 +141,19 @@ print('%06d' % ((struct.unpack('!I',b[p:p+4])[0] & 0x7fffffff) % 1000000))
                     auth_case('wrong-password-then-cancel', command, password='wrong-lab-password', expected=3)
                     auth_case('cancel-password', command, password='', expected=3)
                     auth_case('untrusted-certificate', command[:-3] + command[-1:], expected=1)
-                    client = name + '-client'
-                    try:
-                        r = run('docker', 'run', '--rm', '--name', client, '--network', network,
-                                '--cap-add=NET_ADMIN', '--device=/dev/net/tun', '--entrypoint=python3',
-                                '-v', f'{tmp}:/lab:ro', '-v', f'{LAB}:/test-lab:ro',
-                                '-v', f'{ROOT / "libexec/ocbar-pwauth.py"}:/test/ocbar-pwauth.py:ro',
-                                args.image, '/test-lab/tunnel-client.py')
-                        print(r.stdout.strip(), flush=True)
-                    except subprocess.CalledProcessError as error:
-                        raise AssertionError('container tunnel: ' + error.stderr) from error
-                    finally:
-                        subprocess.run(['docker', 'rm', '-f', client], capture_output=True, timeout=20)
+                    for transport in ('cstp', 'dtls'):
+                        client = name + '-client'
+                        try:
+                            r = run('docker', 'run', '--rm', '--name', client, '--network', network,
+                                    '--cap-add=NET_ADMIN', '--device=/dev/net/tun', '--entrypoint=python3',
+                                    '-v', f'{tmp}:/lab:ro', '-v', f'{LAB}:/test-lab:ro',
+                                    '-v', f'{ROOT / "libexec/ocbar-pwauth.py"}:/test/ocbar-pwauth.py:ro',
+                                    args.image, '/test-lab/tunnel-client.py', transport)
+                            print(r.stdout.strip(), flush=True)
+                        except subprocess.CalledProcessError as error:
+                            raise AssertionError('container tunnel: ' + error.stderr) from error
+                        finally:
+                            subprocess.run(['docker', 'rm', '-f', client], capture_output=True, timeout=20)
                 elif mode == 'groups':
                     auth_case('group-choice-refused-without-selection', command, expected=1, reason='шлюз просит выбрать группу')
                     auth_case('explicit-group', command[:-1] + ['--authgroup=employees', command[-1]])

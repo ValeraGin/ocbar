@@ -31,6 +31,11 @@ container with routed HTTP and VPN DNS. The gateway fixtures bind only to localh
 the host VPN or routes. Local TLS tests need networking and WebKit outside the
 brew sandbox. Real ocserv tests run in a separate Linux CI job.
 
+`tools/macos-vpn-test.py --live` is a separate manual check of real profiles,
+the installed helper and macOS split DNS. It temporarily changes host routes;
+read the lab instructions first. Its `--mode proxy` variant checks SOCKS access
+without changing host routes. External account credentials never belong in CI.
+
 The CLI and `ocbar-auth` self-tests also run inside the sandbox `brew test`
 uses (`tools/brew-sandbox.sb`: no screen, camera or system services, writes
 only to temporary directories), so a check that quietly relies on this

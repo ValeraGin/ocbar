@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Inside a disposable client container: auth, CSTP tunnel, HTTP and DNS."""
+"""Inside a disposable client container: auth, CSTP/DTLS tunnel, HTTP and DNS."""
 import os
+import argparse
 import socket
 import struct
 import subprocess
@@ -8,6 +9,9 @@ import time
 import urllib.request
 from pathlib import Path
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('transport', choices=('cstp', 'dtls'), nargs='?', default='cstp')
+transport = parser.parse_args().transport
 env = dict(os.environ, OCBAR_PASSWORD='lab-password', OCBAR_USERNAME='lab-user',
            OCBAR_PROMPT_CMD='exit 3', OCBAR_PROMPT_TTY='0', OCBAR_PW_TIMEOUT='20')
 url = 'https://gateway:443'
@@ -19,7 +23,8 @@ assert auth.returncode == 0, auth.stderr
 cookie, fingerprint, _ = auth.stdout.strip().rsplit(' ', 2)
 with open('/tmp/openconnect.log', 'w+') as log:
     proc = subprocess.Popen(['openconnect', '--protocol=anyconnect', '--cookie-on-stdin',
-                             '--servercert', fingerprint, '--no-proxy', '--no-dtls',
+                             '--servercert', fingerprint, '--no-proxy',
+                             *(['--no-dtls'] if transport == 'cstp' else []),
                              '--interface=labtun', '--script=/lab/tunnel-script.sh', url],
                             stdin=subprocess.PIPE, stdout=log, stderr=log, text=True)
     proc.stdin.write(cookie + '\n'); proc.stdin.close()
@@ -31,6 +36,15 @@ with open('/tmp/openconnect.log', 'w+') as log:
             time.sleep(.1)
         else:
             raise AssertionError('tunnel not ready')
+        if transport == 'dtls':
+            for _ in range(100):
+                log.seek(0)
+                if 'Established DTLS connection' in log.read():
+                    break
+                assert proc.poll() is None, 'client exited before DTLS negotiation'
+                time.sleep(.1)
+            else:
+                raise AssertionError('DTLS did not establish; TLS fallback does not pass this case')
         route = subprocess.check_output(['ip', '-j', 'route', 'get', '192.0.2.1'], text=True)
         assert 'labtun' in route, route
         # Ignore any inherited proxy: the request must traverse the VPN.
@@ -46,7 +60,10 @@ with open('/tmp/openconnect.log', 'w+') as log:
         ident, flags, _, count, _, _ = struct.unpack('!HHHHHH', answer[:12])
         assert ident == 1234 and flags & 0x8000 and flags & 0xF == 0 and count >= 1
         assert socket.inet_aton('192.0.2.1') in answer
-        print('ocserv (CSTP + route + HTTP + VPN DNS): OK', flush=True)
+        log.seek(0)
+        if transport == 'dtls':
+            assert 'DTLS connection died' not in log.read(), 'DTLS fell back during traffic checks'
+        print('ocserv (%s + route + HTTP + VPN DNS): OK' % transport.upper(), flush=True)
     finally:
         proc.terminate()
         try:
