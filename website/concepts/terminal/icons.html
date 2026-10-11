@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ocbar / Иконка Route Terminal</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .icon-header{height:90px}.icon-header>a:last-child{font:11px var(--mono);color:var(--green)}.icon-intro{display:grid;grid-template-columns:160px 1fr;gap:44px;align-items:center;margin-top:58px;margin-bottom:46px}.icon-intro .eyebrow{margin-bottom:18px}.icon-intro h1{font-size:52px;line-height:1.05;margin:0 0 17px}.icon-intro p:last-child{font-size:14px;max-width:680px}.icon-section{margin-bottom:44px}.icon-section>h2{font-size:24px;letter-spacing:-.03em;margin-bottom:20px}.icon-section>p{font-size:12px;margin-top:15px}.icon-board{border:1px solid #475247;border-radius:6px;padding:30px 23px;overflow:auto}.icon-board.light{background:#edf0e9;color:#394138;border-color:#d4d9ce}.icon-board.dark{background:#1c2420;color:#b2c0ab}.icon-sizes{display:flex;align-items:flex-end;justify-content:space-around;gap:24px;min-width:770px}.icon-sizes figure{display:flex;flex-direction:column;align-items:center;gap:17px;flex-shrink:0}.icon-sizes img{max-width:none}.icon-sizes figcaption{font:10px var(--mono);opacity:.7}.menu-icon-board .icon-sizes{min-width:770px}.icon-board.dark.mono img{filter:invert(1)}.menu-examples{margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:20px}.menu-example{display:flex;align-items:center;gap:18px;justify-content:flex-end;padding:10px 17px;border-radius:6px;font:12px var(--sans)}.menu-example.light{background:#e8ece5;color:#242c23}.menu-example.dark{background:#29332c;color:#d2dbcb}.menu-example.dark img{filter:invert(1)}.menu-example>span:first-child{margin-right:auto;font:9px var(--mono);opacity:.65}.icon-downloads{display:flex;flex-wrap:wrap;gap:12px;margin-top:20px}.icon-notes{border-top:1px solid var(--line);padding:30px 0 50px;font-size:12px}.icon-notes p{max-width:780px}.icon-notes strong{color:#cad8c0}.icon-notes code{color:var(--green)}
+    @media(max-width:800px){.icon-intro{grid-template-columns:90px 1fr;gap:24px;margin-top:37px}.icon-intro>img{width:90px;height:90px}.icon-intro h1{font-size:38px}.icon-intro p:last-child{font-size:12px}.icon-board{padding:25px 20px}.menu-examples{grid-template-columns:1fr}.icon-section>h2{font-size:22px}}
+    @media(max-width:540px){.icon-header{height:76px}.icon-header>a:last-child{font-size:10px}.icon-intro{display:block}.icon-intro>img{width:72px;height:72px;margin-bottom:24px}.icon-intro h1{font-size:39px}.icon-intro .eyebrow{font-size:9px}.icon-intro p:last-child{font-size:13px}.icon-board{padding:24px 17px}.icon-section>p{font-size:11px}.icon-downloads .button{font-size:11px}.icon-sizes{gap:26px;justify-content:flex-start}.icon-notes{font-size:11px}}
+  </style>
+</head>
+<body>
+  <header class="header icon-header wrap"><a href="index.html" class="brand"><img src="icon.svg" width="36" height="36" alt="">ocbar /</a><a href="index.html">← Вернуться к концепту A</a></header>
+  <main class="wrap">
+    <section class="icon-intro"><img src="icon.svg" width="160" height="160" alt="Иконка ocbar: развилка маршрутов на графитовой поверхности"><div><p class="eyebrow">КОНЦЕПТ A / ROUTE TERMINAL</p><h1>Один вход.<br><span>Ваш выбор пути.</span></h1><p>Три квадратных узла, два маршрута, одна развилка. Верхний путь подсвечен: вы выбираете, что направить в VPN. Крупная геометрия сохраняет смысл в строке меню, а графитовая поверхность связывает знак с нативной macOS utility.</p></div></section>
+    <section class="icon-section"><h2>Иконка приложения / светлый фон</h2><div class="icon-board light"><div class="icon-sizes" data-icon="icon.svg"></div></div></section>
+    <section class="icon-section"><h2>Иконка приложения / тёмный фон</h2><div class="icon-board dark"><div class="icon-sizes" data-icon="icon.svg"></div></div></section>
+    <section class="icon-section"><h2>Menu bar / монохром / светлый фон</h2><div class="icon-board light mono menu-icon-board"><div class="icon-sizes" data-icon="icon-mono.svg"></div></div><p>В строке меню используется знак без подложки: сплошные узлы и линии, один цвет, прозрачный фон.</p></section>
+    <section class="icon-section"><h2>Menu bar / монохром / тёмный фон</h2><div class="icon-board dark mono menu-icon-board"><div class="icon-sizes" data-icon="icon-mono.svg"></div></div><div class="menu-examples"><div class="menu-example light"><span>СТРОКА МЕНЮ / ДЕМО</span><img src="icon-mono.svg" width="18" height="18" alt="Знак ocbar, 18 пикселей"><span>◔</span><span>100%</span><span>Вс 11 окт.</span></div><div class="menu-example dark"><span>СТРОКА МЕНЮ / ДЕМО</span><img src="icon-mono.svg" width="18" height="18" alt="Знак ocbar, 18 пикселей"><span>◔</span><span>100%</span><span>Вс 11 окт.</span></div></div></section>
+    <section class="icon-notes"><p><strong>Размеры: 16 / 24 / 32 / 64 / 128 / 256 px.</strong> SVG масштабируется без растрового изображения. Цветной знак: <code>icon.svg</code>. Версия для macOS template image: <code>icon-mono.svg</code>, чёрная геометрия с прозрачным фоном. Белая версия здесь показана CSS-фильтром; при интеграции цвет выбирает система.</p><div class="icon-downloads"><a class="button ghost" href="icon.svg" download>Скачать SVG приложения ↓</a><a class="button ghost" href="icon-mono.svg" download>Скачать SVG menu bar ↓</a><a class="button primary" href="index.html">Посмотреть сайт ↗</a></div></section>
+  </main>
+  <script>
+    for (const board of document.querySelectorAll('[data-icon]')) {
+      for (const size of [16,24,32,64,128,256]) {
+        const figure = document.createElement('figure');
+        const img = document.createElement('img');
+        img.src = board.dataset.icon;
+        img.width = size;
+        img.height = size;
+        img.alt = `Иконка ocbar, ${size} пикселей`;
+        const caption = document.createElement('figcaption');
+        caption.textContent = `${size} px`;
+        figure.append(img,caption);
+        board.append(figure);
+      }
+    }
+  </script>
+</body>
+</html>
