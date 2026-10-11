@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ocbar: угловой сетевой штекер"><rect width="64" height="64" rx="15" fill="#f56837"/><path d="M30 12v11m14-11v11" fill="none" stroke="#252621" stroke-width="6" stroke-linecap="round"/><rect x="23" y="20" width="28" height="22" rx="6" fill="#252621"/><path d="M37 39v6c0 6-4 9-10 9H17c-5 0-8-3-8-8V34" fill="none" stroke="#252621" stroke-width="6" stroke-linecap="round"/><path d="M31 28h12" stroke="#fff8e9" stroke-width="3" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="surface" x1="10" y1="5" x2="54" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#303936"/><stop offset="1" stop-color="#141B18"/>
+    </linearGradient>
+    <linearGradient id="route" x1="13" y1="32" x2="49" y2="18" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9FD9A7"/><stop offset="1" stop-color="#D0F2AD"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#surface)"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="13.5" stroke="#D6ECD5" stroke-opacity=".18"/>
+  <path d="M15 32H29L42 19H48" stroke="url(#route)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M29 32L42 45H48" stroke="#6F8274" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="10" y="27" width="10" height="10" rx="2" fill="#C5E9AE"/>
+  <rect x="44" y="14" width="10" height="10" rx="2" fill="#C5E9AE"/>
+  <rect x="44" y="40" width="10" height="10" rx="2" fill="#859687"/>
+</svg>
