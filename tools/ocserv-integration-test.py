@@ -44,7 +44,7 @@ def run(*args, **kw):
 
 
 @contextmanager
-def server(image, tmp, mode):
+def server(image, tmp, mode, debug=False):
     name = 'ocbar-lab-' + uuid.uuid4().hex[:12]
     network = name + '-net'
     config = CONFIG
@@ -56,12 +56,17 @@ def server(image, tmp, mode):
         config = config.replace('auth = "plain[passwd=/tmp/ocpasswd]"', 'auth = "certificate"')
         config += 'ca-cert = /lab/cert.pem\ncert-user-oid = 2.5.4.3\n'
     (tmp / 'ocserv.conf').write_text(config)
+    if debug:
+        (tmp / 'debug-start.sh').write_text((LAB / 'start.sh').read_text().replace(
+            'exec ocserv -f', 'exec ocserv -d 1 -f'))
     run('docker', 'network', 'create', network)
     try:
         run('docker', 'run', '-d', '--rm', '--name', name,
             '--network', network, '--network-alias=gateway',
             '--cap-add=NET_ADMIN', '--device=/dev/net/tun', '-e', 'LAB_TRAFFIC=1',
-            '-p', '127.0.0.1::443', '-v', f'{tmp}:/lab:ro', image)
+            '-p', '127.0.0.1::443', '-v', f'{tmp}:/lab:ro',
+            *(['--entrypoint', '/bin/sh'] if debug else []), image,
+            *(['/lab/debug-start.sh'] if debug else []))
         port = int(run('docker', 'port', name, '443/tcp').stdout.strip().rsplit(':', 1)[1])
         for _ in range(60):
             try:

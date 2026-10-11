@@ -182,6 +182,52 @@ Observed on the test Mac on 2026-10-11 (OpenConnect 9.21, helper 0.8.2):
   timed out. These were per-socket tests, not changes to macOS TCP settings.
   The exact reason the direct network path stalls remains unresolved.
 
+## Installed macOS helper against controlled ocserv (opt-in)
+
+```sh
+python3 tools/macos-ocserv-test.py --live
+python3 tools/macos-ocserv-test.py --live --tls 1.3
+```
+
+This manual suite connects the installed root helper/OpenConnect directly to
+disposable ocserv containers published on loopback. It requires an initially
+disconnected VPN, Docker images built above, the installed NOPASSWD helper and
+an unused `native.lab.test` resolver. Authentication uses the production password
+driver with a temporary lab CA; the verified session and certificate pin go to
+the helper. This is not a profile/UI test and does not add private-CA support to
+profiles. User credentials and the system trust store are not used.
+
+The suite stops/restores the supervisor, temporarily routes only `192.0.2.1/32`
+through the native utun and installs `native.lab.test` split DNS. It checks direct
+VPN DNS, the macOS resolver, HTTP and certificate-verified HTTPS, comparing SHA-256
+of each 1 MiB response. All checks repeat after pause/resume and reconnect with
+the same session. The server HTTP log must confirm the three successful requests.
+Disconnect/failure cleanup verifies restoration of baseline routes and removal
+of the resolver; containers and networks are removed. `--preserve-route ADDRESS`
+adds an unrelated route to the restoration checks.
+
+Both server images and compression modes (`none`, negotiated LZS) run by default;
+repeat `--image` or `--compression` to select a subset. `--tls 1.2` or `--tls 1.3`
+requires that outer VPN TLS version and checks what was actually negotiated.
+DTLS is disabled in this native suite; the separate Linux suite covers DTLS.
+The macOS resolver is allowed up to five seconds to observe resolver-file changes;
+fresh probe names avoid passing from an earlier cached answer.
+
+On 2026-10-11, installed helper 0.8.2/OpenConnect 9.21 passed both ocserv 1.1.6
+and 1.3.0, with no compression and LZS, first with the servers' default TLS 1.2
+and then forced TLS 1.3: eight combinations, 24 traffic phases and 48 verified
+1 MiB HTTP/HTTPS responses. Server logs confirmed the HTTP requests. The immediate
+resolver check initially failed after resume; readiness checks observed recovery
+in approximately 0.5–0.6 seconds. This transient is distinct from an unanswered
+direct VPN DNS query. All routes/resolvers and the supervisor were restored.
+
+The external WorldVPN stall was not reproduced on this controlled local path,
+including TLS 1.3 with LZS and the same interface MTU 1378. This rules out a
+blanket claim that these helper/transport combinations cannot carry traffic;
+it does not identify the cause on the external path or certify every server.
+
+## Provider options
+
 Services researched on 2026-10-10:
 
 - [WorldVPN setup](https://www.worldvpn.net/how-to-setup-vpn) explicitly lists

@@ -36,6 +36,10 @@ brew sandbox. Real ocserv tests run in a separate Linux CI job.
 the installed helper and macOS split DNS. It temporarily changes host routes;
 read the lab instructions first. Its `--mode proxy` variant checks SOCKS access
 without changing host routes. External account credentials never belong in CI.
+`tools/macos-ocserv-test.py --live` instead exercises the installed macOS helper
+against disposable local ocserv servers with synthetic credentials, including
+TLS 1.3/LZS, large HTTP/HTTPS responses, split DNS and reconnect. It changes one
+host route and one resolver temporarily and is also a manual opt-in test.
 
 The CLI and `ocbar-auth` self-tests also run inside the sandbox `brew test`
 uses (`tools/brew-sandbox.sb`: no screen, camera or system services, writes
