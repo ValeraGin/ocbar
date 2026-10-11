@@ -1,0 +1,36 @@
+<h1>Install ocbar.<br>Make your first connection.</h1>
+<p>ocbar is an AnyConnect-compatible client for a VPN gateway you already have access to. It does not include a VPN subscription or servers. Ask your VPN administrator for the gateway address, group, networks and DNS settings.</p>
+<p class="notice"><strong>Compatibility:</strong> minimum macOS 13. The author’s verified setup is macOS 26 on Apple Silicon with an AnyConnect gateway and Keycloak SSO. Older supported macOS versions and Intel Macs have not yet been verified. Your gateway’s sign-in and device policies may differ.</p>
+<h2>1. Prepare your Mac</h2>
+<p>You need <a href="https://brew.sh/">Homebrew</a> and Apple Command Line Tools. A full Xcode installation is not required. To request Command Line Tools, run:</p>
+<pre><code>xcode-select --install</code></pre>
+<p>Finish the Apple installation dialog before continuing. If the tools are already installed, macOS will tell you. Use an administrator account for the system-helper installation.</p>
+<h2>2. Install with Homebrew</h2>
+<p>The application and its Homebrew tap are public. You do not need a GitHub account, an SSH key or <code>gh auth</code>. Review the <a href="https://github.com/ValeraGin/homebrew-ocbar">tap</a> before trusting it.</p>
+<pre><code>brew tap ValeraGin/ocbar
+brew trust ValeraGin/ocbar
+brew install ocbar</code></pre>
+<p>Homebrew builds the application on your Mac. This is a source build, not a signed and notarized installer; build time depends on your machine and installed dependencies.</p>
+<h2>3. Set up the helper and open the app</h2>
+<pre><code>sudo ocbar install
+ocbar app start</code></pre>
+<p>The first command asks for your Mac administrator password in Terminal. Tunnel mode installs a root-owned helper and copy of OpenConnect, a reconnect LaunchAgent, and <code>/etc/sudoers.d/ocbar</code>. The rule lets members of the <code>admin</code> group run the helper without a password on subsequent connections. It does not grant passwordless access to every command. The menu bar app runs as your normal user. Read the <a href="https://github.com/ValeraGin/ocbar/blob/main/SECURITY.md">security model and its limitations</a>.</p>
+<p>To inspect the planned installation steps without applying them, run <code>ocbar install --dry-run</code> as your normal user.</p>
+<h2>4. Add a profile and sign in</h2>
+<ol><li>Find ocbar in the Mac menu bar and use the setup wizard to add a profile.</li><li>Enter the gateway and authentication group supplied by your administrator.</li><li>Add the networks and DNS zones you need through the VPN. They are your explicit selection; do not guess them from an example.</li><li>Connect and complete your organization’s sign-in. Saving a password or configuring TOTP is optional.</li><li>Check a work resource and an ordinary public website. You can change selected networks or pause the connection from the menu.</li></ol>
+<h2>If the connection fails</h2>
+<pre><code>ocbar doctor
+ocbar status</code></pre>
+<p>The app also has a diagnostics and logs window. Start with any failed checks; confirm your gateway, group and authentication requirements with your administrator. <a href="https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.md">Detailed troubleshooting (Russian)</a> covers common failures. Before opening a public issue, remove gateway details, account names, cookies and tokens from any logs you share.</p>
+<h2>Update</h2>
+<pre><code>brew upgrade ocbar
+ocbar app stop
+ocbar app start
+ocbar doctor</code></pre>
+<p>If the release notes or diagnostics report an outdated helper, run <code>sudo ocbar install</code> again. Updates are not installed automatically.</p>
+<h2 id="remove">Remove the app and system helper</h2>
+<p><strong>Keep this order:</strong> ocbar must still be installed to remove its system components.</p>
+<pre><code>sudo ocbar uninstall
+brew uninstall ocbar</code></pre>
+<p>The first command disconnects ocbar, removes its routes and DNS settings, stops its agents, and removes the helper and its sudoers rule. The second removes the Homebrew package.</p>
+<p>Profiles, local logs and state, saved WebKit sign-in data and Keychain credentials remain. These commands are not a full personal-data wipe. Review the <a href="https://github.com/ValeraGin/ocbar/blob/main/INSTALL.md#8-удаление">full cleanup instructions (Russian)</a> before deleting remaining data. KeePassXC entries are managed separately.</p>

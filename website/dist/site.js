@@ -21,6 +21,7 @@ for (const button of document.querySelectorAll('[data-screen]')) {
   button.addEventListener('click', () => {
     const picture = document.getElementById('app-screenshot');
     picture.src = `${base}assets/${button.dataset.screen}-${russian ? 'ru' : 'en'}.png`;
+    document.getElementById('screenshot-link').href = picture.src;
     picture.alt = button.dataset.screen === 'menu' ? picture.dataset.menuAlt : picture.dataset.profileAlt;
     for (const other of document.querySelectorAll('[data-screen]')) {
       other.setAttribute('aria-pressed', String(other === button));

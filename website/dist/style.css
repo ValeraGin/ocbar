@@ -1209,3 +1209,40 @@ html[lang=ru] .mono {
     gap:10px
   }
 }
+
+/* Installation details and readable, keyboard-accessible screenshot links. */
+.screenshot-link {display:flex;align-items:center;justify-content:center;cursor:zoom-in}
+.screenshot-link img {max-width:100%;max-height:100%;object-fit:contain}
+.screenshot-hint {text-align:center;font-size:14px;color:var(--blue)}
+.compatibility {padding:14px 16px;border-left:3px solid var(--blue);background:#eef3fb}
+.install-disclosures details {border-top:1px solid var(--line);padding:18px 0}
+.install-disclosures summary {cursor:pointer;font-size:16px;font-weight:550;min-height:44px;display:flex;align-items:center;gap:12px}
+.install-disclosures summary::before {content:'+';color:var(--blue)}
+.install-disclosures details[open] summary::before {content:'−'}
+.install-disclosures p {font-size:14px;line-height:1.7;color:var(--muted)}
+.guide {max-width:780px;margin:40px auto 80px;line-height:1.75}
+.guide h1 {font-size:clamp(30px,5vw,48px);line-height:1.15;letter-spacing:-1.5px}
+.guide h2 {font-size:26px;margin:40px 0 16px;letter-spacing:-.7px}
+.guide a {color:var(--blue);text-decoration:underline;text-underline-offset:3px}
+.guide li {margin:8px 0}
+.guide pre {padding:18px;background:#edf1f7;border-radius:8px;overflow:auto}
+.guide pre code {font-size:13px}
+.guide code {overflow-wrap:anywhere}
+.guide .notice {padding:16px;border-left:3px solid var(--blue);background:#eef3fb}
+@media(max-width:600px) {
+  .route-row {display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:8px;padding:14px 0}
+  .route-icon {display:none}
+  .route-row>div {grid-column:1;grid-row:1;min-width:0}
+  .route-row strong {font-size:14px}
+  .route-row code,.route-row>div>span {font-size:12px}
+  .route-destination,.direct {grid-column:1;grid-row:2;margin-left:0;font-size:12px;white-space:normal}
+  .switch {grid-column:2;grid-row:1 / span 2;width:44px;height:44px;background:transparent;position:relative;padding:0}
+  .switch::before {inset:10px 0; background:var(--blue);border-radius:20px}
+  .switch span {position:absolute;left:3px;top:13px;width:18px;height:18px;transform:translateX(20px)}
+  .switch[aria-checked=false] {background:transparent}
+  .switch[aria-checked=false]::before {background:#78889b}
+  .direct-dot {grid-column:2;grid-row:1 / span 2;width:44px}
+  .path-map {white-space:normal;font-size:12px;gap:8px}
+  .demo-badge,html[lang=ru] .demo-badge,.mono,html[lang=ru] .mono {font-size:12px}
+  .guide {margin-top:24px}
+}

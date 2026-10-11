@@ -6,7 +6,9 @@ external fonts, trackers or network integrations.
 
 ## Edit and preview
 
-Copy lives in `src/en.json` and `src/ru.json`; the shared page is `src/page.html`.
+Landing copy lives in `src/en.json` and `src/ru.json`; the shared page is `src/page.html`.
+Installation guides live in `src/guide-en.html` and `src/guide-ru.html`, wrapped by
+`src/guide.html` and generated at `/guide/` and `/ru/guide/`.
 Styles, browser behavior and assets live in `dist/`. The generated HTML is tracked,
 so the site can also be opened without a build environment.
 
