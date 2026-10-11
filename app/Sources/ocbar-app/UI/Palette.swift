@@ -2,12 +2,13 @@ import SwiftUI
 import AppKit
 
 // Цвета из песочницы (tools/ui-lab/index.html): один набор для светлой темы,
-// один для тёмной. Фон панели не красим — его рисует система, и подменять
-// системный материал своим прямоугольником в меню-баре не принято.
+// один для тёмной. У меню непрозрачная подложка: системный материал над
+// белым окном высветляет фон, не меняя наши цвета текста вместе с ним.
 enum Palette {
+    static let menuSurface = dynamic(light: "#f6f6f7", dark: "#232326")
     static let text      = dynamic(light: "#1c1c1a", dark: "#ecebe6")
     static let secondary = dynamic(light: "#5f5e5a", dark: "#a5a39c")
-    static let tertiary  = dynamic(light: "#8a8880", dark: "#74736d")
+    static let tertiary  = dynamic(light: "#686660", dark: "#a3a19b")
     static let line      = dynamic(light: "#e2e0d8", dark: "#303036")
     static let line2     = dynamic(light: "#cfcdc4", dark: "#45454d")
     // Состояния — системными цветами macOS: зелёный, оранжевый, красный,

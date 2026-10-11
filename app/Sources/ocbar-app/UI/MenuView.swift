@@ -72,6 +72,8 @@ struct MenuView: View {
         // берёт её с запасом (на 36 точек), а следом приходится уменьшать —
         // и это видно как рывок.
         .frame(height: contentHeight > 0 ? contentHeight : nil, alignment: .top)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Palette.menuSurface))
         .background(MenuWindowFit(height: contentHeight))
         .background(shortcuts)
         .onAppear {
