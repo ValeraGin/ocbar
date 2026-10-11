@@ -1,7 +1,8 @@
 # ocbar website
 
 English and Russian product pages with real app screenshots, an illustrative route
-switcher, installation instructions and a compatibility FAQ. No runtime packages,
+switcher, installation instructions, user-controlled routes/DNS/SOCKS/CSD, team profile sharing
+and a compatibility FAQ. No runtime packages,
 external fonts, trackers or network integrations.
 
 ## Edit and preview

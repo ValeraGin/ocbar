@@ -18,3 +18,10 @@ Use case: compositing. Asset type: social share card for ocbar, landscape approx
 JPEG copies are exported at quality 85 for the website and GitHub social preview.
 The PNG masters are preserved alongside them. Format conversion does not change
 the composition. The site loads the JPEG copies.
+
+## Screenshot refresh — 2026-10-11
+
+The RU/EN menu and profile images were re-rendered with `tools/screenshots.sh`
+from the app build containing d5d535f: opaque adaptive menu background and
+higher-contrast secondary labels. All profiles are fixtures. The original
+1560×1221 menu and 2096×1416 profile dimensions are preserved.

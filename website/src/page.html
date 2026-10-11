@@ -27,7 +27,7 @@
       <div class="hero-copy"><div class="eyebrow"><span class="status-dot"></span>$eyebrow</div>
         <h1>$hero_title</h1>
         <p class="lead">$hero_description</p>
-        <div class="actions"><a class="button primary" href="#install">$install_cta <span aria-hidden="true">↗</span></a><a class="text-link" href="#app">$explore_cta <span aria-hidden="true">↓</span></a></div>
+        <div class="actions"><a class="button primary" href="#install">$install_cta <span aria-hidden="true">↗</span></a><a class="text-link" href="#control">$explore_cta <span aria-hidden="true">↓</span></a></div>
         <p class="micro">$hero_note</p>
       </div>
       <div class="hero-visual">
@@ -50,13 +50,33 @@
         <p class="demo-foot" aria-live="polite" data-demo-summary>$demo_summary</p>
       </div>
     </section>
+    <section class="control-section section wrap" id="control">
+      <div class="section-top"><div><p class="eyebrow">02 / $control_label</p><h2>$control_title</h2></div><p>$control_intro</p></div>
+      <div class="control-grid">
+        <article><span class="feature-number">01 / ROUTES</span><h3>$traffic_title</h3><p>$traffic_body</p></article>
+        <article><span class="feature-number">02 / DNS</span><h3>$dns_title</h3><p>$dns_body</p></article>
+        <article><span class="feature-number">03 / VPN + VPN</span><h3>$coexist_title</h3><p>$coexist_body</p></article>
+        <article><span class="feature-number">04 / CSD</span><h3>$csd_title</h3><p>$csd_body</p></article>
+        <article><span class="feature-number">05 / SOCKS</span><h3>$proxy_title</h3><p>$proxy_body</p></article>
+        <article><span class="feature-number">06 / LOGS</span><h3>$logs_title</h3><p>$logs_body</p></article>
+      </div>
+      <details class="comparison-note"><summary>$compare_summary</summary><p>$compare_body</p><div class="source-links"><a href="https://www.cisco.com/c/en/us/td/docs/security/vpn_client/anyconnect/Cisco-Secure-Client-5/admin/guide/b-cisco-secure-client-admin-guide-5-1/configure_vpn.html">$compare_source ↗</a><a href="https://www.cisco.com/c/en/us/td/docs/security/vpn_client/anyconnect/Cisco-Secure-Client-5/admin/guide/b-cisco-secure-client-admin-guide-5-1/troubleshoot-anyconnect.html">$diagnostics_source ↗</a></div></details>
+    </section>
+    <section class="sharing-section wrap" id="team">
+      <div class="sharing-copy"><p class="eyebrow">03 / $share_label</p><h2>$share_title</h2><p>$share_description</p><a class="text-link" href="guide/#share">$share_link ↗</a></div>
+      <div class="sharing-workflow">
+        <ol><li><h3>$share_step1</h3><p>$share_step1_body</p></li><li><h3>$share_step2</h3><p>$share_step2_body</p></li><li><h3>$share_step3</h3><p>$share_step3_body</p></li></ol>
+        <div class="profile-transfer"><div><span>$share_sender</span><code>ocbar export main team.ocbar</code></div><div><span>$share_receiver</span><code>ocbar import team.ocbar</code></div></div>
+        <p class="share-note">$share_note</p>
+      </div>
+    </section>
     <section class="app-section" id="app"><div class="wrap">
-      <div class="section-top"><div><p class="eyebrow">02 / $app_label</p><h2>$app_title</h2></div><p>$app_description</p></div>
+      <div class="section-top"><div><p class="eyebrow">04 / $app_label</p><h2>$app_title</h2></div><p>$app_description</p></div>
       <div class="showcase-controls" role="group" aria-label="$screen_label"><button class="selected" type="button" aria-pressed="true" data-screen="menu">$screen_menu</button><button type="button" aria-pressed="false" data-screen="profile">$screen_profile</button><span>$screen_note</span></div>
       <a class="app-stage screenshot-link" id="screenshot-link" href="${base}assets/menu-${lang}.png" target="_blank" rel="noopener" aria-label="$zoom"><img id="app-screenshot" src="${base}assets/menu-${lang}.png" width="1560" height="1221" loading="lazy" alt="$menu_alt" data-menu-alt="$menu_alt" data-profile-alt="$profile_alt"></a><p class="screenshot-hint">$zoom</p>
       <div class="features"><article><span class="feature-number">01</span><h3>$sso_title</h3><p>$sso_description</p></article><article><span class="feature-number">02</span><h3>$resume_title</h3><p>$resume_description</p></article><article><span class="feature-number">03</span><h3>$secrets_title</h3><p>$secrets_description</p></article></div>
     </div></section>
-    <section class="section install-section wrap" id="install"><div class="section-copy"><p class="eyebrow">03 / $install_label</p><h2>$install_title</h2><p>$install_description</p><div class="requirements"><span>$req_os</span><span>$req_tools</span><span>$req_gateway</span></div><p class="compatibility">$compatibility</p><a class="text-link" href="guide/">$guide_link ↗</a></div>
+    <section class="section install-section wrap" id="install"><div class="section-copy"><p class="eyebrow">05 / $install_label</p><h2>$install_title</h2><p>$install_description</p><div class="requirements"><span>$req_os</span><span>$req_tools</span><span>$req_gateway</span></div><p class="compatibility">$compatibility</p><a class="text-link" href="guide/">$guide_link ↗</a></div>
       <div class="install-steps"><article class="install-step"><span class="step-no">1</span><div><h3>$step1_title</h3><div class="terminal"><div class="terminal-top"><span>Terminal</span><button type="button" id="copy-install">$copy</button></div><pre><code id="install-code">brew tap ValeraGin/ocbar
 brew trust ValeraGin/ocbar
 brew install ocbar</code></pre></div><p>$step1_note</p></div></article><article class="install-step"><span class="step-no">2</span><div><h3>$step2_title</h3><pre class="simple-code"><code>sudo ocbar install

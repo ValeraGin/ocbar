@@ -1246,3 +1246,47 @@ html[lang=ru] .mono {
   .demo-badge,html[lang=ru] .demo-badge,.mono,html[lang=ru] .mono {font-size:12px}
   .guide {margin-top:24px}
 }
+
+/* User-controlled connection settings and a portable team setup. */
+.control-section {padding-top:32px}
+.control-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:42px;border-top:1px solid var(--line)}
+.control-grid article {padding:30px 28px 32px 0;border-bottom:1px solid var(--line)}
+.control-grid article:not(:nth-child(3n+1)) {padding-left:28px;border-left:1px solid var(--line)}
+.control-grid h3 {font-size:21px;line-height:1.25;letter-spacing:-.45px;margin:14px 0}
+.control-grid p {font-size:14px;line-height:1.75;color:var(--muted);margin:0}
+.comparison-note {margin-top:24px;font-size:14px;color:var(--muted)}
+.comparison-note summary {font-weight:600;color:var(--ink);cursor:pointer;padding:12px 0}
+.comparison-note p {max-width:900px;line-height:1.8}
+.source-links {display:flex;flex-wrap:wrap;gap:12px 28px;font-size:12px}
+.source-links a {text-decoration:underline;text-underline-offset:3px}
+.sharing-section {display:grid;grid-template-columns:1fr 1fr;gap:70px;background:#102747;color:#f4f7fc;padding:60px;border-radius:18px;margin-bottom:100px}
+.sharing-copy .eyebrow {color:#aac7f6}
+.sharing-copy h2 {font-size:clamp(30px,3vw,42px);line-height:1.16;letter-spacing:-1.5px;margin:20px 0}
+.sharing-copy>p:not(.eyebrow) {color:#c8d5e7;font-size:16px;line-height:1.8;margin-bottom:28px}
+.sharing-copy .text-link {color:#fff}
+.sharing-workflow ol {list-style:none;counter-reset:steps;padding:0;margin:0}
+.sharing-workflow li {counter-increment:steps;position:relative;padding:0 0 20px 40px}
+.sharing-workflow li::before {content:counter(steps);position:absolute;left:0;top:0;border:1px solid #61738e;width:25px;height:25px;border-radius:50%;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:#bdcff0}
+.sharing-workflow h3 {font-size:16px;margin:0 0 7px}
+.sharing-workflow li p {font-size:14px;line-height:1.6;color:#c8d5e7;margin:0}
+.profile-transfer {background:#081a31;border:1px solid #38506f;border-radius:10px;padding:18px 20px;display:grid;gap:18px}
+.profile-transfer span {display:block;font-size:11px;color:#aac7f6;margin-bottom:7px}
+.profile-transfer code {font-size:12px;white-space:normal;overflow-wrap:anywhere}
+.share-note {font-size:12px;line-height:1.65;color:#bacbdf;margin-bottom:0}
+@media(max-width:1100px) {.sharing-section {padding:36px;gap:35px}}
+@media(max-width:800px) {
+ .control-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+ .control-grid article,.control-grid article:not(:nth-child(3n+1)) {border-left:0;padding:24px 22px 24px 0}
+ .control-grid article:nth-child(even) {border-left:1px solid var(--line);padding-left:22px;padding-right:0}
+ .sharing-section {grid-template-columns:1fr;gap:32px;margin-bottom:65px}
+}
+@media(max-width:480px) {
+ .control-section {padding-top:12px}
+ .control-grid {grid-template-columns:1fr;margin-top:24px}
+ .control-grid article,.control-grid article:not(:nth-child(3n+1)),.control-grid article:nth-child(even) {border-left:0;padding:24px 0}
+ .control-grid h3 {font-size:20px}
+ .sharing-section {padding:26px 20px;border-radius:12px}
+ .sharing-copy h2 {font-size:30px;letter-spacing:-1px}
+ .profile-transfer {padding:15px 12px}
+ .sharing-workflow li {padding-left:36px}
+}

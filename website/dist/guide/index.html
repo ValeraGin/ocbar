@@ -44,6 +44,14 @@ ocbar app stop
 ocbar app start
 ocbar doctor</code></pre>
 <p>If the release notes or diagnostics report an outdated helper, run <code>sudo ocbar install</code> again. Updates are not installed automatically.</p>
+<h2 id="share">Share a configured profile with a teammate</h2>
+<p>One .ocbar file brings together the gateway, networks, DNS zones and SSO form rules. New teammates can start with settings you have already checked.</p>
+<pre><code>ocbar export main team.ocbar</code></pre>
+<p>Here, main is the name of your configured profile. Before sharing, open the file: replace your personal User value, review KeePassXC and CSD wrapper paths, and check any custom commands. Export does not retrieve passwords or TOTP secrets from your credential store; you must review the contents of your own commands and rules. Share work settings within your team.</p>
+<p>Your teammate installs ocbar, imports the file and configures their own account and credential sources:</p>
+<pre><code>ocbar import team.ocbar</code></pre>
+<p>They then sign in as themselves. A CSD script referenced by the profile must be shared and set up separately: export includes its path, not the script file.</p>
+
 <h2 id="remove">Remove the app and system helper</h2>
 <p><strong>Keep this order:</strong> ocbar must still be installed to remove its system components.</p>
 <pre><code>sudo ocbar uninstall
