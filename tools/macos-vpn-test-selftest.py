@@ -28,6 +28,7 @@ class RunnerSetup(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 1, '', '')
             if command[1:3] == ['connect', 'live-test']:
                 captured.update(env)
+                captured['profile_text'] = (Path(env['OCBAR_CONFIG_DIR']) / 'profiles/live-test.ocbar').read_text()
                 raise StopBeforeConnection()
             return subprocess.CompletedProcess(command, 0, '', '')
 
@@ -57,6 +58,11 @@ class RunnerSetup(unittest.TestCase):
         for key in source:
             if key.lower().endswith('_proxy'):
                 self.assertNotIn(key, actual, key + ' leaked into the VPN process')
+
+    def test_explicit_upstream_is_written_to_profile(self):
+        actual, _ = self.connect_environment(['--upstream-proxy', 'http://127.0.0.1:10808'])
+        self.assertIn('UpstreamProxy = http://127.0.0.1:10808\n', actual['profile_text'])
+        self.assertNotIn('https_proxy', actual)
 
     def test_explicit_proxy_comparison_preserves_environment(self):
         actual, source = self.connect_environment(['--inherit-proxy-env'])

@@ -294,3 +294,32 @@ was requested separately with the user's authorization; these test scripts do
 not register accounts or purchase subscriptions. For a repeatable internet-hosted lab, deploy the same ocserv config on
 a separately rented Linux VM with proper credentials and a trusted certificate;
 the disposable local lab configuration is not a production deployment template.
+
+## Explicit upstream proxy
+
+`python3 tools/upstream-proxy-test.py` runs six local synthetic checks with the
+real SSO binary: HTTP CONNECT and SOCKS5 success, refusal before gateway init,
+and refusal at the WebKit stage. The `.invalid` gateway name only resolves in
+the test relay. Gateway peer ports must all belong to the relay; ambient proxy
+variables are cleared and `NO_PROXY=*` deliberately tests explicit precedence.
+These are protocol tests, not a production SSO vendor certification.
+
+CLI/helper self-tests cover parsing, both authentication command lines, the
+helper spec, user-mode transport, forced `--no-dtls`, invalid URLs and the helper
+version guard. Without the feature the added CLI checks fail (16 failures),
+helper checks fail (8 failures), and the live SSO check rejects the unknown flag.
+
+Manual external comparison, with inherited proxy variables removed:
+
+```sh
+python3 tools/macos-vpn-test.py --live --mode proxy \
+  --upstream-proxy http://127.0.0.1:10808 \
+  --preserve-route 192.168.188.20 fr1.ocservvpn.com de1.ocservvpn.com
+```
+
+The October 11, 2026 runs passed profile password login, remote DNS and HTTPS on
+both gateways with HTTP CONNECT and SOCKS5, with the VPN gateway as the reported
+exit address. It restored
+the supervisor and original routes after disconnect. A native `--mode tunnel`
+run additionally requires installed helper 0.8.3; an old helper is rejected
+before authentication so it cannot silently ignore the upstream spec.

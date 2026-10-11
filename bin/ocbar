@@ -626,6 +626,27 @@ totp_params_label() {
 totp_env() { printf 'OCBAR_TOTP_ALGORITHM=%s OCBAR_TOTP_DIGITS=%s OCBAR_TOTP_PERIOD=%s' "$P_TOTP_ALG" "$P_TOTP_DIGITS" "$P_TOTP_PERIOD"; }
 
 # Профиль → переменные P_*
+valid_upstream_proxy() {
+    local re='^(http|socks5)://[A-Za-z0-9][A-Za-z0-9.-]{0,252}:[0-9]{1,5}$' port
+    case "$1" in *[[:cntrl:]]*) return 1 ;; esac
+    [[ $1 =~ $re ]] || return 1
+    port=${1##*:}
+    [ "$((10#$port))" -ge 1 ] && [ "$((10#$port))" -le 65535 ]
+}
+# Внешняя CSD-обёртка наследует тот же прокси (curl/wget и подобные клиенты).
+with_upstream_proxy() {
+    if [ -n "${P_UPSTREAM:-}" ]; then
+        env http_proxy="$P_UPSTREAM" https_proxy="$P_UPSTREAM" all_proxy="$P_UPSTREAM" \
+            HTTP_PROXY="$P_UPSTREAM" HTTPS_PROXY="$P_UPSTREAM" ALL_PROXY="$P_UPSTREAM" \
+            no_proxy= NO_PROXY= "$@"
+    else "$@"; fi
+}
+helper_supports_upstream() {
+    local h v
+    h=${OCBAR_SELFTEST_HELPER:-$(helper_path)} || return 1
+    v=$("$h" version 2>/dev/null | awk '{print $2}')
+    printf '%s\n' "$v" | awk -F. 'NF == 3 && /^[0-9]+[.][0-9]+[.][0-9]+$/ {exit !($1>0 || $2>8 || ($2==8 && $3>=3))} NF != 3 || !/^[0-9]+[.][0-9]+[.][0-9]+$/ {exit 1}'
+}
 load_profile() {
     local p="${1:-}"
     [ -n "$p" ] || p=$(profile_default)
@@ -635,6 +656,7 @@ load_profile() {
     P_FILE=$(profile_file "$p")
     if [ -n "$P_FILE" ]; then load_profile_file "$P_FILE" "$p"; return 0; fi
     P_KIND=tunnel; P_PROXY_PORT=11080; P_SYS_PROXY=off
+    P_UPSTREAM=""; P_MTU=""; P_DTLS=on
     P_URL=$(profile_get "$p" url);   [ -n "$P_URL" ] || die "у профиля [$p] нет url"
     P_TITLE=$(profile_get "$p" name); P_TITLE="${P_TITLE:-$p}"
     P_USER=$(profile_get "$p" user);  P_USER="${P_USER:-$(id -un)}"
@@ -822,6 +844,10 @@ load_profile_file() { # файл имя
     # Транспорт: MTU и DTLS. Нужны редко — вложенный VPN, мобильная сеть,
     # сети, где UDP не ходит; по умолчанию решает openconnect.
     P_MTU=$(pf_get "$f" Connection Mtu)
+    P_UPSTREAM=$(pf_get "$f" Connection UpstreamProxy)
+    if [ -n "$P_UPSTREAM" ]; then
+        valid_upstream_proxy "$P_UPSTREAM" || die "UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути"
+    fi
     P_DTLS=$(pf_get "$f" Connection Dtls); P_DTLS="${P_DTLS:-on}"
     case "$P_MTU" in
         '') ;;
@@ -1481,6 +1507,7 @@ cmd_secret() {
 authenticate() { # печатает "token hash post_url"
     local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
     local -a args=(--url "$P_URL" --useragent "$P_UA")
+    [ -z "${P_UPSTREAM:-}" ] || args+=(--upstream-proxy "$P_UPSTREAM")
     # Молчаливый режим для автоподключения: окно поверх работы человека без
     # спроса — плохо. Если вход требует участия, выходим с кодом 5, а решение
     # принимает человек.
@@ -1561,6 +1588,7 @@ authenticate_password() { # печатает "token hash post_url"
     fi
     local oc; oc=$(openconnect_bin) || die "нет openconnect — brew install openconnect"
     local -a cmd=("$oc" --authenticate --protocol=anyconnect --os=mac-intel -u "$P_USER")
+    [ -z "${P_UPSTREAM:-}" ] || cmd+=(--proxy "$P_UPSTREAM" --no-dtls)
     [ -z "$P_UA" ]  || cmd+=(--useragent "$P_UA")
     [ -z "$P_CSD" ] || cmd+=(--csd-wrapper "$P_CSD")
     case "$P_URL" in https://*) cmd+=("$P_URL") ;; *) cmd+=("https://$P_URL") ;; esac
@@ -1581,7 +1609,7 @@ authenticate_password() { # печатает "token hash post_url"
     local rc=0 res
     res=$(OCBAR_PASSWORD="$pw" OCBAR_USERNAME="$P_USER" OCBAR_PROMPT_TTY="$tty" OCBAR_PROMPT_CMD="$prompt" \
           OCBAR_PROMPT_TITLE="$P_TITLE" \
-          /usr/bin/python3 "$(libexec_file ocbar-pwauth.py)" "${cmd[@]}" 2> >(auth_log_tee)) || rc=$?
+          with_upstream_proxy /usr/bin/python3 "$(libexec_file ocbar-pwauth.py)" "${cmd[@]}" 2> >(auth_log_tee)) || rc=$?
     case $rc in
         0) printf '%s\n' "$res" ;;
         2) die "парольная группа: код не введён вовремя" ;;
@@ -1737,6 +1765,7 @@ connect_in_progress() {
 
 build_spec() { # cookie → stdin для tunnel-start
     printf 'cookie=%s\n' "$1"
+    [ -z "${P_UPSTREAM:-}" ] || printf 'upstream %s\n' "$P_UPSTREAM"
     [ -n "${P_MTU:-}" ] && printf 'mtu %s\n' "$P_MTU"
     case "$(printf '%s' "${P_DTLS:-on}" | tr '[:upper:]' '[:lower:]')" in
         off|no|0|false) printf 'nodtls\n' ;;
@@ -1756,6 +1785,9 @@ parse_auth_result() { # строка authenticate → token, hash, post_url вы
 }
 
 do_connect() { # профиль уже загружен
+    if [ -n "${P_UPSTREAM:-}" ] && [ "${P_KIND:-tunnel}" = tunnel ] && [ "$DRY_RUN" != 1 ]; then
+        helper_supports_upstream || die "UpstreamProxy: нужен ocbar-helper 0.8.3 или новее — sudo ocbar install"
+    fi
     # Тем же профилем — уже подключён, делать нечего. Другим — переключение:
     # отключить и подключить заново, с записью в журнал. Раньше здесь было
     # «уже подключён» и код 0, и меню молчало, когда человек выбирал другой
@@ -1999,6 +2031,7 @@ proxy_start() { # url servercert cookie
                   --script-tun --script "'$SELF' _proxy-tun"
                   --pid-file "$PROXY_PID" -b --os=mac-intel --timestamp
                   --reconnect-timeout="${OCBAR_RECONNECT_TIMEOUT:-90}")
+    [ -z "${P_UPSTREAM:-}" ] || cmd+=(--proxy "$P_UPSTREAM" --no-dtls)
     [ -z "$P_UA" ] || cmd+=(--useragent "$P_UA")
     [ -n "${P_CSD:-}" ] && [ -x "$P_CSD" ] && cmd+=(--csd-wrapper "$P_CSD")
     case "$url" in https://*) cmd+=("$url") ;; *) cmd+=("https://$url") ;; esac
@@ -2016,7 +2049,7 @@ proxy_start() { # url servercert cookie
     # задаче launchd супервизора и умирает вместе с ним. Cookie — через stdin.
     printf '%s' "$cookie" \
         | OCBAR_PROXY_ENV="$PROXY_ENV" OCBAR_PROXY_PORT="$P_PROXY_PORT" OCBAR_OCPROXY="$ocp" \
-          /usr/bin/perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' -- "${cmd[@]}" >> "$PROXY_LOG" 2>&1 || {
+          with_upstream_proxy /usr/bin/perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' -- "${cmd[@]}" >> "$PROXY_LOG" 2>&1 || {
         local rc=$?
         printf 'STATE=failed\nRC=%s\n' "$rc" >> "$PROXY_ENV"
         die "openconnect завершился с кодом $rc — хвост $PROXY_LOG:"$'\n'"$(tail -5 "$PROXY_LOG" 2>/dev/null)"
@@ -3582,11 +3615,13 @@ cmd_learn() {
     done
     load_profile "$p"
     local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
+    local -a upstream_args=()
+    [ -z "${P_UPSTREAM:-}" ] || upstream_args=(--upstream-proxy "$P_UPSTREAM")
     # --probe: что предзаполнение разметки узнало бы на первом окне портала —
     # без окна, без учётных данных, ничего не нажимая.
     if [ "$probe" = 1 ]; then
         info "Пробник разметки: профиль [$P_NAME], $P_URL (без окна, ничего не нажимается)"
-        "$auth" --learn-probe --url "$P_URL" --useragent "$P_UA"
+        "$auth" "${upstream_args[@]+"${upstream_args[@]}"}" --learn-probe --url "$P_URL" --useragent "$P_UA"
         return
     fi
     # Куда класть: явный --out; иначе профилю-файлу — в его секцию [Autofill]
@@ -3620,7 +3655,7 @@ cmd_learn() {
     local rc=0
     OCBAR_USERNAME="$P_USER" OCBAR_PASSWORD="$pw" OCBAR_TOTP_SECRET="$totp_secret" OCBAR_TOTP_COMMAND="$totp_cmd" \
         OCBAR_TOTP_ALGORITHM="$P_TOTP_ALG" OCBAR_TOTP_DIGITS="$P_TOTP_DIGITS" OCBAR_TOTP_PERIOD="$P_TOTP_PERIOD" \
-        "$auth" --learn --url "$P_URL" --useragent "$P_UA" --out "$target" >/dev/null || rc=$?
+        "$auth" "${upstream_args[@]+"${upstream_args[@]}"}" --learn --url "$P_URL" --useragent "$P_UA" --out "$target" >/dev/null || rc=$?
     pw=""; totp_secret=""
     case "$rc" in
         0)  if [ "$into_profile" = 1 ]; then
@@ -4018,6 +4053,7 @@ case "${1:-}" in
     _selftest-fn)
         shift; [ -n "${OCBAR_SELFTEST_HELPER:-}" ] || die "_selftest-fn — только для selftest (нет OCBAR_SELFTEST_HELPER)"
         case "${1:-}" in
+            helper_supports_upstream) helper_supports_upstream ;;
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
             app_sync_copy) app_sync_copy "${2:-}" ;;
             auth_rc_action) auth_rc_action "${2:-}" ;;

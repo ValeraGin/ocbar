@@ -400,3 +400,6 @@ openconnect: {} — ocbar cleanup погасит их, текущую не тр�
 CsdWrapper: нужен абсолютный путь к скрипту: {}	CsdWrapper: an absolute script path is required: {}
 CsdWrapper: нет исполняемого файла: {} (проверьте путь и chmod u+x)	CsdWrapper: no executable file: {} (check the path and chmod u+x)
 на «{}» включён чужой SOCKS {}:{} — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле	«{}» already has someone else's SOCKS {}:{} — not overwriting it. Turn it off yourself or remove SystemProxy from the profile
+
+UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути	UpstreamProxy: use http://host:port or socks5://host:port without credentials or a path
+UpstreamProxy: нужен ocbar-helper 0.8.3 или новее — sudo ocbar install	UpstreamProxy: ocbar-helper 0.8.3 or later required — sudo ocbar install

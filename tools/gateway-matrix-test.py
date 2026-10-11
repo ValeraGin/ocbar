@@ -32,7 +32,7 @@ FAILURES = {
 
 
 @contextmanager
-def gateway(case, context):
+def gateway(case, context, connections=None, hostname="localhost"):
     events, errors = [], []
     nonce = uuid.uuid4().hex
     cookie = ('enterpriseTicket' if case == 'custom-cookie' else 'ssoToken') + nonce
@@ -54,6 +54,8 @@ def gateway(case, context):
             self.wfile.write(body)
 
         def do_GET(self):
+            if connections is not None:
+                connections.append(self.client_address[1])
             events.append(('GET', self.path))
             if self.path == '/group' and case == 'get-redirect':
                 return self.send(302, headers=[('Location', '/node')])
@@ -67,6 +69,8 @@ def gateway(case, context):
             self.send(200, '<html>local gateway</html>')
 
         def do_POST(self):
+            if connections is not None:
+                connections.append(self.client_address[1])
             try:
                 self.post()
             except Exception as error:
@@ -78,7 +82,7 @@ def gateway(case, context):
             xml = ET.fromstring(data)
             kind = xml.get('type')
             events.append((kind, self.path))
-            base = f'https://localhost:{self.server.server_port}'
+            base = f'https://{hostname}:{self.server.server_port}'
             if kind == 'init':
                 assert xml.findtext('group-access') == base + '/group'
                 if case == 'http-503':

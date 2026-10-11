@@ -104,6 +104,7 @@ def main():
     parser.add_argument('hosts', nargs='+')
     parser.add_argument('--dtls', choices=('on', 'off'), default='on')
     parser.add_argument('--mtu', type=int, help='Profile base MTU (576–9000)')
+    parser.add_argument('--upstream-proxy', help='Explicit profile proxy, independent of proxy environment')
     parser.add_argument('--mode', choices=('tunnel', 'proxy'), default='tunnel')
     parser.add_argument('--inherit-proxy-env', action='store_true',
                         help='Proxy mode only: allow inherited upstream proxy variables (different network path)')
@@ -154,6 +155,7 @@ def main():
                                    '\nUser = ' + username + '\nAuth = password\n' +
                                    'Mode = ' + args.mode + '\n' +
                                    'Dtls = ' + args.dtls + '\n' +
+                                   ('UpstreamProxy = ' + args.upstream_proxy + '\n' if args.upstream_proxy else '') +
                                    ('Mtu = %d\n' % args.mtu if args.mtu else '') +
                                    '[Routes]\n1.1.1.1/32\n8.8.8.8/32\n' +
                                    '[DNS]\nexample.com = vpn\n' +
@@ -161,7 +163,8 @@ def main():
                                    '[Proxy]\nSystemProxy = off\nPort = %d\n' % port +
                                    '[Health]\nCheck = https://1.1.1.1/cdn-cgi/trace\n')
                 run([CLI, 'profile-check', str(profile)], env)
-                path = 'inherited upstream proxy environment' if args.inherit_proxy_env else 'proxy environment removed'
+                path = ('explicit profile upstream ' + args.upstream_proxy if args.upstream_proxy else
+                        'inherited upstream proxy environment' if args.inherit_proxy_env else 'proxy environment removed')
                 print(host + ': connecting through profile (%s; %s)' % (args.mode, path), flush=True)
                 started = True
                 run([CLI, 'connect', 'live-test'], env, timeout=90)

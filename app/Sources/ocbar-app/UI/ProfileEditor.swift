@@ -381,6 +381,8 @@ struct ProfileEditorView: View {
             .accessibilityLabel(L("Дополнительно"))
             .accessibilityValue(showMore ? L("раскрыто") : L("свёрнуто"))
             if showMore {
+                field(L("Прокси для подключения"), $doc.upstreamProxy, hint: "http://127.0.0.1:10808")
+                Footnote(L("HTTP CONNECT или SOCKS5 без пароля. Вход и VPN идут через этот прокси; DTLS выключается. Для SSO нужна macOS 14 или новее. Пусто — обычное подключение."))
                 // Откуда брать пароль и код — для тех, кто держит их в
                 // KeePassXC или отдаёт своей командой. По умолчанию — связка
                 // ключей, и основной раздел «Вход» управляет ею сам.

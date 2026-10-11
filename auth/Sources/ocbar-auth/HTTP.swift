@@ -22,6 +22,7 @@ final class HTTPClient: NSObject, URLSessionTaskDelegate, URLSessionDelegate {
         self.insecure = insecure
         super.init()
         let cfg = URLSessionConfiguration.ephemeral
+        UpstreamProxy.apply(to: cfg)
         cfg.httpCookieAcceptPolicy = .always
         cfg.httpShouldSetCookies = true
         cfg.timeoutIntervalForRequest = 30

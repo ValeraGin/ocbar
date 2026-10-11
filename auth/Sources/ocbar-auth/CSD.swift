@@ -71,6 +71,7 @@ enum CSD {
         env["CSD_HOSTNAME"] = p.host
         env["CSD_TOKEN"] = p.token
         if let h = p.pinSHA256 { env["CSD_SHA256"] = h } else { env.removeValue(forKey: "CSD_SHA256") }
+        UpstreamProxy.apply(to: &env)
         proc.environment = env
         // Файл 0600 не блокирует дочерний процесс, когда отчёт и диагностика
         // превышают размер pipe; после чтения он сразу удаляется.

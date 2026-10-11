@@ -4,6 +4,8 @@
 
 enum Translations {
     static let en: [String: String] = [
+        "UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути": "UpstreamProxy: use http://host:port or socks5://host:port without credentials or a path",
+        "SSO через UpstreamProxy требует macOS 14 или новее": "SSO through UpstreamProxy requires macOS 14 or later",
         "не удалось прочитать изображение: %@": "could not read the image: %@",
         "в изображении нет QR-кода (или он нечитаем — попробуйте кадр покрупнее)": "no QR code in the image (or it is unreadable — try a larger frame)",
         "QR прочитан, но это не QR второго фактора (нет ссылки otpauth://)": "the QR code was read, but it is not a two-factor QR code (no otpauth:// link)",

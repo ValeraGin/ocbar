@@ -202,6 +202,27 @@ report for ocbar to submit. ocbar waits for the gateway, then resumes SSO.
 Missing files, execution errors and non-zero exit codes stop sign-in.
 Whether the report satisfies the device policy is decided by the gateway.
 
+### Connecting through an upstream proxy
+
+Set `[Connection] UpstreamProxy = http://127.0.0.1:10808` or
+`socks5://127.0.0.1:10808` to send password login, SSO and VPN transport through
+one proxy. Both `Mode = tunnel` and `Mode = proxy` support it. `[Proxy]` still
+configures the local SOCKS endpoint exposed to applications after VPN login.
+
+HTTP CONNECT and SOCKS5 without authentication are supported, with an explicit
+port (1–65535) and DNS hostname or IPv4 address. Credentials, paths and IPv6
+literals are rejected. Native tunnels require helper 0.8.3+ (`sudo ocbar install`).
+Password login works on macOS 13+; SSO and form learning require macOS 14+.
+Explicit upstream always disables DTLS: transport uses TCP. Proxy failure does
+not fall back to a direct connection to the external gateway. WebKit/URLSession
+exclude loopback destinations from proxying; this setting is not intended for
+SSO gateways running on localhost.
+
+CSD wrappers receive `http_proxy`, `https_proxy`, `all_proxy` and uppercase
+variants, with `NO_PROXY` cleared. Custom scripts must honor these variables;
+ocbar does not intercept arbitrary sockets opened by a script. The proxy must
+already be running. An empty setting preserves existing connection behavior.
+
 ## Commands
 
 ```

@@ -20,6 +20,7 @@ struct Args {
     var selfTest = false
     var json = false
     var insecure = false
+    var upstreamProxy: String?
     var csdWrapper: String?   // скрипт HostScan/CSD (профиль CsdWrapper)
     var verbose = false
     var rulesFile: String?
@@ -69,6 +70,7 @@ func usage() -> String {
       --dump-script         напечатать JS автозаполнения по --rules или встроенному
                             набору (данные — плейсхолдеры); с --fill-hosts —
                             вместе с проверкой хоста
+      --upstream-proxy URL  HTTP CONNECT или SOCKS5 без пароля; SSO требует macOS 14+
       --selftest            самопроверка без WebKit и сети: TOTP (RFC 6238),
                             разбор XML, лимиты автозаполнения, журнал, QR, хосты
                             и cookie, пароль при записи входа
@@ -173,6 +175,7 @@ func parseArgs() -> Args {
     while let arg = it.next() {
         switch arg {
         case "--url": a.url = next(arg)
+        case "--upstream-proxy": a.upstreamProxy = next(arg)
         case "--csd-wrapper": a.csdWrapper = next(arg)
         case "--useragent": a.userAgent = next(arg)
         case "--version": a.version = next(arg)
@@ -588,6 +591,16 @@ if args.dumpScript {
     let allowed = args.fillHosts.isEmpty ? nil : FillScope(explicit: args.fillHosts, gatewayHosts: []).jsAllowed
     out(Autofill.script(rules: rules, creds: creds, totpCode: "TOTP", allowed: allowed))
     exit(0)
+}
+
+if let raw = args.upstreamProxy {
+    guard let proxy = UpstreamProxy(raw) else {
+        Log.error(L("UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути")); exit(4)
+    }
+    guard #available(macOS 14.0, *) else {
+        Log.error(L("SSO через UpstreamProxy требует macOS 14 или новее")); exit(4)
+    }
+    UpstreamProxy.current = proxy
 }
 
 let http = HTTPClient(userAgent: args.userAgent, insecure: args.insecure)

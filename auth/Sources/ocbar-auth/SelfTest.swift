@@ -19,6 +19,15 @@ enum AuthSelfTest {
     /// Все проверки; возвращает число провалов.
     static func run() -> Int {
         failures = 0
+        for raw in ["http://127.0.0.1:10808", "socks5://proxy.example:1080"] {
+            ok("upstream accepts " + raw, UpstreamProxy(raw)?.raw == raw)
+        }
+        for raw in ["http://user:pass@host:80", "http://host:0", "http://host:65536", "http://host:80/path", "https://host:80", "http://host:80\r"] {
+            ok("upstream rejects invalid URL", UpstreamProxy(raw) == nil)
+        }
+        if #available(macOS 14.0, *) {
+            ok("upstream has no direct fallback", UpstreamProxy("http://host:80")?.configuration.allowFailover == false)
+        }
         gate()
         journal()
         qr()

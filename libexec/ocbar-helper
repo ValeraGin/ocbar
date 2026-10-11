@@ -54,7 +54,7 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 umask 022
 
-VERSION="0.8.2"
+VERSION="0.8.3"
 PREFIX="/usr/local"
 LIBDIR="$PREFIX/libexec/ocbar"
 # Манифест доверия — рядом с копией openconnect, в root-овом каталоге.
@@ -280,6 +280,13 @@ valid_user()  { matches "$1" '^[A-Za-z0-9._@-]{1,64}$'; }
 valid_url()   { matches "$1" '^(https://)?[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(/[A-Za-z0-9._-]{0,64})?$'; }
 valid_hash()  { matches "$1" '^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64}|(sha1|sha256|pin-sha256):[A-Za-z0-9+/=]{20,100})$'; }
 valid_ua()    { matches "$1" '^[A-Za-z0-9 ._()/;:,-]{1,120}$'; }
+valid_upstream_proxy() {
+    local re='^(http|socks5)://[A-Za-z0-9][A-Za-z0-9.-]{0,252}:[0-9]{1,5}$' port
+    case "$1" in *[[:cntrl:]]*) return 1 ;; esac
+    [[ $1 =~ $re ]] || return 1
+    port=${1##*:}
+    [ "$((10#$port))" -ge 1 ] && [ "$((10#$port))" -le 65535 ]
+}
 valid_name()  { case "$1" in .|..) return 1 ;; esac; matches "$1" '^[A-Za-z0-9._-]{1,64}$'; }
 valid_mode()  { [ "$1" = split ]; }   # full убран
 valid_mtu()   { matches "$1" '^[0-9]{3,4}$' && [ "$1" -ge 576 ] && [ "$1" -le 9000 ]; }
@@ -644,7 +651,7 @@ cmd_tunnel_start() {
     # stdin: cookie и списки. Cookie не должна попасть ни в argv, ни в лог.
     # Сети и зоны проверяются ДО записи: в файл состояния попадает только то,
     # что прошло валидацию.
-    local cookie="" line rest nets="" zones="" zl z d p extra mtu="" nodtls=0
+    local cookie="" line rest nets="" zones="" zl z d p extra mtu="" nodtls=0 upstream=""
     while IFS= read -r line; do
         case "$line" in
             cookie=*) cookie="${line#cookie=}" ;;
@@ -659,6 +666,9 @@ cmd_tunnel_start() {
                       # Вложенный VPN и мобильная сеть: большие пакеты не
                       # проходят, а маленькие идут — лечится MTU в профиле.
                       if valid_mtu "$rest"; then mtu="$rest"; else say "пропускаю mtu: $(clean "$rest")"; fi ;;
+            "upstream "*) upstream="${line#upstream }"
+                      valid_upstream_proxy "$upstream" || die "неверный upstream: нужен http://host:port или socks5://host:port"
+                      nodtls=1 ;;
             nodtls)   nodtls=1 ;;
             ''|\#*) ;;
             *) say "неизвестная строка в spec: $(clean "${line%% *}")" ;;
@@ -692,6 +702,13 @@ cmd_tunnel_start() {
     local -a cmd=("$oc" --cookie-on-stdin --servercert "$hash" -u "$user"
                   --script "$script" --pid-file "$PIDFILE" -b --os=mac-intel --timestamp
                   --reconnect-timeout="$rto")
+    if [ -n "$upstream" ]; then
+        cmd+=(--proxy "$upstream")
+        # CSD запускается дочерним процессом; NO_PROXY не должен менять путь.
+        export http_proxy="$upstream" https_proxy="$upstream" all_proxy="$upstream"
+        export HTTP_PROXY="$upstream" HTTPS_PROXY="$upstream" ALL_PROXY="$upstream"
+        export no_proxy= NO_PROXY=
+    fi
     [ -z "$mtu" ] || cmd+=(--base-mtu "$mtu")
     # DTLS (UDP) быстрее, но через некоторые сети и вложенные VPN не ходит
     # вовсе: с ним туннель «есть», а данные не идут.

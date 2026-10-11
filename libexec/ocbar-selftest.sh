@@ -22,7 +22,7 @@ printf '%s\n' "$*" >> "$OCBAR_STATE_DIR/helper.log"
 [ "${1:-}" = --dry-run ] && shift
 m="$OCBAR_STATE_DIR/socks.state"
 case "${1:-}" in
-    version)     echo "ocbar-helper selftest" ;;
+    version)     echo "ocbar-helper ${OCBAR_STUB_HELPER_VERSION:-0.8.3}" ;;
     socks-set)   if [ -n "${OCBAR_STUB_SOCKS_REFUSE:-}" ]; then
                      echo "ocbar-helper: на «$2» включён чужой SOCKS 127.0.0.1:10808 — не перезаписываю. Выключите его сами или снимите SystemProxy в профиле" >&2; exit 1
                  fi
@@ -182,6 +182,7 @@ d=json.load(sys.stdin); print(d["profiles"][0]["title"])' 2>/dev/null || echo "�
 Url = vpn.example.test/group
 User = tester
 CsdWrapper = $tmp/External Scripts/csd.sh
+UpstreamProxy = http://127.0.0.1:10808
 [Auth]
 Password = command
 PasswordCommand = printf test-password
@@ -202,6 +203,7 @@ STUB
     has "CSD: исполняемый скрипт принят" "rc=0" "$out"
     is "CSD: путь с пробелом — один аргумент" "$tmp/External Scripts/csd.sh" \
         "$(sed -n '/^--csd-wrapper$/{n;p;}' "$tmp/csd-args")"
+    is "upstream: SSO получает явный прокси" "http://127.0.0.1:10808" "$(sed -n '/^--upstream-proxy$/{n;p;}' "$tmp/csd-args")"
     rm -f "$tmp/External Scripts/csd.sh"
     out=$(OCBAR_AUTH="$tmp/auth-stub" OCBAR_CSD_ARGS="$tmp/csd-args" run _selftest-fn sso_auth csd; echo "rc=$?")
     has "CSD: отсутствующий скрипт — ошибка" "rc=1" "$out"
@@ -215,6 +217,7 @@ Name = Пароль и SMS
 Url  = vpn.example.test/pw
 User = tester
 Auth = password
+UpstreamProxy = socks5://127.0.0.1:10808
 
 [Auth]
 Password        = command
@@ -238,6 +241,7 @@ STUB
           run _selftest-fn pw_auth pw </dev/null || true)
     has "парольная группа: сессия от openconnect --authenticate" "tok123 pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= https://node.example.test/pw" "$out"
     is "парольная группа: пароль и код дошли до шлюза" "secret-pw 424242" "$(cut -d' ' -f1-2 "$tmp/pwstub.log" 2>/dev/null)"
+    has "upstream: парольный вход получает прокси" "--proxy socks5://127.0.0.1:10808" "$(cat "$tmp/pwstub.log")"
     has "парольная группа: openconnect только аутентифицирует" "--authenticate" "$(cat "$tmp/pwstub.log" 2>/dev/null)"
     is "парольная группа: человеку показана подпись шлюза" "Response:" "$(cat "$tmp/pwlabel" 2>/dev/null)"
     hasnt "парольная группа: пароль и код не в выводе" "secret-pw" "$out"
@@ -815,6 +819,28 @@ STUB
     printf '[Connection]\nName = Плохой DTLS\nUrl = vpn.example.test/t\nUser = tester\nDtls = может-быть\n' > "$tmp/profiles/td.ocbar"
     is "транспорт: Dtls принимает только on/off" fail "$( (run _check-profile td >/dev/null 2>&1) && echo ok || echo fail)"
     rm -f "$tmp/profiles/tr.ocbar" "$tmp/profiles/tb.ocbar" "$tmp/profiles/td.ocbar"
+
+    for upstream in http://127.0.0.1:10808 socks5://proxy.example:1080; do
+        printf '[Connection]\nUrl = vpn.example.test\nUpstreamProxy = %s\n' "$upstream" > "$tmp/profiles/up.ocbar"
+        out=$(run connect --dry-run up || true)
+        has "upstream: адрес уходит в spec" "upstream $upstream" "$out"
+        printf '[Connection]\nUrl = vpn.example.test\nMode = proxy\nUpstreamProxy = %s\n' "$upstream" > "$tmp/profiles/up.ocbar"
+        out=$(run connect --dry-run up 2>&1 || true)
+        has "upstream: пользовательский туннель" "--proxy $upstream" "$out"
+        has "upstream: пользовательский туннель без UDP" "--no-dtls" "$out"
+    done
+    for upstream in http://user:pass@host:80 http://host:0 http://host:65536 http://host:80/path https://host:80; do
+        printf '[Connection]\nUrl = vpn.example.test\nUpstreamProxy = %s\n' "$upstream" > "$tmp/profiles/up.ocbar"
+        is "upstream: неверный адрес — отказ" fail "$( (run _check-profile up >/dev/null 2>&1) && echo ok || echo fail)"
+    done
+    rm -f "$tmp/profiles/up.ocbar"
+
+    for version in 0.8.2 0.7.9 unknown; do
+        is "upstream: старый helper отвергнут ($version)" fail "$(OCBAR_STUB_HELPER_VERSION="$version" run _selftest-fn helper_supports_upstream >/dev/null 2>&1 && echo ok || echo fail)"
+    done
+    for version in 0.8.3 0.9.0 1.0.0; do
+        is "upstream: новый helper принят ($version)" ok "$(OCBAR_STUB_HELPER_VERSION="$version" run _selftest-fn helper_supports_upstream >/dev/null 2>&1 && echo ok || echo fail)"
+    done
 
     # Автоподключение: политика читается и применяется супервизором.
     rm -f "$tmp/state/autoconnect"

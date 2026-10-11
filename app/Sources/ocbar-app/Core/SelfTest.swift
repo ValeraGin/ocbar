@@ -59,6 +59,7 @@ enum SelfTest {
 
         [Connection]
         Notifications = off
+        UpstreamProxy = http://127.0.0.1:10808
 
         [Auth]
         Rules = ~/.config/ocbar/autofill.rules
@@ -81,6 +82,7 @@ enum SelfTest {
 
         // Ключи, которых редактор не знает, должны пережить запись: молча
         // потерять чужую строку — худшее, что может сделать редактор.
+        check("upstream сохранён после редактирования", ProfileDoc.parse(doc.render(), fileName: "sample").upstreamProxy == "http://127.0.0.1:10808")
         let rendered = doc.render()
         check("незнакомый ключ сохранён", rendered.contains("БудущийКлюч"), rendered)
         check("незнакомая секция сохранена", rendered.contains("[СовсемНоваяСекция]"))

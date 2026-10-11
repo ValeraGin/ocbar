@@ -21,6 +21,7 @@ auth/.build/release/ocbar-auth --selftest      # TOTP, fill scope, autofill limi
 auth/.build/release/ocbar-auth --learn-selftest
 app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
 python3 tools/gateway-matrix-test.py           # local TLS gateways + real WebKit
+python3 tools/upstream-proxy-test.py            # HTTP CONNECT/SOCKS5 login + no direct fallback
 python3 tools/hostscan-sequence-test.py        # external CSD wrapper handshake
 python3 tools/macos-vpn-test-selftest.py       # live-runner setup, no network/privileges
 ```

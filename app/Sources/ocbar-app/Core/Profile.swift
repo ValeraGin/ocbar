@@ -26,6 +26,7 @@ struct ProfileDoc {
     var user = ""
     var userAgent = ""
     var csdWrapper = ""
+    var upstreamProxy = ""
     var auth = ""           // пусто = sso
     // Строки секции [Routes] как есть: сеть — первое слово (как `read -r n _`
     // в bin/ocbar), хвост и строки-комментарии сохраняются на своих местах.
@@ -101,7 +102,7 @@ struct ProfileDoc {
 
     // Ключи, которые редактор понимает, по секциям (в нижнем регистре).
     static let knownKeys: [String: Set<String>] = [
-        "connection": ["name", "description", "url", "user", "useragent", "csdwrapper", "auth", "mode", "notifications"],
+        "connection": ["name", "description", "url", "user", "useragent", "csdwrapper", "upstreamproxy", "auth", "mode", "notifications"],
         "auth": ["password", "passwordcommand", "totp", "totpcommand", "totpalgorithm", "totpdigits", "totpperiod",
                  "keepassentry", "keepassdb", "keepasskeychain", "keychainservice", "idphosts", "rules"],
         "proxy": ["port", "systemproxy"],
@@ -224,6 +225,7 @@ struct ProfileDoc {
         case ("connection", "user"): user = value
         case ("connection", "useragent"): userAgent = value
         case ("connection", "csdwrapper"): csdWrapper = value
+        case ("connection", "upstreamproxy"): upstreamProxy = value
         case ("connection", "auth"): auth = value
         case ("connection", "mode"): mode = value.isEmpty ? "tunnel" : value
         case ("connection", "notifications"): notifications = value
@@ -265,6 +267,7 @@ struct ProfileDoc {
         if !user.isEmpty { out += kv("User", 11, user) }
         out += kv("UserAgent", 11, userAgent.isEmpty ? Self.defaultUserAgent : userAgent)
         if !csdWrapper.isEmpty { out += kv("CsdWrapper", 11, csdWrapper) }
+        if !upstreamProxy.isEmpty { out += kv("UpstreamProxy", 13, upstreamProxy) }
         if !auth.isEmpty && auth != "sso" { out += kv("Auth", 11, auth) }
         if mode != "tunnel" { out += kv("Mode", 11, mode) }
         if !notifications.isEmpty { out += kv("Notifications", 11, notifications) }
@@ -507,6 +510,13 @@ enum ProfileCheck {
         }
         if d.mode != "tunnel" && d.mode != "proxy" {
             err(L("режим «%@» — бывает tunnel или proxy", d.mode))
+        }
+        if !d.upstreamProxy.isEmpty {
+            let pattern = "\\A(http|socks5)://[A-Za-z0-9][A-Za-z0-9.-]{0,252}:[0-9]{1,5}\\z"
+            let port = Int(d.upstreamProxy.split(separator: ":").last.map(String.init) ?? "") ?? 0
+            if d.upstreamProxy.range(of: pattern, options: .regularExpression) == nil || !(1...65535).contains(port) {
+                err(L("UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути"))
+            }
         }
         // MTU и DTLS: клиент такой профиль не загрузит, поэтому редактор
         // не должен давать его сохранить.

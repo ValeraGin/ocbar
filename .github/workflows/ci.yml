@@ -81,6 +81,8 @@ jobs:
 
       - name: AnyConnect gateway matrix (local HTTPS, real WebKit)
         run: python3 tools/gateway-matrix-test.py
+      - name: Explicit upstream proxy (URLSession and WebKit)
+        run: python3 tools/upstream-proxy-test.py
 
       - name: ocbar-auth learn self-test (WebKit, offscreen)
         run: auth/.build/release/ocbar-auth --learn-selftest

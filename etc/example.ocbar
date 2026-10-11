@@ -13,6 +13,7 @@ Description = Любые устройства, расширенный досту
 Url         = vpn.example.com/employees
 User        = alice
 UserAgent   = AnyConnect Windows 4.10.06079
+# UpstreamProxy = http://127.0.0.1:10808  # HTTP CONNECT/SOCKS5 без пароля; вход и VPN; DTLS off
 # CsdWrapper = ~/vpn/csd-post.sh      # внешний скрипт HostScan; нужен chmod u+x
 # Mode      = tunnel                  # tunnel (по умолчанию) | proxy — локальный SOCKS
 #                                     # через ocproxy (brew install ocproxy), без root

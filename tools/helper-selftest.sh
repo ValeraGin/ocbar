@@ -271,6 +271,22 @@ fresh
 Hin $'cookie=x\nmtu 99\n' tunnel-start vpn.example.com "$HASH" split user
 check 10 "tunnel-start: негодный MTU пропускается" all 'has "пропускаю mtu"' 'hasnt "--base-mtu"'
 
+# Явный upstream: ошибочный адрес нельзя проигнорировать и выйти напрямую.
+for upstream in http://127.0.0.1:10808 socks5://proxy.example:1080; do
+    fresh
+    Hin "cookie=x
+upstream $upstream
+" tunnel-start vpn.example.com "$HASH" split user
+    check 17 "upstream: $upstream передан, UDP выключен" all 'has "--proxy $upstream"' 'has "--no-dtls"'
+done
+for upstream in http://user:pass@host:80 http://host:0 http://host:65536 http://host:80/path https://host:80 $'http://host:80\r'; do
+    fresh
+    Hin "cookie=x
+upstream $upstream
+" tunnel-start vpn.example.com "$HASH" split user
+    check 17 "upstream: неверный адрес — отказ без запуска" all 'has "неверный upstream"' 'hasnt "--cookie-on-stdin"'
+done
+
 # Статус «подключено» — только после маршрутов и зон.
 fresh; printf '10.1.0.0/16\n' > "$ST/routes.wanted"; printf 'ok.test vpn 53\n' > "$ST/zones.wanted"
 Henv reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 INTERNAL_IP4_DNS=10.0.0.53 "$H" --dry-run vpnc

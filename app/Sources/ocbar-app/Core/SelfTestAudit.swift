@@ -166,6 +166,11 @@ extension SelfTest {
         let cases: [(String, String)] = [
             ("обычный профиль", base),
             ("MTU вне диапазона", base + "\nMtu = 99"),
+            ("HTTP upstream", base + "\nUpstreamProxy = http://127.0.0.1:10808"),
+            ("SOCKS upstream", base + "\nUpstreamProxy = socks5://proxy.example:1080"),
+            ("upstream с паролем", base + "\nUpstreamProxy = http://user:pass@host:80"),
+            ("upstream порт вне диапазона", base + "\nUpstreamProxy = http://host:65536"),
+            ("upstream с путём", base + "\nUpstreamProxy = http://host:80/path"),
             ("DTLS не on/off", base + "\nDtls = maybe"),
             ("режим не tunnel/proxy", base + "\nMode = magic"),
             ("порт прокси занят системой", base + "\n\n[Proxy]\nPort = 80"),

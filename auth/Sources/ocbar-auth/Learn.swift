@@ -119,6 +119,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     func start() {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .nonPersistent()
+        UpstreamProxy.apply(to: cfg.websiteDataStore)
         let controller = WKUserContentController()
         controller.add(self, contentWorld: Self.world, name: "ocbarLearn")
         controller.addUserScript(WKUserScript(source: Self.js, injectionTime: .atDocumentEnd,
@@ -904,6 +905,7 @@ final class LearnProbe: NSObject, WKNavigationDelegate {
     func start() {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .nonPersistent()
+        UpstreamProxy.apply(to: cfg.websiteDataStore)
         let c = WKUserContentController()
         c.addUserScript(WKUserScript(source: LearnSession.pageScript, injectionTime: .atDocumentEnd,
                                      forMainFrameOnly: true, in: LearnSession.world))

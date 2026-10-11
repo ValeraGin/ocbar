@@ -86,6 +86,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         let cfg = WKWebViewConfiguration()
         // persistent: IdP-сессия переживает перезапуск
         cfg.websiteDataStore = persistent ? .default() : .nonPersistent()
+        UpstreamProxy.apply(to: cfg.websiteDataStore)
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = false
         return cfg
     }
