@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="800" viewBox="0 0 1380 800" role="img" aria-labelledby="title desc">
+  <title id="title">Один Mac, разные маршруты</title>
+  <desc id="desc">Слева пример общего VPN для интернет-трафика. Справа YouTube доступен через сторонний личный VPN, рабочий портал через ocbar, домашний NAS напрямую по локальной сети. Маршруты выбираются по адресу назначения. Интерфейсы браузера и Finder — иллюстрация.</desc>
+  <defs>
+    <linearGradient id="desk" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#e5f3ef"/><stop offset=".55" stop-color="#e5eaf5"/><stop offset="1" stop-color="#f5efe2"/></linearGradient>
+    <linearGradient id="video" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#b9d5e8"/><stop offset="1" stop-color="#4b819a"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-25%" width="150%" height="160%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#23334a" flood-opacity=".12"/></filter>
+    <style>text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;fill:#17272b}.title{font-size:24px;font-weight:650;letter-spacing:-.6px}.label{font-size:13px;font-weight:600}.small{font-size:12px}.muted{fill:#667478}.route{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.purple{stroke:#7768c1}.green{stroke:#21846a}.blue{stroke:#3b83a5}</style>
+  </defs>
+  <rect width="1380" height="800" rx="26" fill="#f4f5f0"/>
+  <rect x="0" width="426" height="800" rx="26" fill="#e9e9e3"/>
+  <rect x="400" width="26" height="800" fill="#e9e9e3"/>
+  <text x="36" y="51" class="label muted" letter-spacing="2">01 / ОБЩИЙ МАРШРУТ</text>
+  <text x="36" y="93" class="title">Один туннель для</text><text x="36" y="123" class="title">интернет-трафика</text>
+  <text x="464" y="51" class="label" fill="#21846a" letter-spacing="2">02 / ВЫБРАННЫЕ МАРШРУТЫ</text>
+  <text x="464" y="93" class="title">У каждого назначения — свой путь.</text>
+  <text x="464" y="120" class="small muted">Пример: маршруты настроены на одном Mac</text>
+  <!-- Before: all Internet destinations use the same tunnel; LAN remains separate. -->
+  <rect x="35" y="175" width="352" height="365" rx="13" fill="#d7ddd9" stroke="#bfc9c3"/>
+  <rect x="35" y="175" width="352" height="24" rx="13" fill="#edf0ed"/>
+  <text x="49" y="191" font-size="10">● Finder</text><text x="330" y="191" font-size="10">12:34</text>
+  <g filter="url(#shadow)">
+    <rect x="55" y="226" width="239" height="138" rx="8" fill="white"/><rect x="55" y="226" width="239" height="26" rx="8" fill="#f4f5f4"/>
+    <circle cx="68" cy="239" r="3" fill="#ff7064"/><circle cx="79" cy="239" r="3" fill="#e7bd5a"/><circle cx="90" cy="239" r="3" fill="#67bd78"/>
+    <rect x="106" y="233" width="149" height="13" rx="4" fill="#e6e9e7"/><text x="118" y="243" font-size="8">youtube.com</text>
+    <rect x="67" y="261" width="130" height="72" rx="3" fill="url(#video)"/><path d="M117 282l18 11-18 11z" fill="white"/><text x="207" y="278" font-size="9" font-weight="650">Новый выпуск</text><rect x="207" y="289" width="69" height="4" rx="2" fill="#e2e7e5"/><rect x="207" y="300" width="52" height="4" rx="2" fill="#e2e7e5"/>
+    <text x="68" y="350" font-size="9" class="muted">Внешний сервис</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="121" y="324" width="243" height="136" rx="8" fill="white"/><rect x="121" y="324" width="243" height="25" rx="8" fill="#f4f5f4"/>
+    <circle cx="134" cy="337" r="3" fill="#ff7064"/><circle cx="145" cy="337" r="3" fill="#e7bd5a"/><circle cx="156" cy="337" r="3" fill="#67bd78"/>
+    <rect x="174" y="331" width="163" height="13" rx="4" fill="#e6e9e7"/><text x="184" y="341" font-size="8">portal.example.com</text>
+    <text x="136" y="372" font-size="12" font-weight="650">Рабочее пространство</text><rect x="136" y="389" width="212" height="20" rx="4" fill="#eaf3ed"/><text x="145" y="402" font-size="9">Задачи команды</text><rect x="136" y="419" width="151" height="4" rx="2" fill="#e2e7e5"/><rect x="136" y="430" width="184" height="4" rx="2" fill="#e2e7e5"/>
+  </g>
+  <g><rect x="55" y="469" width="201" height="47" rx="7" fill="#fbfcfb"/><path d="M68 481h15l5 5h23v19H68z" fill="#72b8d6"/><text x="122" y="489" font-size="10" font-weight="600">Домашний NAS</text><text x="122" y="505" font-size="9" class="muted">LAN / 192.168.50.20</text></g>
+  <path d="M102 351H20v237q0 10 10 10h145M346 435h49v153q0 10-10 10H235" class="route" stroke="#8d938d"/>
+  <rect x="96" y="571" width="228" height="59" rx="12" fill="#d2d6d0"/><text x="210" y="596" text-anchor="middle" class="label">Общий VPN</text><text x="210" y="615" text-anchor="middle" class="small muted">Интернет → один туннель</text>
+  <path d="M210 630v35" class="route" stroke="#8d938d"/><path d="M204 660l6 6 6-6" fill="none" stroke="#8d938d" stroke-width="2"/>
+  <text x="210" y="691" text-anchor="middle" class="small">Интернет и рабочая сеть</text>
+  <text x="36" y="745" class="small muted">Доступ к LAN зависит от настроек.</text><text x="36" y="765" class="small muted">NAS может оставаться доступным.</text>
+  <!-- macOS desktop and illustrative application windows -->
+  <rect x="465" y="164" width="877" height="493" rx="16" fill="url(#desk)" stroke="#ccd7d0"/>
+  <rect x="465" y="164" width="877" height="26" rx="16" fill="#fff" fill-opacity=".7"/>
+  <text x="482" y="182" font-size="11" font-weight="650">● Finder</text><text x="549" y="182" font-size="10">Файл　Правка　Вид　Переход</text>
+  <g transform="translate(1230 171)" stroke="#268168" stroke-width="2" fill="none"><path d="M0 8h9m0 0V1m0 7v7m0-7h10"/><circle cx="0" cy="8" r="2" fill="#268168"/><circle cx="9" cy="1" r="2" fill="#268168"/><circle cx="9" cy="15" r="2" fill="#268168"/><circle cx="19" cy="8" r="2" fill="#268168"/></g><text x="1276" y="182" font-size="10">12:34</text>
+  <g filter="url(#shadow)">
+    <rect x="491" y="220" width="379" height="231" rx="10" fill="white"/><rect x="491" y="220" width="379" height="35" rx="10" fill="#f7f8f7"/>
+    <circle cx="507" cy="237" r="4" fill="#ff7064"/><circle cx="520" cy="237" r="4" fill="#e7bd5a"/><circle cx="533" cy="237" r="4" fill="#67bd78"/>
+    <rect x="570" y="228" width="251" height="18" rx="5" fill="#e9eceb"/><text x="666" y="241" font-size="10">youtube.com</text>
+    <text x="509" y="279" font-size="13" font-weight="700">▶ YouTube</text><rect x="619" y="267" width="229" height="19" rx="10" fill="#f4f5f4"/><text x="631" y="280" font-size="10" class="muted">Поиск</text>
+    <rect x="509" y="298" width="244" height="114" rx="5" fill="url(#video)"/><path d="M509 387l57-40 40 25 46-42 101 75v7H509z" fill="#527c75"/><path d="M509 402l70-20 71 22 103-26v34H509z" fill="#344f55"/><circle cx="717" cy="317" r="11" fill="#f6df9d"/><path d="M621 338l19 12-19 12z" fill="white"/>
+    <rect x="765" y="298" width="85" height="48" rx="4" fill="#e3ece5"/><rect x="765" y="356" width="85" height="48" rx="4" fill="#e9e3d7"/>
+    <text x="509" y="433" font-size="11" font-weight="600">Тихое утро в горах</text><text x="739" y="433" font-size="10" class="muted">Демо-видео</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="883" y="233" width="431" height="263" rx="10" fill="white"/><rect x="883" y="233" width="431" height="35" rx="10" fill="#f7f8f7"/>
+    <circle cx="899" cy="250" r="4" fill="#ff7064"/><circle cx="912" cy="250" r="4" fill="#e7bd5a"/><circle cx="925" cy="250" r="4" fill="#67bd78"/>
+    <rect x="948" y="241" width="309" height="18" rx="5" fill="#e9eceb"/><text x="1038" y="254" font-size="10">portal.example.com</text>
+    <rect x="883" y="268" width="96" height="228" fill="#f2f5f0"/><text x="897" y="297" font-size="12" font-weight="700">Workspace</text><rect x="891" y="314" width="80" height="25" rx="5" fill="#dbe9dd"/><text x="901" y="331" font-size="10">Обзор</text><text x="901" y="357" font-size="10" class="muted">Мои задачи</text><text x="901" y="383" font-size="10" class="muted">Документы</text><text x="901" y="409" font-size="10" class="muted">Команда</text>
+    <text x="997" y="299" font-size="17" font-weight="650">Хорошего рабочего дня</text><text x="997" y="319" font-size="10" class="muted">Командное пространство / Обзор</text>
+    <rect x="997" y="338" width="294" height="55" rx="6" fill="#edf4ed"/><text x="1009" y="357" font-size="10" class="muted">В РАБОТЕ</text><text x="1009" y="379" font-size="14" font-weight="600">Обновление продукта</text>
+    <text x="997" y="419" font-size="11" font-weight="600">Сегодня</text><path d="M997 430h294m-294 28h294" stroke="#e4e9e4"/><circle cx="1002" cy="444" r="4" fill="#9ac3a8"/><text x="1015" y="448" font-size="10">Обсудить план с командой</text><circle cx="1002" cy="474" r="4" fill="#d6dfd6"/><text x="1015" y="478" font-size="10">Посмотреть новые документы</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="669" y="464" width="480" height="169" rx="10" fill="white"/><rect x="669" y="464" width="480" height="34" rx="10" fill="#f7f8f7"/>
+    <circle cx="685" cy="480" r="4" fill="#ff7064"/><circle cx="698" cy="480" r="4" fill="#e7bd5a"/><circle cx="711" cy="480" r="4" fill="#67bd78"/><text x="851" y="485" font-size="11" font-weight="600">Домашний NAS</text><text x="1061" y="485" font-size="12" class="muted">⌕</text>
+    <rect x="669" y="498" width="116" height="135" fill="#f0f4f7"/><text x="683" y="518" font-size="9" class="muted">ИЗБРАННОЕ</text><text x="683" y="540" font-size="10">◉ Недавние</text><text x="683" y="562" font-size="10">▣ Документы</text><rect x="677" y="576" width="100" height="22" rx="5" fill="#d8e7f0"/><text x="685" y="591" font-size="10">▤ Домашний NAS</text>
+    <text x="800" y="514" font-size="9" class="muted">Имя</text><text x="1024" y="514" font-size="9" class="muted">Изменено</text><path d="M794 521h342" stroke="#e5e9eb"/>
+    <g fill="#75b8d4"><path d="M800 531h10l4 4h15v15h-29z"/><path d="M800 560h10l4 4h15v15h-29z"/><path d="M800 589h10l4 4h15v15h-29z"/></g>
+    <text x="839" y="546" font-size="11">Фотографии</text><text x="839" y="575" font-size="11">Семейный архив</text><text x="839" y="604" font-size="11">Резервные копии</text><text x="1024" y="546" font-size="10" class="muted">Сегодня</text><text x="1024" y="575" font-size="10" class="muted">Вчера</text><text x="1024" y="604" font-size="10" class="muted">Вчера</text>
+  </g>
+  <!-- Address-based routes, not process bindings. -->
+  <path d="M492 423h-13v271q0 12 12 12h97" class="route purple"/><circle cx="492" cy="423" r="5" fill="#7768c1"/>
+  <path d="M1314 439h16v255q0 12-12 12h-266" class="route green"/><circle cx="1314" cy="439" r="5" fill="#21846a"/>
+  <path d="M1149 610h31v84q0 12 12 12h29" class="route blue"/><circle cx="1149" cy="610" r="5" fill="#3b83a5"/>
+  <rect x="510" y="685" width="235" height="64" rx="12" fill="#f0edf9" stroke="#dcd6ee"/><text x="627" y="710" text-anchor="middle" class="label">Личный VPN</text><text x="627" y="731" text-anchor="middle" class="small muted">Внешний адрес YouTube</text>
+  <rect x="780" y="685" width="270" height="64" rx="12" fill="#e4f1e9" stroke="#c9dfd0"/><text x="915" y="710" text-anchor="middle" class="label">ocbar → рабочая сеть</text><text x="915" y="731" text-anchor="middle" class="small muted">10.20.0.0/16</text>
+  <rect x="1090" y="685" width="224" height="64" rx="12" fill="#e4eff5" stroke="#c9dee9"/><text x="1202" y="710" text-anchor="middle" class="label">Напрямую по LAN</text><text x="1202" y="731" text-anchor="middle" class="small muted">192.168.50.20</text>
+  <text x="465" y="780" class="small muted">Иллюстрация с демо-данными. Цвет обозначает маршрут к адресу назначения.</text>
+</svg>
