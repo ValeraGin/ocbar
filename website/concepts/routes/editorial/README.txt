@@ -34,3 +34,8 @@ Controls: сравнение полного туннеля и выбранных
 Реальные скриншоты: ../assets/{menu,profile}[-light]-ru.png.
 Иконка: ../../workbench/icon.svg. Родитель выполняет браузерный QA.
 Сервер/браузер/агенты не запускались; commit/push/deploy не выполнялись.
+
+2026-10-13: личный маршрут подписан V2Ray / AWG / WireGuard. Добавлены
+карточки технологий и иллюстрация Cisco AnyConnect с конкретным full-tunnel
+профилем; возможность split tunneling указана со ссылкой на Cisco.
+Выбор цвета и сочетания 3+5 — ../direction/index.html.
