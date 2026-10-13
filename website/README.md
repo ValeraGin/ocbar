@@ -5,6 +5,15 @@ switcher, installation instructions, user-controlled routes/DNS/SOCKS/CSD, team 
 and a compatibility FAQ. No runtime packages,
 external fonts, trackers or network integrations.
 
+## Selected design — local preview
+
+The approved lime switch, editorial hero (concept 5) and interactive route atlas
+(concept 3) are assembled into a single Russian landing page in `next/`.
+It is self-contained: `index.html`, `style.css`, `script.js`, and `assets/`.
+Serve `website/` and open `http://127.0.0.1:8767/next/index.html`.
+Installation links lead to the current published guide. `next/` has not been deployed;
+`src/` and `dist/` continue to represent the existing bilingual production site.
+
 ## Edit and preview
 
 Landing copy lives in `src/en.json` and `src/ru.json`; the shared page is `src/page.html`.
