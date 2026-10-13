@@ -78,13 +78,13 @@ struct SetupView: View {
                 }
                 VStack(spacing: 6) {
                     ZStack {
-                        Circle().fill(done(i) ? Palette.ok : i == step ? Palette.accent : Color.clear)
+                        Circle().fill(done(i) ? Palette.ok : i == step ? Palette.brand : Color.clear)
                         Circle().strokeBorder(done(i) || i == step ? Color.clear : Palette.line2, lineWidth: 1.5)
                         if done(i) {
                             Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
                         } else {
                             Text("\(i + 1)").font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(i == step ? Color.white : Palette.secondary)
+                                .foregroundStyle(i == step ? Palette.onBrand : Palette.secondary)
                         }
                     }
                     .frame(width: 30, height: 30)
@@ -209,7 +209,7 @@ struct SetupView: View {
                 }
                 .frame(width: 320)
                 if store.busy != nil {
-                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(.link)
+                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(BrandLinkStyle())
                 }
             }
             Spacer()

@@ -22,7 +22,7 @@ struct OcbarApp: App {
         .menuBarExtraStyle(.window)
 
         Window(L("Настройка ocbar"), id: WindowID.settings) { SettingsWindow() }
-        Window(L("Первый запуск ocbar"), id: WindowID.setup) { SetupView() }
+        Window(L("Первый запуск ocbar"), id: WindowID.setup) { SetupView().tint(Palette.control).accentColor(Palette.control) }
             .defaultSize(width: 740, height: 560)
 
         Window(L("Журналы ocbar"), id: WindowID.logs) { LogsView() }
@@ -120,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.title = "ocbar — витрина состояний"  // i18n: не интерфейс
         if CommandLine.arguments.contains("--light") {
             window.appearance = NSAppearance(named: .aqua)
+        } else if CommandLine.arguments.contains("--dark") {
+            window.appearance = NSAppearance(named: .darkAqua)
         }
         if screenshot == "menu" {
             // Без зажатия окна по «идеальному» размеру SwiftUI: он меньше
@@ -202,12 +204,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
-// Значок в строке состояния: монограмма «oc», чтобы значок читался как ocbar,
-// а не как «какая-то зелёная фигура». Состояние — цветом букв (те же цвета,
-// что в меню): зелёный подключено, оранжевый связь восстанавливается или
-// запуск, жёлтый пауза, красный нужен вход или клиента нет, серый отключено.
-// Пауза дополнительно помечена двумя штрихами вместо точки над буквами —
-// цвет один не всем различим.
+// Компактный свитч в строке меню. Цвета сохраняют смысл состояний,
+// пауза дополнительно обозначена двумя штрихами.
 enum MenuBarIcon {
     static func image(for status: Status) -> NSImage {
         let color: NSColor
@@ -225,17 +223,21 @@ enum MenuBarIcon {
         let dim = status.presentation == .down || status.presentation == .foreign
         let size = NSSize(width: 26, height: 18)
         let image = NSImage(size: size, flipped: false) { rect in
-            let base = NSFont.systemFont(ofSize: 15.5, weight: .heavy)
-            let font = base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: 15.5) } ?? base
-            let text = NSAttributedString(string: "oc", attributes: [
-                .font: font, .foregroundColor: color.withAlphaComponent(dim ? 0.75 : 1), .kern: -0.8,
-            ])
-            let s = text.size()
-            text.draw(at: NSPoint(x: (rect.width - s.width) / 2, y: (rect.height - s.height) / 2 - 0.5))
+            color.withAlphaComponent(dim ? 0.75 : 1).set()
+            let routes = NSBezierPath()
+            routes.move(to: NSPoint(x: 4, y: 9)); routes.line(to: NSPoint(x: 11, y: 9))
+            routes.line(to: NSPoint(x: 18, y: 15)); routes.line(to: NSPoint(x: 22, y: 15))
+            routes.move(to: NSPoint(x: 11, y: 9)); routes.line(to: NSPoint(x: 18, y: 3))
+            routes.line(to: NSPoint(x: 22, y: 3))
+            routes.lineWidth = 1.8; routes.lineCapStyle = .round; routes.lineJoinStyle = .round
+            routes.stroke()
+            for (x, y) in [(2.0, 7.0), (20.0, 13.0), (20.0, 1.0)] {
+                NSBezierPath(roundedRect: NSRect(x: x, y: y, width: 4, height: 4), xRadius: 1, yRadius: 1).fill()
+            }
             if paused {
                 color.set()
-                for x in [rect.width / 2 - 3.5, rect.width / 2 + 0.5] {
-                    NSBezierPath(roundedRect: NSRect(x: x, y: rect.height - 3.5, width: 3, height: 3), xRadius: 0.8, yRadius: 0.8).fill()
+                for x in [3.0, 7.0] {
+                    NSBezierPath(roundedRect: NSRect(x: x, y: 13, width: 2, height: 4), xRadius: 0.8, yRadius: 0.8).fill()
                 }
             }
             return true

@@ -200,7 +200,7 @@ struct ProfileEditorView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(p.display).font(.system(size: 12))
                                 Button(L("перевести в файл")) { convert(p.name) }
-                                    .buttonStyle(.link).font(.system(size: 11))
+                                    .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
                             }
                         }
                     }
@@ -678,7 +678,7 @@ struct ProfileEditorView: View {
                 Spacer()
                 if learning {
                     ProgressView().controlSize(.small).scaleEffect(0.6)
-                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(.link).font(.system(size: 11))
+                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(BrandLinkStyle()).font(.system(size: 11))
                 }
                 Button(learning ? L("Идёт разметка…") : L("Разметить…")) { learn() }
                     .disabled(learnDisabled)
@@ -926,7 +926,7 @@ struct ProfileEditorView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Button(L("Перечитать")) { if let name = loadedName { open(name) } }
-                        .buttonStyle(.link).font(.system(size: 11))
+                        .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
                 }
             }
             if !issues.isEmpty {

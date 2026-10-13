@@ -34,9 +34,24 @@ private struct MenuRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let lit = hover || configuration.isPressed
         return configuration.label
-            .background(RoundedRectangle(cornerRadius: 5).fill(lit ? Color.accentColor.opacity(0.85) : .clear))
-            .foregroundStyle(lit ? AnyShapeStyle(.white) : AnyShapeStyle(Palette.text))
+            .background(RoundedRectangle(cornerRadius: 5).fill(lit ? Palette.brand : .clear))
+            .foregroundStyle(lit ? AnyShapeStyle(Palette.onBrand) : AnyShapeStyle(Palette.text))
             .opacity(configuration.isPressed ? 0.9 : 1)
+    }
+}
+
+// Нативный .link на macOS сохраняет системный синий вопреки tint.
+// Общий стиль для текстовых команд с контрастным акцентом обеих тем.
+struct BrandLinkStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hover = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(Palette.accent)
+            .opacity(!isEnabled ? 0.45 : configuration.isPressed ? 0.6 : hover ? 0.8 : 1)
+            .contentShape(Rectangle())
+            .onHover { hover = $0 }
     }
 }
 
@@ -236,7 +251,7 @@ private struct WideButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let (fill, text): (Color, Color) = switch kind {
-        case .primary: (Palette.accent, .white)
+        case .primary: (Palette.brand, Palette.onBrand)
         // «Отключить» — спокойная кнопка с красной подписью: в рабочем
         // состоянии главное на карточке — статус, а не выход из него.
         case .destructive: (hover ? Palette.bad.opacity(0.16) : Palette.group, Palette.bad)
@@ -288,7 +303,7 @@ struct Banner: View {
                     }
                     if let link { Button(link.0, action: link.1) }
                 }
-                .buttonStyle(.link).font(.system(size: 11.5))
+                .buttonStyle(BrandLinkStyle()).font(.system(size: 11.5))
             }
             Spacer(minLength: 0)
             if let dismiss {
@@ -356,21 +371,33 @@ struct TightLabel: LabelStyle {
     }
 }
 
-// Знак ocbar — два сцепленных кольца на синем скруглённом квадрате. Рисуется
-// кодом: у приложения, запущенного из сборки без бандла, своей иконки нет, и
-// система подставила бы папку.
+// Лаймовый свитч: один вход и два независимых маршрута.
+// Геометрия соответствует website/next/assets/icon.svg и make-icon.swift.
 struct AppMark: View {
     var size: CGFloat = 22
 
     var body: some View {
-        let ring = size * 0.36, line = max(1.5, size * 0.09)
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                .fill(LinearGradient(colors: [Color(red: 0.25, green: 0.60, blue: 1.0),
-                                              Color(red: 0.0, green: 0.38, blue: 0.87)],
-                                     startPoint: .top, endPoint: .bottom))
-            Circle().stroke(.white, lineWidth: line).frame(width: ring, height: ring).offset(x: -ring * 0.3)
-            Circle().stroke(.white, lineWidth: line).frame(width: ring, height: ring).offset(x: ring * 0.3)
+        Canvas { context, bounds in
+            context.scaleBy(x: bounds.width / 64, y: bounds.height / 64)
+            let field = Path(roundedRect: CGRect(x: 2, y: 2, width: 60, height: 60), cornerRadius: 14)
+            context.fill(field, with: .linearGradient(Gradient(colors: [
+                Color(nsColor: NSColor(hex: "#303835")), Color(nsColor: NSColor(hex: "#151C19"))
+            ]), startPoint: CGPoint(x: 10, y: 5), endPoint: CGPoint(x: 54, y: 62)))
+            context.stroke(Path(roundedRect: CGRect(x: 2.5, y: 2.5, width: 59, height: 59), cornerRadius: 13.5),
+                           with: .color(Color(nsColor: NSColor(hex: "#D6ECD5")).opacity(0.18)), lineWidth: 1)
+            var lower = Path()
+            lower.move(to: CGPoint(x: 29, y: 32)); lower.addLine(to: CGPoint(x: 42, y: 45)); lower.addLine(to: CGPoint(x: 48, y: 45))
+            context.stroke(lower, with: .color(Color(nsColor: NSColor(hex: "#66746B"))), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+            var upper = Path()
+            upper.move(to: CGPoint(x: 15, y: 32)); upper.addLine(to: CGPoint(x: 29, y: 32))
+            upper.addLine(to: CGPoint(x: 42, y: 19)); upper.addLine(to: CGPoint(x: 48, y: 19))
+            context.stroke(upper, with: .linearGradient(Gradient(colors: [Color(nsColor: NSColor(hex: "#A4DA50")), Palette.brand]),
+                           startPoint: CGPoint(x: 13, y: 32), endPoint: CGPoint(x: 49, y: 18)),
+                           style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+            for (x, y, color) in [(10.0, 27.0, Palette.brand), (44.0, 14.0, Palette.brand),
+                                   (44.0, 40.0, Color(nsColor: NSColor(hex: "#819084")))] {
+                context.fill(Path(roundedRect: CGRect(x: x, y: y, width: 10, height: 10), cornerRadius: 2), with: .color(color))
+            }
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)

@@ -24,7 +24,7 @@ struct SettingsWindow: View {
         }
         var color: Color {
             switch self {
-            case .profiles: return Palette.accent
+            case .profiles: return Palette.control
             case .notifications: return Palette.bad
             case .general: return .gray
             case .about: return Palette.violet
@@ -50,6 +50,8 @@ struct SettingsWindow: View {
             detail.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 960, minHeight: 600)
+        .tint(Palette.control)
+        .accentColor(Palette.control)
     }
 
     private var sidebar: some View {

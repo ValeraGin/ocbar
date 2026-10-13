@@ -61,6 +61,8 @@ struct MenuView: View {
             }
         }
         .padding(12)
+        .tint(Palette.control)
+        .accentColor(Palette.control)
         .frame(width: Self.width)
         // Высота содержимого — и окно под неё: система сама умеет только
         // увеличивать своё окно.
@@ -189,7 +191,7 @@ struct MenuView: View {
             actionButtons
             if s.profiles.count > 1 {
                 Button(L("Другой профиль…")) { open(WindowID.settings) }
-                    .buttonStyle(.link).font(.system(size: 11))
+                    .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
             }
             if let note = look.note {
                 Text(note)
@@ -256,7 +258,7 @@ struct MenuView: View {
                     Spacer()
                     Button(L("Не подключаться")) { store.disconnect() }
                 }
-                .buttonStyle(.link).font(.system(size: 11))
+                .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
             case .down, .foreign:
                 WideButton(title: s.presentation == .foreign
                                ? L("Подключить · %@", StateLook.profileName(s)) : L("Подключить"),
@@ -268,7 +270,7 @@ struct MenuView: View {
                         .disabled(!canConnect)
                     Spacer()
                 }
-                .buttonStyle(.link).font(.system(size: 11))
+                .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
             case .missing:
                 EmptyView()
             }
@@ -340,7 +342,7 @@ struct MenuView: View {
     private var setupRow: some View {
         VStack(spacing: 0) {
             MenuRow(enabled: s.available, action: { open(WindowID.setup) }) {
-                IconTile(symbol: "plus", color: Palette.accent)
+                IconTile(symbol: "plus", color: Palette.control)
                 Text(L("Настроить ocbar…"))
                 Spacer()
             }

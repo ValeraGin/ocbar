@@ -93,7 +93,7 @@ struct AboutView: View {
             Button(Self.short(path)) {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
-            .buttonStyle(.link).lineLimit(1).truncationMode(.head)
+            .buttonStyle(BrandLinkStyle()).lineLimit(1).truncationMode(.head)
             .help(L("Показать в Finder"))
         }
     }
