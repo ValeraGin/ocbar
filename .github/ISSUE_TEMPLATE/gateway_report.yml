@@ -1,0 +1,71 @@
+name: Works (or not) with my gateway
+description: Tell which gateway and sign-in you tried — it fills the compatibility table
+labels: [compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Short reports help most: one gateway, one sign-in, did it work.
+        Do not name your company, gateway host or identity provider host —
+        the product and version are enough. Русский тоже подходит.
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Works — connected and used work resources
+        - Partly — connected, but something is off (describe below)
+        - Does not work
+    validations: {required: true}
+  - type: input
+    id: version
+    attributes:
+      label: ocbar version
+      description: Output of `ocbar version`
+    validations: {required: true}
+  - type: input
+    id: macos
+    attributes:
+      label: macOS and architecture
+      placeholder: "26.6, arm64 / 14.7, x86_64"
+    validations: {required: true}
+  - type: dropdown
+    id: gateway
+    attributes:
+      label: Gateway
+      options:
+        - Cisco ASA
+        - Cisco Firepower (FTD)
+        - ocserv
+        - Other AnyConnect-compatible
+        - Not sure
+    validations: {required: true}
+  - type: dropdown
+    id: signin
+    attributes:
+      label: Sign-in
+      multiple: true
+      options:
+        - SAML / SSO in a browser window
+        - Password
+        - Password + TOTP
+        - Password + SMS code
+        - Client certificate
+        - HostScan / CSD device check
+    validations: {required: true}
+  - type: input
+    id: idp
+    attributes:
+      label: Identity provider, if SSO
+      placeholder: "Keycloak / Okta / Microsoft Entra ID / ADFS / Duo"
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options: [Tunnel (routes and DNS), Proxy (SOCKS via ocproxy)]
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: What did not work, or what you had to configure. For failures, attach the relevant part of `ocbar report` after reading it.
+      render: text

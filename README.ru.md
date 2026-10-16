@@ -29,6 +29,9 @@ AnyConnect с провайдером входа Keycloak. Установка с�
 говорят на языке системы — русском или английском. История версий —
 [CHANGELOG.md](CHANGELOG.md), как поставить — [INSTALL.md](INSTALL.md).
 
+Попробовали со своим шлюзом? [Расскажите, получилось ли](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml): короткий отчёт
+о шлюзе и способе входа пополняет таблицу совместимости.
+
 ## Как это устроено
 
 ```

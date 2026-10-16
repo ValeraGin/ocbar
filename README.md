@@ -299,6 +299,9 @@ They run in CI on every push.
 | macOS 13–25, Apple Silicon | expected to work (deployment target is macOS 13), not verified |
 | Intel Macs | expected to work; Homebrew prefix is `/usr/local`, which the helper checks for ownership. Not verified |
 
+Tried ocbar with your gateway? [Tell whether it worked](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml) — one short report
+per gateway and sign-in method fills the compatibility table.
+
 No telemetry: ocbar never sends anything anywhere. It talks to your gateway
 and identity provider, writes logs under `~/Library/Logs/ocbar`, and that is
 all. There is no update check, no crash reporting, no analytics.
