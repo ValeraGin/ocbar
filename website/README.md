@@ -25,6 +25,7 @@ explorations. Neither directory is included in a production upload.
 
 Cloudflare Pages project: `ocbar`. Public addresses:
 [English](https://ocbar.pages.dev/) · [Русский](https://ocbar.pages.dev/ru/).
+The rebranded EN/RU landing and guides were published on 2026-10-16.
 The project uses free `pages.dev` hosting, with Direct Upload rather than Git
 integration. Upload only `dist/` through Workers & Pages → ocbar → Create
 deployment → Production. Check both languages, installation links and diagrams.

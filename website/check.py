@@ -2,6 +2,8 @@
 """Check generated site links, assets, translations and metadata before publishing."""
 from html.parser import HTMLParser
 import json
+import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -45,6 +47,12 @@ for path in DIST.rglob('*.html'):
     assert page.meta.get('description'), f'{path}: missing description'
     assert page.meta.get('og:image'), f'{path}: missing share card'
     assert page.meta.get('twitter:card') == 'summary_large_image'
+
+for path in (DIST / 'assets').glob('*.svg'):
+    ET.parse(path)
+    if path.name.endswith('-en.svg'):
+        assert not re.search('[А-Яа-яЁё]', path.read_text()), f'{path}: untranslated illustration'
+assert not re.search('[А-Яа-яЁё]', (DIST / 'index.html').read_text()), 'Untranslated English landing'
 
 checked = 0
 for path, page in pages.items():

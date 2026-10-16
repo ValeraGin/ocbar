@@ -13,7 +13,8 @@ The Cisco comparison describes a full-tunnel configuration, not a limitation
 of every Cisco configuration. No third-party stock images or remote fonts.
 
 `social-card.png` and its JPEG delivery copy use the new switch, typography and
-three route lines. They are programmatically drawn marketing artwork, not a
+three route lines. Regenerate them from the repository root with
+`swift tools/make-social-card.swift`. They are programmatically drawn marketing artwork, not a
 screenshot. PNG is the master; JPEG is the web/Open Graph delivery asset.
 
 The menu and profile PNGs are actual native app renders from the rebranded

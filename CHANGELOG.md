@@ -13,7 +13,6 @@ release to its tag and commit.
   VPN transport. The profile editor exposes the setting.
 - Sign-in preserves compound session cookies and handles repeated password
   prompts without exposing entered credentials.
-
 - Sign-in now returns the completed HostScan token in `auth-reply`, linking
   the external script's report to the session. Previously a submitted report
   could still end with "Cisco Secure Desktop not installed on the client".
@@ -23,8 +22,6 @@ release to its tag and commit.
 - HostScan wrappers receive the gateway's non-default port in `-url`. Local
   HTTPS checks cover the report submission, paths with spaces, wrapper
   failures, and groups that do not request HostScan.
-
-
 - For sign-in groups that request a device check, ocbar-auth now runs the
   executable `CsdWrapper` configured in the profile before SSO. The wrapper
   supplies the report; ocbar waits for the gateway to finish processing it,
