@@ -1,3 +1,5 @@
+<img src="assets/mark.svg" width="72" height="72" alt="ocbar">
+
 # ocbar
 
 [Website](https://ocbar.pages.dev/)

@@ -1290,3 +1290,9 @@ html[lang=ru] .mono {
  .profile-transfer {padding:15px 12px}
  .sharing-workflow li {padding-left:36px}
 }
+
+/* Installation pages share the lime switch identity with the landing. */
+.guide-page{--ink:#2b3b30;--muted:#64715e;--blue:#49691e;--paper:#fafbf6;--line:#dce3d5}
+.guide-page .brand{display:flex;align-items:center;gap:10px}
+.guide-page .guide pre,.guide-page .guide .notice{background:#edf1e5}
+.guide-page .header{border-bottom:1px solid var(--line)}

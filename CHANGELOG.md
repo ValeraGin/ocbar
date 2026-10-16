@@ -3,7 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
-## Unreleased
+## 0.18.0 — 2026-10-16
+
+- A new graphite-and-lime switch icon ties the macOS app and website together.
+  Menu actions, links and charts use contrast-aware accents in both appearances.
+- The website now has a bilingual route atlas, split-DNS illustrations,
+  examples of personal VPN and LAN coexistence, and fresh app screenshots.
+- Profiles can use an explicit HTTP or SOCKS upstream proxy for sign-in and
+  VPN transport. The profile editor exposes the setting.
+- Sign-in preserves compound session cookies and handles repeated password
+  prompts without exposing entered credentials.
 
 - Sign-in now returns the completed HostScan token in `auth-reply`, linking
   the external script's report to the session. Previously a submitted report
@@ -15,7 +24,6 @@ release to its tag and commit.
   HTTPS checks cover the report submission, paths with spaces, wrapper
   failures, and groups that do not request HostScan.
 
-## 0.17.9 — 2026-09-24
 
 - For sign-in groups that request a device check, ocbar-auth now runs the
   executable `CsdWrapper` configured in the profile before SSO. The wrapper

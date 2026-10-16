@@ -1,27 +1,25 @@
 # Visual assets
 
-Generated with the built-in ImageGen tool on 2026-10-10. The app icon keeps the existing linked-ring identity from `app/make-icon.swift`; screenshots come from the repository and show synthetic demo profiles. No third-party stock imagery or remote fonts are used.
+## Current identity — 2026-10-16
 
-## Hero: `dist/assets/routing-art.png`
+The approved graphite-and-lime switch is drawn in code. `dist/assets/mark.svg`
+and `icon.svg` match the app's `app/make-icon.swift` and SwiftUI `AppMark`.
+Brand accent: #C3F36B. The image represents one input and two separate routes.
 
-Use case: ads-marketing. Asset type: website hero background and launch artwork for ocbar, a macOS menu bar VPN client built on OpenConnect. Primary request: an elegant editorial 3D illustration of two carefully separated network paths, communicating selective connection and calm control. Scene: deep midnight navy studio, an architectural tunnel made from a thick matte cobalt blue bent ribbon at the right side, one thin luminous ice-blue path passes through its arch, a second warm white path gently curves around it and continues independently. Composition: landscape 3:2, sculptural forms concentrated in the right half and bottom third, generous dark negative space upper left to layer a REAL product screenshot in the website. Style: refined physical paper sculpture / anodized aluminum, subtle material grain, soft directional lighting, realistic shadows, restrained premium macOS utility aesthetic. Color palette: midnight #071c39, vivid cobalt #1265ed, ice #d5e7ff, tiny warm cream highlights. No text, no letters, no logos, no padlocks, no shields, no globes, no people, no UI, no fake screenshots, no neon cyberpunk. Full-bleed opaque background.
+The route atlas, split-DNS, Cisco comparison and open-source illustrations are
+original SVG artwork from the selected design concepts, localized into EN/RU.
+They are labeled as illustrations; destination addresses and names are examples.
+The Cisco comparison describes a full-tunnel configuration, not a limitation
+of every Cisco configuration. No third-party stock images or remote fonts.
 
-## Share card: `dist/assets/social-card.png`
+`social-card.png` and its JPEG delivery copy use the new switch, typography and
+three route lines. They are programmatically drawn marketing artwork, not a
+screenshot. PNG is the master; JPEG is the web/Open Graph delivery asset.
 
-Reference: the hero illustration above.
+The menu and profile PNGs are actual native app renders from the rebranded
+build in `--stage` mode, with synthetic profiles. Website images use light
+appearance and each page's language. README images use the default appearance.
+Menu dimensions: 1560×1221. Profile dimensions: 2096×1416.
 
-Use case: compositing. Asset type: social share card for ocbar, landscape approximately 1.91:1. Input image: existing brand artwork to preserve. Keep the exact blue architectural arch and two separate luminous pathways, palette and material style of the artwork; reframe the arch into the right half. Add very crisp editorial typography in the generous dark upper-left space with the exact text 'ocbar' large, white, modern grotesk lowercase; below in smaller white type 'Your work VPN.' and on the next line 'Back in its place.'; small bottom-left descriptor 'OpenConnect for macOS'. High readability and generous margins. Do not add logos or shields, extra imagery, UI, claims or words. This is the final marketing share image, not a screenshot.
-
-
-## Delivery copies
-
-JPEG copies are exported at quality 85 for the website and GitHub social preview.
-The PNG masters are preserved alongside them. Format conversion does not change
-the composition. The site loads the JPEG copies.
-
-## Screenshot refresh — 2026-10-11
-
-The RU/EN menu and profile images were re-rendered with `tools/screenshots.sh`
-from the app build containing d5d535f: opaque adaptive menu background and
-higher-contrast secondary labels. All profiles are fixtures. The original
-1560×1221 menu and 2096×1416 profile dimensions are preserved.
+Earlier generated blue tunnel artwork is historical and is not used by the
+current production pages. Earlier concept directories preserve the design work.

@@ -1,3 +1,5 @@
+<img src="assets/mark.svg" width="72" height="72" alt="ocbar">
+
 # ocbar
 
 [Сайт](https://ocbar.pages.dev/ru/)
