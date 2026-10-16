@@ -17,7 +17,9 @@ Free under the MIT license. Install through Homebrew, which builds the app
 on your Mac. Requires macOS 13+ and access to your own compatible VPN gateway;
 ocbar does not provide VPN servers.
 
-![ocbar menu](assets/menu.png)
+![ocbar menu: connect, toggle a network, pause](assets/demo.gif)
+
+<sub>The real menu on a demo profile: connect, switch off a network, pause.</sub>
 
 **Status:** a single-author tool used daily on a real AnyConnect gateway
 with a Keycloak identity provider. The app, the sign-in windows and the CLI

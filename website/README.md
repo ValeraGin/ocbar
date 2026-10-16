@@ -28,7 +28,12 @@ Cloudflare Pages project: `ocbar`. Public addresses:
 The rebranded EN/RU landing and guides were published on 2026-10-16.
 The project uses free `pages.dev` hosting, with Direct Upload rather than Git
 integration. Upload only `dist/` through Workers & Pages → ocbar → Create
-deployment → Production. Check both languages, installation links and diagrams.
+deployment → Production: either the `dist` folder, or a ZIP with the contents of
+`dist/` at the archive root (`cd website/dist && zip -qr -X ../ocbar-site.zip .`).
+Check both languages, installation links and diagrams.
+
+`pages.dev` does not resolve from Russian mobile networks without a VPN
+(checked 2026-10-16), so Russian visitors need a mirror on another host.
 
 Always build with the stable project URL. The build generates canonical URLs,
 language alternates, social-card URLs, sitemap and robots.txt. A deployment
@@ -38,6 +43,8 @@ a portable local preview and removes sitemap/robots files.
 ## Screenshots and assets
 
 `tools/screenshots.sh` refreshes README screenshots in `assets/` and `assets/ru/`.
+`tools/demo-gif.sh` rebuilds the README animation `assets/demo.gif` and `assets/ru/demo.gif`
+from the real menu on the demo profile.
 For the website, render `--stage --light --screenshot menu` and
 `--stage --light --screenshot settings --tab 0` into
 `dist/assets/menu-LANG.png` and `profile-LANG.png`, with `-AppleLanguages '(LANG)'`.

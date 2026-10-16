@@ -298,22 +298,56 @@ struct ScreenshotSettingsView: View {
 }
 
 // Кадр для README: главный экран меню и второй — «Сети и DNS».
+// С --frame <кадр> — одно меню в одном состоянии: из таких кадров
+// tools/demo-gif.sh собирает анимацию для README и сайта.
 struct ScreenshotMenuView: View {
+    private let frame: String? = {
+        let args = CommandLine.arguments
+        return args.firstIndex(of: "--frame").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+    }()
+
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
-            menu()
-            menu(expandDetails: true)
+            if let frame {
+                single(frame)
+            } else {
+                menu()
+                menu(expandDetails: true)
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .underPageBackgroundColor))
     }
 
-    private func menu(expandDetails: Bool = false, expandProfiles: Bool = false) -> some View {
+    // Сценарий демо: отключено → подключение → подключено → сети и DNS →
+    // выключить сеть → пауза. Неизвестное имя — подключённое меню.
+    @ViewBuilder private func single(_ name: String) -> some View {
+        switch name {
+        case "down": menu(status: Fixture.status(.down), active: false)
+        case "connecting": menu(status: Fixture.status(.starting), active: false, busy: L("Подключаюсь…"))
+        case "networks": menu(expandDetails: true)
+        case "network-busy": menu(expandDetails: true, busy: L("Переключаю %@…", "172.16.0.0/12"))
+        case "network-off": menu(status: Self.withoutSecondRoute(), expandDetails: true)
+        case "pausing": menu(status: Self.withoutSecondRoute(), busy: L("Ставлю на паузу…"))
+        case "paused": menu(status: Fixture.status(.paused), active: false)
+        default: menu()
+        }
+    }
+
+    private static func withoutSecondRoute() -> Status {
+        var s = Fixture.status(.connected)
+        s.routes = s.routes.map { $0.net == "172.16.0.0/12" ? RouteEntry(net: $0.net, via: nil, enabled: false) : $0 }
+        return s
+    }
+
+    private func menu(status: Status = Fixture.status(.connected), active: Bool = true,
+                      expandDetails: Bool = false, expandProfiles: Bool = false,
+                      busy: String? = nil) -> some View {
         MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles)
-            .environmentObject(StatusStore(preview: Fixture.status(.connected),
-                                           samples: Fixture.samples(active: true),
-                                           latency: "41 " + L("мс"), busy: nil, actionNote: nil))
+            .environmentObject(StatusStore(preview: status,
+                                           samples: Fixture.samples(active: active),
+                                           latency: "41 " + L("мс"), busy: busy, actionNote: nil))
             .fixedSize(horizontal: false, vertical: true)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
