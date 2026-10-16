@@ -204,6 +204,8 @@ ALL_PROXY=socks5h://127.0.0.1:11080 git fetch
 CsdWrapper = ~/vpn/csd-post.sh
 ```
 
+Заготовка ставится вместе с ocbar:
+`cp "$(brew --prefix ocbar)"/share/ocbar/examples/csd-wrapper.sh ~/vpn/csd-post.sh`.
 Разрешите исполнение: `chmod u+x "$HOME/vpn/csd-post.sh"`. Пробелы в пути
 поддерживаются; кавычки вокруг значения в профиле не нужны. Скрипт запускается
 от пользователя до SSO с аргументами OpenConnect и переменными окружения

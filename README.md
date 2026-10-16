@@ -195,6 +195,8 @@ For gateways that request a device report, set your script in the profile:
 CsdWrapper = ~/vpn/csd-post.sh
 ```
 
+A starting point (comments in Russian) is installed with ocbar:
+`cp "$(brew --prefix ocbar)"/share/ocbar/examples/csd-wrapper.sh ~/vpn/csd-post.sh`.
 Make the file executable with `chmod u+x "$HOME/vpn/csd-post.sh"`. Paths
 with spaces work; do not put quotes around the value in the profile.
 The script runs as your user before SSO, using OpenConnect's wrapper

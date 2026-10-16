@@ -36,7 +36,7 @@ class Ocbar < Formula
     (pkgshare/"swiftbar").install "swiftbar/ocbar.5s.sh"
     # example.ocbar — образец основного формата (профиль одним файлом); маска
     # *.example его не берёт, поэтому он назван отдельно.
-    (pkgshare/"examples").install Dir["etc/*.example"], "etc/example.ocbar"
+    (pkgshare/"examples").install Dir["etc/*.example"], "etc/example.ocbar", "etc/csd-wrapper.sh"
     doc.install "README.md", "README.ru.md", "INSTALL.md", "TROUBLESHOOTING.md", "SECURITY.md", "CHANGELOG.md"
   end
 

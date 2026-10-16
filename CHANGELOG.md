@@ -28,6 +28,8 @@ release to its tag and commit.
   then refreshes the sign-in request. Groups without this request are unchanged.
 - The client checks the wrapper sequence against a local HTTPS gateway during
   release validation.
+- A sample `CsdWrapper` script is installed with the other examples in
+  `share/ocbar/examples/csd-wrapper.sh`.
 
 ## 0.17.8 — 2026-09-24
 
