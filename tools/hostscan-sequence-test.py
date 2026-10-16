@@ -161,9 +161,12 @@ printf 'endpoint.os.version="fixture";\\n' | curl -fksS --pinnedpubkey "sha256//
             assert reason in result.stderr, result.stderr
             assert 'session_token' not in result.stdout, result.stdout
         else:
-            expected = ['resolve', 'init', 'token', 'scan', 'wait', 'wait', 'resolve', 'init', 'sso', 'final', 'reply']
+            # Клиенту хватает cookie из редиректа /sso: успеет ли WebKit
+            # запросить /final до остановки — дело тайминга, не протокола.
+            events = [event for event in events if event != 'final']
+            expected = ['resolve', 'init', 'token', 'scan', 'wait', 'wait', 'resolve', 'init', 'sso', 'reply']
             if mode == 'no-hostscan':
-                expected = ['resolve', 'init', 'sso', 'final', 'reply']
+                expected = ['resolve', 'init', 'sso', 'reply']
             assert events == expected, f'events: {events}; stderr: {result.stderr}'
             assert result.returncode == 0, result.stderr
             assert '"session_token":"SESSION"' in result.stdout, result.stdout
