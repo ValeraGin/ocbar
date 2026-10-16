@@ -25,7 +25,8 @@ ocbar does not provide VPN servers.
 with a Keycloak identity provider. The app, the sign-in windows and the CLI
 follow the system language (English or Russian); the longer guides,
 [INSTALL.md](INSTALL.md) and [TROUBLESHOOTING.md](TROUBLESHOOTING.md), are in
-Russian. Version history is in [CHANGELOG.md](CHANGELOG.md).
+Russian; the first-connection problems are also in
+[TROUBLESHOOTING.en.md](TROUBLESHOOTING.en.md). Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 > Not affiliated with Cisco. "AnyConnect" is used only to describe protocol
 > compatibility.
