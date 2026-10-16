@@ -1,6 +1,6 @@
 class Ocbar < Formula
   desc "AnyConnect-compatible VPN client: SSO, split DNS, split tunnel, menu bar"
-  homepage "https://github.com/ValeraGin/ocbar"
+  homepage "https://valeragin.github.io/ocbar/"
   # Стабильная версия — тег и коммит: версия берётся из имени тега, а хеш
   # архива не нужно считать заранее.
   url "https://github.com/ValeraGin/ocbar.git",

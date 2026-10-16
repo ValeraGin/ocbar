@@ -12,8 +12,8 @@
 
 ---
 
-Краткая инструкция: [Русский](https://ocbar.pages.dev/ru/guide/) ·
-[English](https://ocbar.pages.dev/guide/).
+Краткая инструкция: [Русский](https://valeragin.github.io/ocbar/ru/guide/) ·
+[English](https://valeragin.github.io/ocbar/guide/).
 
 ## 1. Что нужно заранее
 

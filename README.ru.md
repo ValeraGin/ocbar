@@ -2,7 +2,7 @@
 
 # ocbar
 
-[Сайт](https://ocbar.pages.dev/ru/)
+[Сайт](https://valeragin.github.io/ocbar/ru/)
 
 [English](README.md) · **Русский**
 

@@ -1,13 +1,13 @@
 # ocbar website
 
-English and Russian landing pages and installation guides for Cloudflare Pages.
+English and Russian landing pages and installation guides, published on GitHub Pages.
 The production design uses the lime switch, editorial hero and interactive route
 atlas selected in `next/`. The site has no runtime dependencies or tracking.
 
 ## Build and check
 
 ```sh
-python3 website/build.py --url https://ocbar.pages.dev/
+python3 website/build.py --url https://valeragin.github.io/ocbar/
 python3 website/check.py
 python3 -m http.server 8767 --bind 127.0.0.1 --directory website
 ```
@@ -23,17 +23,19 @@ explorations. Neither directory is included in a production upload.
 
 ## Publish
 
-Cloudflare Pages project: `ocbar`. Public addresses:
-[English](https://ocbar.pages.dev/) · [Русский](https://ocbar.pages.dev/ru/).
-The rebranded EN/RU landing and guides were published on 2026-10-16.
-The project uses free `pages.dev` hosting, with Direct Upload rather than Git
-integration. Upload only `dist/` through Workers & Pages → ocbar → Create
-deployment → Production: either the `dist` folder, or a ZIP with the contents of
-`dist/` at the archive root (`cd website/dist && zip -qr -X ../ocbar-site.zip .`).
-Check both languages, installation links and diagrams.
+Main site — GitHub Pages: [English](https://valeragin.github.io/ocbar/) ·
+[Русский](https://valeragin.github.io/ocbar/ru/). The **Website** workflow builds
+and publishes it on every push to `main` that changes `website/`, and can be run
+by hand. `configure-pages` supplies the address, so canonical URLs follow it.
 
-`pages.dev` does not resolve from Russian mobile networks without a VPN
-(checked 2026-10-16), so Russian visitors need a mirror on another host.
+Mirror — Cloudflare Pages project `ocbar` at `ocbar.pages.dev`, Direct Upload.
+It stays a mirror because `pages.dev` does not resolve from Russian mobile
+networks without a VPN, while `github.io` does (both checked 2026-10-16).
+Build it with the main address so its canonical URLs point to GitHub Pages, then
+upload through Workers & Pages → ocbar → Create deployment → Production: either
+the `dist` folder, or a ZIP with the contents of `dist/` at the archive root
+(`cd website/dist && zip -qr -X ../ocbar-site.zip .`).
+Check both languages, installation links and diagrams.
 
 Always build with the stable project URL. The build generates canonical URLs,
 language alternates, social-card URLs, sitemap and robots.txt. A deployment

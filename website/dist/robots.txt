@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://ocbar.pages.dev/sitemap.xml
+Sitemap: https://valeragin.github.io/ocbar/sitemap.xml
