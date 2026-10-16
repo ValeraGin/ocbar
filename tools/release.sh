@@ -2,12 +2,62 @@
 # Выпуск: tools/release.sh 0.4.1 "что нового одной строкой"
 # VERSION в bin/ocbar → коммит и тег → revision в формуле → push ocbar →
 # формула в tap → push tap → brew upgrade, brew test, перезапуск приложения.
+# Тег уже есть, а push не прошёл — доделать: tools/release.sh --publish 0.4.1
 set -euo pipefail
-ver="${1:?версия, например 0.4.1}"; note="${2:?что нового одной строкой}"
+publish_only=
+if [ "${1:-}" = --publish ]; then
+    publish_only=1; ver="${2:?версия, например 0.4.1}"
+else
+    ver="${1:?версия, например 0.4.1}"; note="${2:?что нового одной строкой}"
+fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
 tap="${OCBAR_TAP_DIR:-$(brew --repository)/Library/Taps/valeragin/homebrew-ocbar}"
 cd "$root"
 [ -z "$(git status --porcelain -- . ':!.claude')" ] || { echo "release: в дереве незакоммиченные правки" >&2; exit 1; }
+# Хук worktime (knowledge-base/tools/worktime) не пускает push в будни
+# 10–19 МСК. Проверяем до сборки: 0.18.0 собрался, получил тег и встал на push.
+if [ -z "${WORKTIME_PUSH_OK:-}" ] && [ -e .git/hooks/pre-push ] \
+    && TZ=Europe/Moscow date '+%u %H' | awk '{exit !($1 <= 5 && $2 >= 10 && $2 < 19)}'; then
+    echo "release: рабочее время (будни 10–19 МСК), хук worktime не пустит push — выпуск после 19:00" >&2
+    exit 1
+fi
+
+publish() {
+    git push -q origin main "v$ver"
+
+    cp Formula/ocbar.rb "$tap/Formula/ocbar.rb"
+    git -C "$tap" add Formula/ocbar.rb
+    git -C "$tap" commit -q -m "ocbar $ver"
+    git -C "$tap" push -q origin main
+
+    # Заметки к релизу — из CHANGELOG, раздел этой версии.
+    notes=$(awk -v v="## $ver " 'index($0, v) == 1 {f = 1; next} f && /^## / {exit} f' CHANGELOG.md)
+    if command -v gh >/dev/null; then
+        printf '%s\n' "$notes" | gh release create "v$ver" --title "ocbar $ver" --notes-file - >/dev/null \
+            && echo "release: GitHub Release v$ver создан" \
+            || echo "release: GitHub Release не создан (проверьте gh auth)" >&2
+    fi
+
+    brew update >/dev/null
+    # Исходники brew тянет git'ом внутри своей песочницы, а там помощнику учётки
+    # (gh, связка ключей) хода нет: репозиторий приватный, и fetch падает с
+    # «could not read Username» (2026-09-21, 0.17.1). Кеш подтягиваем снаружи —
+    # тогда brew нужный тег уже находит у себя.
+    cache="$(brew --cache)/ocbar--git"
+    [ -d "$cache" ] && git -C "$cache" fetch -q origin --tags '+refs/heads/*:refs/remotes/origin/*'
+    brew upgrade ocbar
+    brew test ocbar
+    ocbar app stop >/dev/null 2>&1 || true
+    ocbar app start
+    echo "release: ocbar $ver выпущен"
+}
+
+if [ -n "$publish_only" ]; then
+    git rev-parse -q --verify "refs/tags/v$ver" >/dev/null || { echo "release: тега v$ver нет — сначала обычный выпуск" >&2; exit 1; }
+    grep -q "tag: *\"v$ver\"" Formula/ocbar.rb || { echo "release: формула не на v$ver" >&2; exit 1; }
+    publish
+    exit 0
+fi
 git rev-parse -q --verify "refs/tags/v$ver" >/dev/null && { echo "release: тег v$ver уже есть" >&2; exit 1; }
 
 # Проверки — до отправки: выпуск не должен зависеть от того, заметит ли
@@ -55,30 +105,4 @@ open(path, "w").write(s2)
 PY
 ruby -c Formula/ocbar.rb >/dev/null
 git add Formula/ocbar.rb && git commit -q -m "chore: формула — revision тега v$ver"
-git push -q origin main "v$ver"
-
-cp Formula/ocbar.rb "$tap/Formula/ocbar.rb"
-git -C "$tap" add Formula/ocbar.rb
-git -C "$tap" commit -q -m "ocbar $ver"
-git -C "$tap" push -q origin main
-
-# Заметки к релизу — из CHANGELOG, раздел этой версии.
-notes=$(awk -v v="## $ver " 'index($0, v) == 1 {f = 1; next} f && /^## / {exit} f' CHANGELOG.md)
-if command -v gh >/dev/null; then
-    printf '%s\n' "$notes" | gh release create "v$ver" --title "ocbar $ver" --notes-file - >/dev/null \
-        && echo "release: GitHub Release v$ver создан" \
-        || echo "release: GitHub Release не создан (проверьте gh auth)" >&2
-fi
-
-brew update >/dev/null
-# Исходники brew тянет git'ом внутри своей песочницы, а там помощнику учётки
-# (gh, связка ключей) хода нет: репозиторий приватный, и fetch падает с
-# «could not read Username» (2026-09-21, 0.17.1). Кеш подтягиваем снаружи —
-# тогда brew нужный тег уже находит у себя.
-cache="$(brew --cache)/ocbar--git"
-[ -d "$cache" ] && git -C "$cache" fetch -q origin --tags '+refs/heads/*:refs/remotes/origin/*'
-brew upgrade ocbar
-brew test ocbar
-ocbar app stop >/dev/null 2>&1 || true
-ocbar app start
-echo "release: ocbar $ver выпущен"
+publish
