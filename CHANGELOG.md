@@ -5,6 +5,8 @@ release to its tag and commit.
 
 ## 0.18.0 — 2026-10-16
 
+Needs `sudo ocbar install` once: the privileged helper is now 0.8.3.
+
 - A new graphite-and-lime switch icon ties the macOS app and website together.
   Menu actions, links and charts use contrast-aware accents in both appearances.
 - The website now has a bilingual route atlas, split-DNS illustrations,
