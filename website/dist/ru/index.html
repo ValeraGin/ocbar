@@ -8,7 +8,7 @@
 
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="740" viewBox="0 0 1200 740" fill="none" role="img" aria-labelledby="title desc">
 <title id="title">Атлас маршрутов одного Mac</title>
-<desc id="desc">Иллюстрация с демо-данными. YouTube открыт через сторонний личный VPN. Рабочий портал portal.example.com и сеть 10.20.0.0/16 доступны через ocbar. Папки NAS 192.168.50.20 доступны напрямую по LAN. Маршрут выбирается по адресу назначения, а не по приложению.</desc>
+<desc id="desc">Иллюстрация с демо-данными. Видеосервис открыт через сторонний личный VPN. Рабочий портал portal.example.com и сеть 10.20.0.0/16 доступны через ocbar. Папки NAS 192.168.50.20 доступны напрямую по LAN. Маршрут выбирается по адресу назначения, а не по приложению.</desc>
 <defs>
   <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" stroke="#D9DFD5" stroke-width=".65"/></pattern>
   <filter id="shadow" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#213528" flood-opacity=".10"/></filter>
@@ -34,9 +34,9 @@
     <circle cx="79" cy="113" r="4" fill="#EE827A"/><circle cx="93" cy="113" r="4" fill="#E8C76B"/><circle cx="107" cy="113" r="4" fill="#87BF85"/>
     <path d="M126 110L122 114L126 118M141 110L145 114L141 118" stroke="#A2ACA1" stroke-width="1.3"/>
     <rect x="164" y="102" width="238" height="22" rx="5" fill="#EDEFEA"/>
-    <text x="280" y="117" font-size="10" text-anchor="middle">youtube.com</text>
-    <rect x="78" y="149" width="23" height="16" rx="5" fill="#D95847"/><path d="M87 153L94 157L87 161Z" fill="white"/>
-    <text x="109" y="162" font-size="13" font-weight="600">YouTube</text>
+    <text x="280" y="117" font-size="10" text-anchor="middle">video.example</text>
+    <rect x="78" y="149" width="23" height="16" rx="5" fill="#7787B4"/><path d="M87 153L94 157L87 161Z" fill="white"/>
+    <text x="109" y="162" font-size="13" font-weight="600">Видео</text>
     <rect x="79" y="180" width="209" height="83" rx="5" fill="#DEE5DD"/>
     <path d="M79 244L128 209L157 229L211 190L288 233V258Q288 263 283 263H84Q79 263 79 258Z" fill="#BCCBBB"/>
     <circle cx="256" cy="200" r="9" fill="#F5F1DB"/>
@@ -50,13 +50,13 @@
   <path d="M883 172L892 177L883 182" stroke="#7787B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   <rect x="607" y="92" width="234" height="51" rx="8" fill="#EEF0F7" stroke="#C6CEE2"/>
   <circle cx="625" cy="114" r="5" fill="#7787B4"/>
-  <text x="639" y="111" font-size="12" font-weight="600">Личный VPN</text><text x="620" y="132" font-size="11" fill="#7787B4">V2Ray · AWG · WireGuard</text>
+  <text x="639" y="111" font-size="12" font-weight="600">Личный VPN</text><text x="620" y="132" font-size="11" fill="#7787B4">TUN · прокси · WireGuard</text>
   <text x="612" y="164" class="small muted">Внешний адрес назначения</text>
   <g transform="translate(917 140)">
     <path d="M0 20L39 0L78 20L39 40Z" fill="#E1E5F0" stroke="#B8C2D8"/><path d="M0 20V63L39 83V40Z" fill="#CFD6E6" stroke="#B8C2D8"/><path d="M39 40L78 20V63L39 83Z" fill="#EEF0F7" stroke="#B8C2D8"/>
     <path d="M47 46L64 38V55L47 63Z" fill="#9CAACE"/><path d="M53 43L61 45L53 53Z" fill="white"/>
   </g>
-  <text x="1021" y="170" class="heading">YouTube</text><text x="1021" y="191" class="body muted">Личный маршрут</text>
+  <text x="1021" y="170" class="heading">Видеосервис</text><text x="1021" y="191" class="body muted">Личный маршрут</text>
   <text x="62" y="300" class="small muted">01 / ВНЕШНИЙ СЕРВИС</text>
 </g>
 
@@ -117,9 +117,9 @@
 
 
       </div>
-      <div class="mobile-key" aria-label="Маршруты примера"><div class="legend"><i style="background:var(--personal)"></i>YouTube <span class="trail">→ V2Ray / AWG / WireGuard</span></div><div class="legend"><i></i>Рабочий портал <span class="trail">→ ocbar / 10.20.0.0/16</span></div><div class="legend"><i style="background:var(--lan)"></i>Домашний NAS <span class="trail">→ LAN / 192.168.50.20</span></div></div>
+      <div class="mobile-key" aria-label="Маршруты примера"><div class="legend"><i style="background:var(--personal)"></i>Видео <span class="trail">→ личный VPN</span></div><div class="legend"><i></i>Рабочий портал <span class="trail">→ ocbar / 10.20.0.0/16</span></div><div class="legend"><i style="background:var(--lan)"></i>Домашний NAS <span class="trail">→ LAN / 192.168.50.20</span></div></div>
       <div class="caption"><p id="route-caption" aria-live="polite">Один Mac. Три назначения. Три пути.</p><p>Иллюстрация с демо-данными</p></div>
-      <aside class="personal-examples" aria-label="Примеры личного подключения"><div class="examples-title">Личное подключение — на ваш выбор</div><div class="client-tiles"><div><b class="client-monogram">V2</b><span><strong>V2Ray</strong><small>Клиент с TUN или прокси</small></span></div><div><b class="client-monogram">AWG</b><span><strong>AmneziaWG</strong><small>Личный VPN</small></span></div><div><b class="client-monogram">WG</b><span><strong>WireGuard</strong><small>И другие клиенты</small></span></div></div><p>Примеры сторонних клиентов и технологий. Настраиваются отдельно; совместная работа зависит от маршрутов и DNS. Для V2Ray путь трафика зависит от режима выбранного клиента.</p></aside>
+      <aside class="personal-examples" aria-label="Примеры личного подключения"><div class="examples-title">Личное подключение — на ваш выбор</div><div class="client-tiles"><div><b class="client-monogram">TUN</b><span><strong>TUN-клиент</strong><small>Забирает маршруты на себя</small></span></div><div><b class="client-monogram">PRX</b><span><strong>Прокси-клиент</strong><small>Только настроенные приложения</small></span></div><div><b class="client-monogram">WG</b><span><strong>WireGuard</strong><small>И другие клиенты</small></span></div></div><p>Примеры сторонних клиентов и технологий. Настраиваются отдельно; совместная работа зависит от маршрутов и DNS. Клиент в режиме TUN забирает маршруты на себя, в режиме прокси — только настроенные приложения.</p></aside>
       <p class="conditions">Пример предполагает отсутствие конфликтов маршрутов и DNS. ocbar управляет одной собственной сессией; личный VPN настраивается отдельно. Путь выбирается по сети или адресу назначения, а не по приложению.</p>
     </section>
 
@@ -127,7 +127,7 @@
       <div class="section-head"><div><div class="eyebrow">01 / Маршруты</div><h2 id="routes-title">Рабочий VPN.<br>В нужных границах.</h2></div><p>В ocbar задайте сети, которым нужен рабочий туннель. Личный интернет и домашние устройства продолжат использовать свои маршруты.</p></div>
       <figure class="brand-comparison"><div class="comparison-scroll" tabindex="0" aria-label="Сравнение Cisco AnyConnect и ocbar, на телефоне можно прокрутить"><img src="../assets/cisco-ocbar-ru.svg" width="1100" height="470" alt="Иллюстрация: Cisco AnyConnect с профилем полного туннеля и ocbar с выбранной рабочей сетью"></div><figcaption>Иллюстрация конфигураций, не скриншот. Cisco AnyConnect также поддерживает <a href="https://www.cisco.com/c/en/us/support/docs/security/anyconnect-secure-mobility-client/119006-configure-anyconnect-00.html">split tunneling</a>. Здесь показан профиль с полным туннелем; доступ к LAN зависит от настроек.</figcaption></figure><div class="comparison">
         <div><div class="modes" role="tablist" aria-label="Сравнить маршрутизацию"><button id="selected-tab" type="button" role="tab" data-mode="selected" aria-selected="true" aria-controls="compare-panel"><span>ВЫБРАННЫЕ СЕТИ</span>Только рабочие адреса<br>через ocbar</button><button id="all-tab" type="button" role="tab" data-mode="all" aria-selected="false" aria-controls="compare-panel" tabindex="-1"><span>ПРИМЕР FULL TUNNEL</span>Cisco AnyConnect<br>Весь интернет через VPN</button></div><p class="compare-note" id="mode-copy">Выбран рабочий диапазон 10.20.0.0/16. Личный VPN и LAN — отдельные маршруты.</p></div>
-        <div class="compare-map" id="compare-panel" role="tabpanel" aria-labelledby="selected-tab" data-mode="selected"><div class="traffic-row"><span class="origin">YouTube</span><span class="rail"><span class="node" id="internet-node">Личный VPN</span></span><span class="destination">Внешний сервис</span></div><div class="traffic-row"><span class="origin">Портал</span><span class="rail work"><span class="node" id="work-node">ocbar</span></span><span class="destination">10.20.0.0/16</span></div><div class="traffic-row"><span class="origin">Finder</span><span class="rail lan"><span class="node">Напрямую / LAN</span></span><span class="destination">Домашний NAS</span></div></div>
+        <div class="compare-map" id="compare-panel" role="tabpanel" aria-labelledby="selected-tab" data-mode="selected"><div class="traffic-row"><span class="origin">Видео</span><span class="rail"><span class="node" id="internet-node">Личный VPN</span></span><span class="destination">Внешний сервис</span></div><div class="traffic-row"><span class="origin">Портал</span><span class="rail work"><span class="node" id="work-node">ocbar</span></span><span class="destination">10.20.0.0/16</span></div><div class="traffic-row"><span class="origin">Finder</span><span class="rail lan"><span class="node">Напрямую / LAN</span></span><span class="destination">Домашний NAS</span></div></div>
       </div>
       <p class="notice">Схематическое сравнение настроек. Полный туннель здесь означает профиль, направляющий интернет-трафик через VPN; доступ к LAN зависит от маршрутов профиля.</p>
     </section>

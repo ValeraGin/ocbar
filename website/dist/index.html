@@ -8,7 +8,7 @@
 
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="740" viewBox="0 0 1200 740" fill="none" role="img" aria-labelledby="title desc">
 <title id="title">Route atlas for one Mac</title>
-<desc id="desc">Illustration with demo data. YouTube uses a separate personal VPN. The work portal portal.example.com and network 10.20.0.0/16 use ocbar. NAS folders at 192.168.50.20 are reached directly over LAN. Routes are selected by destination address, not by application.</desc>
+<desc id="desc">Illustration with demo data. A video service uses a separate personal VPN. The work portal portal.example.com and network 10.20.0.0/16 use ocbar. NAS folders at 192.168.50.20 are reached directly over LAN. Routes are selected by destination address, not by application.</desc>
 <defs>
   <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" stroke="#D9DFD5" stroke-width=".65"/></pattern>
   <filter id="shadow" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#213528" flood-opacity=".10"/></filter>
@@ -34,9 +34,9 @@
     <circle cx="79" cy="113" r="4" fill="#EE827A"/><circle cx="93" cy="113" r="4" fill="#E8C76B"/><circle cx="107" cy="113" r="4" fill="#87BF85"/>
     <path d="M126 110L122 114L126 118M141 110L145 114L141 118" stroke="#A2ACA1" stroke-width="1.3"/>
     <rect x="164" y="102" width="238" height="22" rx="5" fill="#EDEFEA"/>
-    <text x="280" y="117" font-size="10" text-anchor="middle">youtube.com</text>
-    <rect x="78" y="149" width="23" height="16" rx="5" fill="#D95847"/><path d="M87 153L94 157L87 161Z" fill="white"/>
-    <text x="109" y="162" font-size="13" font-weight="600">YouTube</text>
+    <text x="280" y="117" font-size="10" text-anchor="middle">video.example</text>
+    <rect x="78" y="149" width="23" height="16" rx="5" fill="#7787B4"/><path d="M87 153L94 157L87 161Z" fill="white"/>
+    <text x="109" y="162" font-size="13" font-weight="600">Video</text>
     <rect x="79" y="180" width="209" height="83" rx="5" fill="#DEE5DD"/>
     <path d="M79 244L128 209L157 229L211 190L288 233V258Q288 263 283 263H84Q79 263 79 258Z" fill="#BCCBBB"/>
     <circle cx="256" cy="200" r="9" fill="#F5F1DB"/>
@@ -50,13 +50,13 @@
   <path d="M883 172L892 177L883 182" stroke="#7787B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   <rect x="607" y="92" width="234" height="51" rx="8" fill="#EEF0F7" stroke="#C6CEE2"/>
   <circle cx="625" cy="114" r="5" fill="#7787B4"/>
-  <text x="639" y="111" font-size="12" font-weight="600">Personal VPN</text><text x="620" y="132" font-size="11" fill="#7787B4">V2Ray · AWG · WireGuard</text>
+  <text x="639" y="111" font-size="12" font-weight="600">Personal VPN</text><text x="620" y="132" font-size="11" fill="#7787B4">TUN · proxy · WireGuard</text>
   <text x="612" y="164" class="small muted">External destination</text>
   <g transform="translate(917 140)">
     <path d="M0 20L39 0L78 20L39 40Z" fill="#E1E5F0" stroke="#B8C2D8"/><path d="M0 20V63L39 83V40Z" fill="#CFD6E6" stroke="#B8C2D8"/><path d="M39 40L78 20V63L39 83Z" fill="#EEF0F7" stroke="#B8C2D8"/>
     <path d="M47 46L64 38V55L47 63Z" fill="#9CAACE"/><path d="M53 43L61 45L53 53Z" fill="white"/>
   </g>
-  <text x="1021" y="170" class="heading">YouTube</text><text x="1021" y="191" class="body muted">Personal route</text>
+  <text x="1021" y="170" class="heading">Video service</text><text x="1021" y="191" class="body muted">Personal route</text>
   <text x="62" y="300" class="small muted">01 / EXTERNAL SERVICE</text>
 </g>
 
@@ -117,9 +117,9 @@
 
 
       </div>
-      <div class="mobile-key" aria-label="Example routes"><div class="legend"><i style="background:var(--personal)"></i>YouTube <span class="trail">→ V2Ray / AWG / WireGuard</span></div><div class="legend"><i></i>Work portal <span class="trail">→ ocbar / 10.20.0.0/16</span></div><div class="legend"><i style="background:var(--lan)"></i>Home NAS <span class="trail">→ LAN / 192.168.50.20</span></div></div>
+      <div class="mobile-key" aria-label="Example routes"><div class="legend"><i style="background:var(--personal)"></i>Video <span class="trail">→ personal VPN</span></div><div class="legend"><i></i>Work portal <span class="trail">→ ocbar / 10.20.0.0/16</span></div><div class="legend"><i style="background:var(--lan)"></i>Home NAS <span class="trail">→ LAN / 192.168.50.20</span></div></div>
       <div class="caption"><p id="route-caption" aria-live="polite">One Mac. Three destinations. Three routes.</p><p>Illustration with demo data</p></div>
-      <aside class="personal-examples" aria-label="Personal connection examples"><div class="examples-title">Your personal connection, your choice</div><div class="client-tiles"><div><b class="client-monogram">V2</b><span><strong>V2Ray</strong><small>Client with TUN or proxy</small></span></div><div><b class="client-monogram">AWG</b><span><strong>AmneziaWG</strong><small>Personal VPN</small></span></div><div><b class="client-monogram">WG</b><span><strong>WireGuard</strong><small>And other clients</small></span></div></div><p>Examples of third-party clients and technologies. Configure them separately; coexistence depends on routes and DNS. For V2Ray, the traffic path depends on the chosen client mode.</p></aside>
+      <aside class="personal-examples" aria-label="Personal connection examples"><div class="examples-title">Your personal connection, your choice</div><div class="client-tiles"><div><b class="client-monogram">TUN</b><span><strong>TUN client</strong><small>Takes over routes</small></span></div><div><b class="client-monogram">PRX</b><span><strong>Proxy client</strong><small>Only configured apps</small></span></div><div><b class="client-monogram">WG</b><span><strong>WireGuard</strong><small>And other clients</small></span></div></div><p>Examples of third-party clients and technologies. Configure them separately; coexistence depends on routes and DNS. A client in TUN mode takes over routes; in proxy mode, only configured apps use it.</p></aside>
       <p class="conditions">This example assumes no route or DNS conflicts. ocbar manages one session of its own; configure the personal VPN separately. Routes are selected by network or destination address, not by application.</p>
     </section>
 
@@ -127,7 +127,7 @@
       <div class="section-head"><div><div class="eyebrow">01 / Routes</div><h2 id="routes-title">Work VPN.<br>Within your boundaries.</h2></div><p>Choose the networks that need the work tunnel in ocbar. Your personal internet and home devices keep their own routes.</p></div>
       <figure class="brand-comparison"><div class="comparison-scroll" tabindex="0" aria-label="Cisco AnyConnect and ocbar comparison; scroll horizontally on mobile"><img src="assets/cisco-ocbar-en.svg" width="1100" height="470" alt="Illustration: Cisco AnyConnect with a full-tunnel profile and ocbar with a selected work network"></div><figcaption>Configuration illustration, not a screenshot. Cisco AnyConnect also supports <a href="https://www.cisco.com/c/en/us/support/docs/security/anyconnect-secure-mobility-client/119006-configure-anyconnect-00.html">split tunneling</a>. This example uses a full-tunnel profile; LAN access depends on its settings.</figcaption></figure><div class="comparison">
         <div><div class="modes" role="tablist" aria-label="Compare routing"><button id="selected-tab" type="button" role="tab" data-mode="selected" aria-selected="true" aria-controls="compare-panel"><span>SELECTED NETWORKS</span>Only work addresses<br>through ocbar</button><button id="all-tab" type="button" role="tab" data-mode="all" aria-selected="false" aria-controls="compare-panel" tabindex="-1"><span>FULL-TUNNEL EXAMPLE</span>Cisco AnyConnect<br>All internet traffic via VPN</button></div><p class="compare-note" id="mode-copy">Work range 10.20.0.0/16 is selected. Personal VPN and LAN keep separate routes.</p></div>
-        <div class="compare-map" id="compare-panel" role="tabpanel" aria-labelledby="selected-tab" data-mode="selected"><div class="traffic-row"><span class="origin">YouTube</span><span class="rail"><span class="node" id="internet-node">Personal VPN</span></span><span class="destination">External service</span></div><div class="traffic-row"><span class="origin">Portal</span><span class="rail work"><span class="node" id="work-node">ocbar</span></span><span class="destination">10.20.0.0/16</span></div><div class="traffic-row"><span class="origin">Finder</span><span class="rail lan"><span class="node">Direct / LAN</span></span><span class="destination">Home NAS</span></div></div>
+        <div class="compare-map" id="compare-panel" role="tabpanel" aria-labelledby="selected-tab" data-mode="selected"><div class="traffic-row"><span class="origin">Video</span><span class="rail"><span class="node" id="internet-node">Personal VPN</span></span><span class="destination">External service</span></div><div class="traffic-row"><span class="origin">Portal</span><span class="rail work"><span class="node" id="work-node">ocbar</span></span><span class="destination">10.20.0.0/16</span></div><div class="traffic-row"><span class="origin">Finder</span><span class="rail lan"><span class="node">Direct / LAN</span></span><span class="destination">Home NAS</span></div></div>
       </div>
       <p class="notice">A schematic comparison of configurations. Full tunnel here means a profile that sends internet traffic through the VPN; LAN access depends on the profile routes.</p>
     </section>

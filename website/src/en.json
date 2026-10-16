@@ -175,7 +175,7 @@
   "site_047": "INTERNET, WORK,",
   "site_048": "Configuration illustration, not a screenshot. Cisco AnyConnect also supports",
   "site_049": "Illustration with demo data",
-  "site_050": "Illustration with demo data. YouTube uses a separate personal VPN. The work portal portal.example.com and network 10.20.0.0/16 use ocbar. NAS folders at 192.168.50.20 are reached directly over LAN. Routes are selected by destination address, not by application.",
+  "site_050": "Illustration with demo data. A video service uses a separate personal VPN. The work portal portal.example.com and network 10.20.0.0/16 use ocbar. NAS folders at 192.168.50.20 are reached directly over LAN. Routes are selected by destination address, not by application.",
   "site_051": "Illustration: Cisco AnyConnect with a full-tunnel profile and ocbar with a selected work network",
   "site_052": "Internet",
   "site_053": "Source available to explore",
@@ -238,7 +238,7 @@
   "site_110": "This example assumes no route or DNS conflicts. ocbar manages one session of its own; configure the personal VPN separately. Routes are selected by network or destination address, not by application.",
   "site_111": "Example: corporate DNS resolves portal.example.com to work address 10.20.8.12. Traffic to that address goes through ocbar. The usual resolver handles example.org. Dashed lines represent DNS queries; solid lines represent traffic.",
   "site_112": "Personal connection examples",
-  "site_113": "Examples of third-party clients and technologies. Configure them separately; coexistence depends on routes and DNS. For V2Ray, the traffic path depends on the chosen client mode.",
+  "site_113": "Examples of third-party clients and technologies. Configure them separately; coexistence depends on routes and DNS. A client in TUN mode takes over routes; in proxy mode, only configured apps use it.",
   "site_114": "Projects",
   "site_115": "Profiles, connection controls and logs in your macOS menu bar. Network settings live in the profile editor. Actual ocbar screenshots with demonstration data.",
   "site_116": "Company profile · all internet via VPN",
@@ -285,5 +285,14 @@
   "site_157": "→ ocbar → work",
   "site_158": "→ usual route",
   "site_159": "▣ Home NAS",
-  "site_160": "▱ Documents"
+  "site_160": "▱ Documents",
+  "site_161": "Video",
+  "site_162": "Video service",
+  "site_163": "TUN · proxy · WireGuard",
+  "site_164": "Video",
+  "site_165": "→ personal VPN",
+  "site_166": "TUN client",
+  "site_167": "Takes over routes",
+  "site_168": "Proxy client",
+  "site_169": "Only configured apps"
 }
