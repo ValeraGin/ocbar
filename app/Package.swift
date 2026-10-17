@@ -9,8 +9,15 @@ let package = Package(
     name: "ocbar-app",
     platforms: [.macOS(.v13)],
     targets: [
+        // Вендорная копия MacControlCenterUI (MIT): см. Sources/MacControlCenterUI/VENDOR.md.
+        .target(
+            name: "MacControlCenterUI",
+            path: "Sources/MacControlCenterUI",
+            exclude: ["LICENSE", "VENDOR.md"]
+        ),
         .executableTarget(
             name: "ocbar-app",
+            dependencies: ["MacControlCenterUI"],
             path: "Sources/ocbar-app",
             linkerSettings: [
                 .linkedFramework("AppKit"),

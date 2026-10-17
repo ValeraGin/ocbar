@@ -331,8 +331,21 @@ struct ScreenshotMenuView: View {
         case "network-off": menu(status: Self.withoutSecondRoute(), expandDetails: true)
         case "pausing": menu(status: Self.withoutSecondRoute(), busy: L("Ставлю на паузу…"))
         case "paused": menu(status: Fixture.status(.paused), active: false)
+        case "native-connected": native(Fixture.status(.connected))
+        case "native-paused": native(Fixture.status(.paused))
+        case "native-down": native(Fixture.status(.down))
         default: menu()
         }
+    }
+
+    // Пробное меню в духе Wi‑Fi/Bluetooth (NativeMenuView) на тех же демо-данных.
+    private func native(_ status: Status) -> some View {
+        NativeMenuView()
+            .environmentObject(StatusStore(preview: status, samples: Fixture.samples(active: true),
+                                           latency: "41 " + L("мс"), busy: nil, actionNote: nil))
+            .fixedSize(horizontal: false, vertical: true)
+            .background(RoundedRectangle(cornerRadius: 12).fill(.regularMaterial))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line))
     }
 
     private static func withoutSecondRoute() -> Status {
