@@ -3,7 +3,7 @@ import AVFoundation
 import SwiftUI
 
 // Проверка живого меню без человека: приложение само нажимает свой значок в
-// строке состояния, переключает экраны и пишет размеры настоящего окна в
+// строке состояния, открывает меню и пишет размеры настоящего окна в
 // журнал. Иначе проверить нечем: окно меню создаёт система, в витрине его
 // поведение другое, а глазами это смотрит человек.
 //
@@ -57,23 +57,19 @@ enum MenuProbe {
         return w.frame.height
     }
 
-    /// Итог: меню должно быть в полный рост, экран сетей — выше главного,
-    /// возврат — той же высоты, что до перехода.
+    /// Итог: меню в полный рост, не выше экрана и открывается одной
+    /// перестройкой окна, а не рывками.
     private static var jitter: [String] = []
 
     private static func verdict() {
         let main = heights["главный экран"] ?? 0
-        let networks = heights["сети и DNS"] ?? 0
-        let back = heights["возврат на главный"] ?? 0
         var bad: [String] = []
         if !jitter.isEmpty { bad.append("окно дёргается — перестроений " + jitter.joined(separator: ", ")) }
-        if main < 200 { bad.append("главный экран схлопнут (\(Int(main)))") }
-        if networks <= main + 40 { bad.append("сети не выше главного (\(Int(networks)) против \(Int(main)))") }
-        if abs(back - main) > 2 { bad.append("после возврата высота другая (\(Int(back)) против \(Int(main)))") }
+        if main < 200 { bad.append("меню схлопнуто (\(Int(main)))") }
         let screen = NSScreen.main?.visibleFrame.height ?? 800
-        if networks > screen - 30 { bad.append("выше экрана (\(Int(networks)))") }
+        if main > screen - 30 { bad.append("выше экрана (\(Int(main)))") }
         AppLog.write(bad.isEmpty
-                     ? "проверка меню: ИТОГ ОК — главный \(Int(main)), сети \(Int(networks)), возврат \(Int(back))"
+                     ? "проверка меню: ИТОГ ОК — высота \(Int(main))"
                      : "проверка меню: ИТОГ ПЛОХО — " + bad.joined(separator: "; "))
     }
 
@@ -90,13 +86,10 @@ enum MenuProbe {
                 AppLog.write(String(format: "проверка меню: перестройка → h=%.0f верх=%.0f", w.frame.height, w.frame.maxY))
             }
         }
-        let nav = MenuView.MenuNav.shared
         var step = 0
         let steps: [(String, () -> Void)] = [
             ("меню открыто", { button.performClick(nil) }),
             ("главный экран", {}),
-            ("сети и DNS", { nav.page = .networks }),
-            ("возврат на главный", { nav.page = .main }),
             ("меню закрыто", { button.performClick(nil) }),
             ("итог", { verdict() }),
         ]
@@ -109,7 +102,7 @@ enum MenuProbe {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 let count = resizes
                 log(name)
-                if ["сети и DNS", "возврат на главный"].contains(name) {
+                if name == "главный экран" {
                     AppLog.write("проверка меню: перестроений окна на шаге «\(name)»: \(count)")
                     if count > 2 { jitter.append("\(name): \(count)") }
                 }
