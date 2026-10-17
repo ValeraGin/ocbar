@@ -30,14 +30,10 @@ Main site — GitHub Pages: [English](https://valeragin.github.io/ocbar/) ·
 and publishes it on every push to `main` that changes `website/`, and can be run
 by hand. `configure-pages` supplies the address, so canonical URLs follow it.
 
-Mirror — Cloudflare Pages project `ocbar` at `ocbar.pages.dev`, Direct Upload.
-It stays a mirror because `pages.dev` does not resolve from Russian mobile
-networks without a VPN, while `github.io` does (both checked 2026-10-16).
-Build it with the main address so its canonical URLs point to GitHub Pages, then
-upload through Workers & Pages → ocbar → Create deployment → Production: either
-the `dist` folder, or a ZIP with the contents of `dist/` at the archive root
-(`cd website/dist && zip -qr -X ../ocbar-site.zip .`).
-Check both languages, installation links and diagrams.
+GitHub Pages, not Cloudflare Pages: `*.pages.dev` does not resolve from Russian
+mobile networks without a VPN, while `github.io` does (both checked 2026-10-16).
+The former Cloudflare project `ocbar.pages.dev` was deleted on 2026-10-17.
+After a push, check both languages, installation links and the animation.
 
 Always build with the stable project URL. The build generates canonical URLs,
 language alternates, social-card URLs, sitemap and robots.txt. A deployment
@@ -57,6 +53,3 @@ Use only demonstration profiles, never `--live` for public images.
 SVG route, DNS, comparison and open-source illustrations are localized for both
 languages. `mark.svg`/`icon.svg` match the native app switch. The social card uses
 this identity too. See [ASSETS.md](ASSETS.md) for provenance.
-
-The manual GitHub Pages workflow remains available as an alternative; a normal
-push does not deploy the Cloudflare site.
