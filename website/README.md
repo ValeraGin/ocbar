@@ -1,8 +1,9 @@
 # ocbar website
 
 English and Russian landing pages and installation guides, published on GitHub Pages.
-The production design uses the lime switch, editorial hero and interactive route
-atlas selected in `next/`. The site has no runtime dependencies or tracking.
+The landing is one short page: what ocbar is, the menu animation, five advantages,
+the install commands and links. No runtime dependencies or tracking; the only
+scripts are language detection and the copy button.
 
 ## Build and check
 
@@ -13,13 +14,14 @@ python3 -m http.server 8767 --bind 127.0.0.1 --directory website
 ```
 
 Preview `/dist/` and `/dist/ru/`. The main page template is `src/page.html`;
-translations are in `src/en.json` and `src/ru.json`. Landing strings use `site_`
-keys. Installation guides keep their own templates and their existing URLs.
-`dist/landing.css` and `dist/landing.js` implement the approved design;
-`dist/style.css` styles the installation guides. Generated HTML is tracked.
+translations are in `src/en.json` and `src/ru.json`. Installation guides keep their
+own templates and their existing URLs. `dist/landing.css` styles the landing,
+`dist/style.css` the installation guides. The build copies the README animation
+`assets/demo.gif` and `assets/ru/demo.gif` to `dist/assets/demo-{en,ru}.gif`; the page
+background matches the animation background `#EEF0EA`. Generated HTML is tracked.
 
-`next/` preserves the selected design preview; `concepts/` preserves earlier
-explorations. Neither directory is included in a production upload.
+`next/` and `concepts/` preserve earlier, larger designs (route atlas, Cisco
+comparison, split-DNS diagrams). Neither directory is included in a production upload.
 
 ## Publish
 

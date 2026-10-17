@@ -3,6 +3,7 @@
 import argparse
 import html
 import json
+import shutil
 from pathlib import Path
 from string import Template
 from urllib.parse import urlparse
@@ -37,6 +38,10 @@ var w=c;if(!w){var l=navigator.languages||[navigator.language||""];
 for(var i=0;i<l.length;i++){var p=String(l[i]).toLowerCase().split("-")[0];if(p==="ru"||p==="en"){w=p;break}}}
 if(w==="ru")location.replace("%s"+location.hash)})()</script>
 '''
+
+# Анимация меню — та же, что в README: tools/demo-gif.sh пишет её в assets/ репозитория.
+for lang, source in (('en', 'assets/demo.gif'), ('ru', 'assets/ru/demo.gif')):
+    shutil.copyfile(ROOT.parent / source, ROOT / f'dist/assets/demo-{lang}.gif')
 
 for lang in ('en', 'ru'):
     content = json.loads((ROOT / f'src/{lang}.json').read_text())

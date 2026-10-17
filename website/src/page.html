@@ -1,147 +1,62 @@
-<!doctype html><html lang="$lang"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#17201d"><title>${site_019}</title><meta name="description" content="${site_095}"><link rel="icon" type="image/svg+xml" href="${base}assets/icon.svg"><link rel="stylesheet" href="${base}landing.css?v=20261016"><meta property="og:title" content="$site_019"><meta property="og:description" content="$site_095"><meta property="og:type" content="website"><meta property="og:image" content="${base}assets/social-card.jpg"><meta name="twitter:card" content="summary_large_image"></head><body><a class="skip-link" href="#content">${site_057}</a><div class="hero-dark" id="top"><div class="wrap"><header class="site-header"><a class="brand" href="#top" aria-label="${site_020}"><img src="${base}assets/icon.svg" width="36" height="36" alt="">ocbar</a><nav aria-label="${site_091}"><a href="#map">${site_072}</a><a href="#app">${site_108}</a><a href="https://github.com/ValeraGin/ocbar">GitHub ↗</a><span class="languages" aria-label="$language_label"><a href="${base}./" lang="en" $en_current>EN</a><span>/</span><a href="${base}ru/" lang="ru" $ru_current>RU</a></span></nav></header><section class="editorial-hero" aria-labelledby="hero-title"><div class="hero-meta"><span>${site_015}<br>${site_085}</span><span>${site_047}<br>${site_037}</span></div><h1 id="hero-title">${site_141}<br><em>${site_089}</em></h1><div class="hero-bottom"><p>${site_121}<br>${site_092}</p><div class="hero-buttons"><a class="lime-button" href="guide/">${site_143} <span aria-hidden="true">↗</span></a><a class="outline-button" href="#map">${site_106} <span aria-hidden="true">↓</span></a></div></div></section></div></div><main id="content"><div class="wrap"><section class="route-intro" id="map" aria-label="${site_059}"><div class="atlas-head"><div class="route-controls" role="group" aria-label="${site_103}"><button type="button" data-route="all" aria-pressed="true">${site_029}</button><button class="personal" type="button" data-route="personal" aria-pressed="false"><i></i>${site_066}</button><button type="button" data-route="work" aria-pressed="false"><i></i>${site_123}</button><button class="lan" type="button" data-route="lan" aria-pressed="false"><i></i>${site_042}</button></div><a class="map-link" href="${base}assets/routes-${lang}.svg" target="_blank" rel="noopener">${site_096}</a></div>
-      <div class="atlas-frame" id="atlas">
-
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="740" viewBox="0 0 1200 740" fill="none" role="img" aria-labelledby="title desc">
-<title id="title">${site_023}</title>
-<desc id="desc">${site_050}</desc>
-<defs>
-  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" stroke="#D9DFD5" stroke-width=".65"/></pattern>
-  <filter id="shadow" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#213528" flood-opacity=".10"/></filter>
-  <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#406C4B"/><stop offset="1" stop-color="#274833"/></linearGradient>
-  <style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#29372D}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.muted{fill:#7C887D}.label{font-size:11px;letter-spacing:1.5px}.body{font-size:13px}.small{font-size:11px}.heading{font-size:17px;font-weight:600}.route-personal,.route-work,.route-lan{transition:opacity .2s}svg[data-focus="personal"] .route-work,svg[data-focus="personal"] .route-lan,svg[data-focus="work"] .route-personal,svg[data-focus="work"] .route-lan,svg[data-focus="lan"] .route-personal,svg[data-focus="lan"] .route-work{opacity:.18}@media(prefers-reduced-motion:reduce){.route-personal,.route-work,.route-lan{transition:none}}</style>
-</defs>
-<rect width="1200" height="740" rx="24" fill="#F2F4ED"/>
-<rect x="24" y="24" width="1152" height="692" rx="16" fill="url(#grid)"/>
-<path d="M550 36C730 46 681 147 850 168S1102 95 1171 252M537 47C710 63 666 170 837 185S1091 121 1169 272M525 61C699 83 653 194 824 205S1088 146 1169 294M549 691C674 588 799 645 889 564S1001 397 1177 444M571 704C686 612 814 665 904 584S1015 420 1173 465" stroke="#D7DED2" stroke-width="1.2"/>
-<text x="43" y="49" class="label muted">${site_021}</text>
-<text x="1114" y="49" class="label muted">01—03</text>
-<g opacity=".55"><path d="M1140 94V66M1134 74L1140 66L1146 74" stroke="#85927F" stroke-linecap="round"/><text x="1135" y="108" class="small muted">N</text></g>
-<path d="M527 135V614" stroke="#CBD4C7" stroke-width="1.4" stroke-dasharray="3 7"/>
-<rect x="482" y="341" width="88" height="38" rx="19" fill="#F2F4ED" stroke="#D4DCD0"/>
-<text x="526" y="365" font-size="12" text-anchor="middle">${site_027}</text>
-
-<!-- A familiar browser window, entirely illustrated with demo data. -->
-<g class="route-personal">
-  <g filter="url(#shadow)">
-    <rect x="62" y="94" width="378" height="185" rx="12" fill="white" stroke="#D0D8CE"/>
-    <path d="M74 94H428Q440 94 440 106V133H62V106Q62 94 74 94" fill="#F8F9F6"/>
-    <path d="M62 133H440" stroke="#E4E8E0"/>
-    <circle cx="79" cy="113" r="4" fill="#EE827A"/><circle cx="93" cy="113" r="4" fill="#E8C76B"/><circle cx="107" cy="113" r="4" fill="#87BF85"/>
-    <path d="M126 110L122 114L126 118M141 110L145 114L141 118" stroke="#A2ACA1" stroke-width="1.3"/>
-    <rect x="164" y="102" width="238" height="22" rx="5" fill="#EDEFEA"/>
-    <text x="280" y="117" font-size="10" text-anchor="middle">video.example</text>
-    <rect x="78" y="149" width="23" height="16" rx="5" fill="#7787B4"/><path d="M87 153L94 157L87 161Z" fill="white"/>
-    <text x="109" y="162" font-size="13" font-weight="600">${site_161}</text>
-    <rect x="79" y="180" width="209" height="83" rx="5" fill="#DEE5DD"/>
-    <path d="M79 244L128 209L157 229L211 190L288 233V258Q288 263 283 263H84Q79 263 79 258Z" fill="#BCCBBB"/>
-    <circle cx="256" cy="200" r="9" fill="#F5F1DB"/>
-    <circle cx="184" cy="221" r="15" fill="#FFF" fill-opacity=".9"/><path d="M181 214L190 221L181 228Z" fill="#5B6A5A"/>
-    <text x="305" y="193" font-size="11" font-weight="500">${site_036}</text><text x="305" y="210" font-size="11" font-weight="500">${site_148}</text>
-    <rect x="305" y="224" width="106" height="5" rx="2.5" fill="#E4E8E0"/><rect x="305" y="236" width="76" height="5" rx="2.5" fill="#E4E8E0"/>
-    <text x="305" y="257" class="small muted">${site_038}</text>
-  </g>
-  <path d="M440 186H550Q578 186 578 158V131Q578 115 595 115H747Q771 115 771 139V177H892" stroke="#7787B4" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="527" cy="186" r="5" fill="#7787B4" stroke="#F2F4ED" stroke-width="3"/>
-  <path d="M883 172L892 177L883 182" stroke="#7787B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="607" y="92" width="234" height="51" rx="8" fill="#EEF0F7" stroke="#C6CEE2"/>
-  <circle cx="625" cy="114" r="5" fill="#7787B4"/>
-  <text x="639" y="111" font-size="12" font-weight="600">${site_067}</text><text x="620" y="132" font-size="11" fill="#7787B4">${site_163}</text>
-  <text x="612" y="164" class="small muted">${site_032}</text>
-  <g transform="translate(917 140)">
-    <path d="M0 20L39 0L78 20L39 40Z" fill="#E1E5F0" stroke="#B8C2D8"/><path d="M0 20V63L39 83V40Z" fill="#CFD6E6" stroke="#B8C2D8"/><path d="M39 40L78 20V63L39 83Z" fill="#EEF0F7" stroke="#B8C2D8"/>
-    <path d="M47 46L64 38V55L47 63Z" fill="#9CAACE"/><path d="M53 43L61 45L53 53Z" fill="white"/>
-  </g>
-  <text x="1021" y="170" class="heading">${site_162}</text><text x="1021" y="191" class="body muted">${site_068}</text>
-  <text x="62" y="300" class="small muted">${site_001}</text>
-</g>
-
-<g class="route-work">
-  <g filter="url(#shadow)">
-    <rect x="105" y="330" width="364" height="169" rx="12" fill="white" stroke="#D0D8CE"/>
-    <path d="M117 330H457Q469 330 469 342V369H105V342Q105 330 117 330" fill="#F8F9F6"/>
-    <path d="M105 369H469" stroke="#E4E8E0"/>
-    <circle cx="122" cy="349" r="4" fill="#EE827A"/><circle cx="136" cy="349" r="4" fill="#E8C76B"/><circle cx="150" cy="349" r="4" fill="#87BF85"/>
-    <rect x="185" y="339" width="233" height="21" rx="5" fill="#EDEFEA"/><text x="300" y="354" font-size="10" text-anchor="middle">portal.example.com</text>
-    <rect x="121" y="383" width="27" height="27" rx="7" fill="#DFEADB"/><path d="M129 397L134 392L140 397L134 403Z" stroke="#668665" stroke-width="1.5"/>
-    <text x="158" y="400" font-size="15" font-weight="600">${site_126}</text>
-    <text x="121" y="431" font-size="11" class="muted">${site_076}</text><text x="342" y="431" font-size="10" class="muted">${site_086}</text>
-    <rect x="121" y="441" width="330" height="42" rx="5" fill="#F4F6F0"/><circle cx="141" cy="462" r="8" fill="#D3E1CC"/>
-    <text x="158" y="459" font-size="11" font-weight="500">${site_061}</text><text x="158" y="474" font-size="10" class="muted">${site_040}</text>
-  </g>
-  <path d="M469 417H587Q611 417 611 393V356Q611 332 635 332H803Q826 332 826 356V411H915" stroke="#4E7856" stroke-width="3.5" stroke-linecap="round"/>
-  <circle cx="527" cy="417" r="5" fill="#4E7856" stroke="#F2F4ED" stroke-width="3"/>
-  <path d="M906 406L915 411L906 416" stroke="#4E7856" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <g transform="translate(651 297)"><rect width="150" height="68" rx="12" fill="url(#green)"/>
-    <path d="M17 34H29L40 23H45M29 34L40 45H45" stroke="#BBDFAB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="30" width="8" height="8" rx="2" fill="#C7E5B9"/>
-    <text x="62" y="31" font-size="20" font-weight="600" style="fill:#fff">ocbar</text><text x="62" y="49" font-size="10" style="fill:#C7DEBD">OpenConnect</text>
-  </g>
-  <text x="652" y="391" class="mono" font-size="12" fill="#4E7856">10.20.0.0/16</text>
-  <g transform="translate(940 373)">
-    <path d="M0 20L39 0L78 20L39 40Z" fill="#DCE8D4" stroke="#ACC2A6"/><path d="M0 20V63L39 83V40Z" fill="#BACCAC" stroke="#ACC2A6"/><path d="M39 40L78 20V63L39 83Z" fill="#E8EFDF" stroke="#ACC2A6"/>
-    <path d="M48 45L68 35V61L48 71Z" fill="#8AAC83"/><path d="M53 45L63 40M53 52L63 47M53 59L63 54" stroke="#E8EFDF" stroke-width="2"/>
-  </g>
-  <text x="1040" y="404" class="heading">${site_119}</text><text x="1040" y="425" class="body muted">${site_130}</text>
-  <text x="105" y="520" class="small muted">${site_004}</text>
-</g>
-
-<g class="route-lan">
-  <g filter="url(#shadow)">
-    <rect x="62" y="551" width="377" height="134" rx="12" fill="white" stroke="#D0D8CE"/>
-    <path d="M74 551H427Q439 551 439 563V588H62V563Q62 551 74 551" fill="#F8F9F6"/>
-    <circle cx="79" cy="570" r="4" fill="#EE827A"/><circle cx="93" cy="570" r="4" fill="#E8C76B"/><circle cx="107" cy="570" r="4" fill="#87BF85"/>
-    <path d="M135 567L131 571L135 575M149 567L153 571L149 575" stroke="#A2ACA1" stroke-width="1.3"/>
-    <text x="188" y="575" font-size="12" font-weight="600">${site_043}</text><path d="M398 566H414M398 571H414M398 576H414" stroke="#A2ACA1"/>
-    <path d="M62 588H439" stroke="#E4E8E0"/>
-    <path d="M62 588H170V685H74Q62 685 62 673Z" fill="#EEF0EA"/>
-    <text x="77" y="608" font-size="9" class="muted">${site_070}</text><rect x="71" y="618" width="92" height="23" rx="5" fill="#DDE5D7"/>
-    <text x="81" y="633" font-size="10">${site_159}</text><text x="81" y="660" font-size="10" class="muted">${site_160}</text>
-    <g fill="#9AC8E1" stroke="#82B4D0"><path d="M190 612H207L212 617H233V644H190Z"/><path d="M257 612H274L279 617H300V644H257Z"/><path d="M324 612H341L346 617H367V644H324Z"/></g>
-    <g font-size="10" text-anchor="middle"><text x="212" y="661">${site_147}</text><text x="278" y="661">${site_022}</text><text x="345" y="661">${site_114}</text></g>
-  </g>
-  <path d="M439 617H653Q678 617 678 591V566Q678 548 697 548H891Q914 548 914 571V610H989" stroke="#AD9671" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="527" cy="617" r="5" fill="#AD9671" stroke="#F2F4ED" stroke-width="3"/>
-  <path d="M980 605L989 610L980 615" stroke="#AD9671" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="735" y="528" width="130" height="41" rx="8" fill="#F4EEE3" stroke="#D7C9AD"/><circle cx="753" cy="548" r="5" fill="#AD9671"/>
-  <text x="767" y="546" font-size="12" font-weight="600">${site_077}</text><text x="767" y="560" font-size="10" fill="#AD9671">${site_151}</text>
-  <text x="722" y="603" class="mono" font-size="12" fill="#AD9671">192.168.50.20</text>
-  <g transform="translate(1010 572)"><path d="M0 20L34 3L68 20L34 37Z" fill="#ECE2D0" stroke="#C9B797"/><path d="M0 20V63L34 80V37Z" fill="#D7C9AE" stroke="#C9B797"/><path d="M34 37L68 20V63L34 80Z" fill="#F5EDDD" stroke="#C9B797"/><path d="M43 43L59 35V58L43 66Z" fill="#C8B48F"/><path d="M47 46L55 42M47 52L55 48" stroke="#F5EDDD"/><circle cx="55" cy="57" r="2" fill="#78966A"/></g>
-  <text x="1100" y="611" class="heading">NAS</text><text x="1100" y="632" class="body muted">${site_041}</text>
-</g>
-<text x="45" y="718" font-size="10" class="muted">${site_064}</text>
-</svg>
-
-
-      </div>
-      <div class="mobile-key" aria-label="${site_074}"><div class="legend"><i style="background:var(--personal)"></i>${site_164} <span class="trail">${site_165}</span></div><div class="legend"><i></i>${site_126} <span class="trail">→ ocbar / 10.20.0.0/16</span></div><div class="legend"><i style="background:var(--lan)"></i>${site_043} <span class="trail">→ LAN / 192.168.50.20</span></div></div>
-      <div class="caption"><p id="route-caption" aria-live="polite">${site_090}</p><p>${site_049}</p></div>
-      <aside class="personal-examples" aria-label="${site_112}"><div class="examples-title">${site_065}</div><div class="client-tiles"><div><b class="client-monogram">TUN</b><span><strong>${site_166}</strong><small>${site_167}</small></span></div><div><b class="client-monogram">PRX</b><span><strong>${site_168}</strong><small>${site_169}</small></span></div><div><b class="client-monogram">WG</b><span><strong>WireGuard</strong><small>${site_046}</small></span></div></div><p>${site_113}</p></aside>
-      <p class="conditions">${site_110}</p>
-    </section>
-
-    <section class="story" id="routes" aria-labelledby="routes-title">
-      <div class="section-head"><div><div class="eyebrow">${site_002}</div><h2 id="routes-title">${site_125}<br>${site_025}</h2></div><p>${site_024}</p></div>
-      <figure class="brand-comparison"><div class="comparison-scroll" tabindex="0" aria-label="${site_134}"><img src="${base}assets/cisco-ocbar-${lang}.svg" width="1100" height="470" alt="${site_051}"></div><figcaption>${site_048} <a href="https://www.cisco.com/c/en/us/support/docs/security/anyconnect-secure-mobility-client/119006-configure-anyconnect-00.html">split tunneling</a>${site_000}</figcaption></figure><div class="comparison">
-        <div><div class="modes" role="tablist" aria-label="${site_135}"><button id="selected-tab" type="button" role="tab" data-mode="selected" aria-selected="true" aria-controls="compare-panel"><span>${site_026}</span>${site_138}<br>${site_154}</button><button id="all-tab" type="button" role="tab" data-mode="all" aria-selected="false" aria-controls="compare-panel" tabindex="-1"><span>${site_101}</span>Cisco AnyConnect<br>${site_030}</button></div><p class="compare-note" id="mode-copy">${site_034}</p></div>
-        <div class="compare-map" id="compare-panel" role="tabpanel" aria-labelledby="selected-tab" data-mode="selected"><div class="traffic-row"><span class="origin">${site_164}</span><span class="rail"><span class="node" id="internet-node">${site_067}</span></span><span class="destination">${site_033}</span></div><div class="traffic-row"><span class="origin">${site_105}</span><span class="rail work"><span class="node" id="work-node">ocbar</span></span><span class="destination">10.20.0.0/16</span></div><div class="traffic-row"><span class="origin">Finder</span><span class="rail lan"><span class="node">${site_078}</span></span><span class="destination">${site_043}</span></div></div>
-      </div>
-      <p class="notice">${site_137}</p>
-    </section>
-
-    <section class="story" id="dns" aria-labelledby="dns-title">
-      <div class="section-head"><div><div class="eyebrow">${site_006}</div><h2 id="dns-title">${site_132}<br>${site_107}</h2></div><p>${site_016}</p></div>
-      <img class="diagram" src="${base}assets/dns-${lang}.svg" alt="${site_109}">
-      <div class="dns-mobile" aria-label="${site_018}"><article><strong>portal.example.com</strong><div class="dns-query">${site_045}<br>${site_062}<br>${site_093} <code>10.20.8.12</code></div><div class="dns-traffic"><span>${site_139}</span><b>${site_157}</b></div></article><article><strong>example.org</strong><div class="dns-query">${site_045}<br>${site_088}<br>${site_094}</div><div class="dns-traffic"><span>${site_139}</span><b>${site_158}</b></div></article></div><div class="dns-details"><span><strong>${site_118}</strong> ${site_155}</span><span><strong>${site_133}</strong> ${site_156}</span><span>${site_122}</span></div>
-    </section>
-
-    <section class="story" id="app" aria-labelledby="app-title">
-      <div class="section-head"><div><div class="eyebrow">${site_007}</div><h2 id="app-title">${site_073}<br>${site_142}</h2></div><p>${site_115}</p></div>
-      <div class="screens"><figure class="screenshot"><span class="screen-label">${site_011}</span><a href="${base}assets/menu-${lang}.png" target="_blank" rel="noopener" aria-label="${site_098}"><img src="${base}assets/menu-${lang}.png" alt="${site_080}" loading="lazy" width="1560" height="1221"></a><figcaption>${site_035}</figcaption></figure><figure class="screenshot"><span class="screen-label">${site_012}</span><a href="${base}assets/profile-${lang}.png" target="_blank" rel="noopener" aria-label="${site_099}"><img src="${base}assets/profile-${lang}.png" alt="${site_081}" loading="lazy" width="2096" height="1416"></a><figcaption>${site_082}</figcaption></figure></div>
-      <div class="details-row">
-        <article><svg class="mini" viewBox="0 0 220 90" fill="none" aria-hidden="true"><rect x="6" y="12" width="62" height="63" rx="6" fill="#EEF2E7" stroke="#C6D4BA"/><path d="M42 12V28H68" stroke="#C6D4BA"/><text x="15" y="51" font-size="10" fill="#4E7856" font-family="monospace">.ocbar</text><path d="M83 45H127M119 39L127 45L119 51" stroke="#91A381" stroke-width="2"/><circle cx="165" cy="33" r="12" fill="#D3DFC8"/><path d="M144 68C144 45 186 45 186 68" fill="#E4EBD9" stroke="#BDCFAC"/><path d="M193 64L200 71L214 57" stroke="#73945E" stroke-width="2"/></svg><h3>${site_117}</h3><p>${site_146} <code>.ocbar</code> ${site_152}</p></article>
-        <article><svg class="mini" viewBox="0 0 220 90" fill="none" aria-hidden="true"><rect x="8" y="19" width="68" height="49" rx="7" fill="#EEF2E7" stroke="#C6D4BA"/><text x="22" y="48" font-family="monospace" font-size="12" fill="#698257">&gt;_ CSD</text><path d="M90 44H132M124 38L132 44L124 50" stroke="#91A381" stroke-width="2"/><path d="M148 16H193V70H148Z" fill="#E2E9D8" stroke="#BACDA9"/><path d="M148 27H193M148 58H193" stroke="#BACDA9"/><text x="151" y="46" font-size="9" fill="#698257" font-family="monospace">gateway</text></svg><h3>${site_129}</h3><p>${site_075}</p></article>
-        <article><svg class="mini" viewBox="0 0 220 90" fill="none" aria-hidden="true"><rect x="6" y="21" width="67" height="44" rx="7" fill="#EEF2E7" stroke="#C6D4BA"/><text x="19" y="48" font-size="11" fill="#698257" font-family="monospace">SOCKS</text><path d="M87 43H123" stroke="#91A381" stroke-width="2"/><rect x="126" y="21" width="84" height="44" rx="7" fill="#E2E9D8" stroke="#BACDA9"/><text x="138" y="48" font-size="11" fill="#698257" font-family="monospace">ocproxy</text></svg><h3>${site_069}</h3><p>${site_128} <code>ocproxy</code> ${site_150} <code>SystemProxy=off</code>${site_010}</p></article>
-      </div>
-    </section>
-
-    <section class="story open-story" aria-labelledby="source-title"><div><div class="eyebrow">${site_008}</div><h2 id="source-title">${site_104}<br>${site_153}</h2><p>${site_056}</p><a class="source-link" href="https://github.com/ValeraGin/ocbar">${site_097}</a></div><img src="${base}assets/open-source-${lang}.svg" alt="${site_084}" loading="lazy"></section>
-</div></main><section class="closing"><div class="wrap"><div><span class="eyebrow">OCBAR / MACOS / OPENCONNECT</span><h2>${site_120}<br><em>${site_028}</em></h2></div><a class="lime-button" href="guide/">${site_083}</a></div></section><footer class="site-footer wrap"><a class="brand" href="#top"><img src="${base}assets/icon.svg" width="30" height="30" alt="">ocbar</a><nav aria-label="${site_136}"><a href="guide/">${site_144}</a><a href="https://github.com/ValeraGin/ocbar">${site_054}</a><a href="https://github.com/ValeraGin/ocbar/issues">${site_087}</a></nav><p>${site_039}</p></footer><script src="${base}landing.js?v=20261016"></script></body></html>
+<!doctype html>
+<html lang="$lang">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#eef0ea">
+<title>$title</title><meta name="description" content="$description">
+<meta property="og:title" content="$title"><meta property="og:description" content="$description">
+<meta property="og:type" content="website"><meta property="og:image" content="${base}assets/social-card.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="${base}assets/icon.svg">
+<link rel="stylesheet" href="${base}landing.css?v=20261017">
+</head>
+<body>
+<a class="skip" href="#content">$skip</a>
+<header class="top wrap">
+  <a class="brand" href="./"><img src="${base}assets/icon.svg" width="28" height="28" alt="">ocbar</a>
+  <nav><a href="https://github.com/ValeraGin/ocbar">GitHub</a><span class="languages" aria-label="$language_label"><a href="${base}./" lang="en" $en_current>EN</a> / <a href="${base}ru/" lang="ru" $ru_current>RU</a></span></nav>
+</header>
+<main id="content" class="wrap">
+  <section class="hero">
+    <div>
+      <h1>$h1</h1>
+      <p class="lead">$lead</p>
+      <p class="actions"><a class="button" href="#install">$install_cta</a><a class="link" href="https://github.com/ValeraGin/ocbar">$source_cta ↗</a></p>
+    </div>
+    <figure><img src="${base}assets/demo-${lang}.gif" width="373" height="595" alt="$demo_alt"><figcaption>$demo_caption</figcaption></figure>
+  </section>
+  <section class="pros" aria-label="$pros_label">
+    <div><h2>$p1_t</h2><p>$p1_d</p></div>
+    <div><h2>$p2_t</h2><p>$p2_d</p></div>
+    <div><h2>$p3_t</h2><p>$p3_d</p></div>
+    <div><h2>$p4_t</h2><p>$p4_d</p></div>
+    <div><h2>$p5_t</h2><p>$p5_d</p></div>
+  </section>
+  <section class="install" id="install">
+    <h2>$install_title</h2>
+    <div class="code"><pre id="commands">brew tap ValeraGin/ocbar
+brew trust ValeraGin/ocbar
+brew install ocbar
+sudo ocbar install
+ocbar app start</pre><button type="button" id="copy" data-done="$copied">$copy</button></div>
+    <p>$install_note</p>
+    <p class="muted">$requirements</p>
+    <p><a class="link" href="guide/">$guide_link →</a></p>
+  </section>
+</main>
+<footer class="wrap">
+  <a href="$troubleshooting_url">$troubleshooting</a>
+  <a href="https://github.com/ValeraGin/ocbar">GitHub</a>
+  <span>$license</span>
+  <span>$disclaimer</span>
+</footer>
+<script>
+document.getElementById("copy").addEventListener("click", function () {
+  var button = this, text = document.getElementById("commands").textContent;
+  var done = function () { var label = button.textContent; button.textContent = button.dataset.done; setTimeout(function () { button.textContent = label; }, 1600); };
+  var select = function () { var range = document.createRange(); range.selectNodeContents(document.getElementById("commands")); var selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, select); else select();
+});
+</script>
+</body>
+</html>

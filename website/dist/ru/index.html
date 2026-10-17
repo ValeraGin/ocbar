@@ -1,4 +1,15 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#17201d"><title>ocbar — рабочий VPN, ваши маршруты</title><meta name="description" content="Открытый OpenConnect-клиент для macOS. Выбранные рабочие сети, split DNS, профили для коллег. Рабочий портал, личный VPN и домашний NAS на одном Mac."><link rel="icon" type="image/svg+xml" href="../assets/icon.svg"><link rel="stylesheet" href="../landing.css?v=20261016"><meta property="og:title" content="ocbar — рабочий VPN, ваши маршруты"><meta property="og:description" content="Открытый OpenConnect-клиент для macOS. Выбранные рабочие сети, split DNS, профили для коллег. Рабочий портал, личный VPN и домашний NAS на одном Mac."><meta property="og:type" content="website"><meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card.jpg"><meta name="twitter:card" content="summary_large_image"><script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#eef0ea">
+<title>ocbar — рабочий VPN в строке меню Mac</title><meta name="description" content="Открытый клиент для AnyConnect-совместимых VPN-шлюзов на macOS: пароль и TOTP подставляются сами, свои сети и DNS, меню вместо консоли.">
+<meta property="og:title" content="ocbar — рабочий VPN в строке меню Mac"><meta property="og:description" content="Открытый клиент для AnyConnect-совместимых VPN-шлюзов на macOS: пароль и TOTP подставляются сами, свои сети и DNS, меню вместо консоли.">
+<meta property="og:type" content="website"><meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
+<link rel="stylesheet" href="../landing.css?v=20261017">
+<script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
 if(a)try{localStorage.setItem(k,a.lang)}catch(e){}});
@@ -11,150 +22,54 @@ if(w==="ru")location.replace("../ru/"+location.hash)})()</script>
 <link rel="alternate" hreflang="en" href="https://valeragin.github.io/ocbar/">
 <link rel="alternate" hreflang="ru" href="https://valeragin.github.io/ocbar/ru/">
 <link rel="alternate" hreflang="x-default" href="https://valeragin.github.io/ocbar/">
-</head><body><a class="skip-link" href="#content">К содержанию</a><div class="hero-dark" id="top"><div class="wrap"><header class="site-header"><a class="brand" href="#top" aria-label="ocbar, начало"><img src="../assets/icon.svg" width="36" height="36" alt="">ocbar</a><nav aria-label="Основная навигация"><a href="#map">Маршруты</a><a href="#app">Приложение</a><a href="https://github.com/ValeraGin/ocbar">GitHub ↗</a><span class="languages" aria-label="Язык"><a href=".././" lang="en" >EN</a><span>/</span><a href="../ru/" lang="ru" aria-current="page">RU</a></span></nav></header><section class="editorial-hero" aria-labelledby="hero-title"><div class="hero-meta"><span>OPENCONNECT ДЛЯ MACOS<br>ОТКРЫТЫЙ КОД · MIT</span><span>ИНТЕРНЕТ, РАБОТА,<br>ДОМ. ОДНОВРЕМЕННО.</span></div><h1 id="hero-title">Три пути.<br><em>Один Mac.</em></h1><div class="hero-bottom"><p>Рабочая сеть — через ocbar.<br>Остальные маршруты — по вашему плану.</p><div class="hero-buttons"><a class="lime-button" href="guide/">Установить на Mac <span aria-hidden="true">↗</span></a><a class="outline-button" href="#map">Посмотреть пути <span aria-hidden="true">↓</span></a></div></div></section></div></div><main id="content"><div class="wrap"><section class="route-intro" id="map" aria-label="Карта маршрутов"><div class="atlas-head"><div class="route-controls" role="group" aria-label="Подсветить маршрут в примере"><button type="button" data-route="all" aria-pressed="true">Весь атлас</button><button class="personal" type="button" data-route="personal" aria-pressed="false"><i></i>Личный</button><button type="button" data-route="work" aria-pressed="false"><i></i>Рабочий</button><button class="lan" type="button" data-route="lan" aria-pressed="false"><i></i>Домашний</button></div><a class="map-link" href="../assets/routes-ru.svg" target="_blank" rel="noopener">Открыть атлас крупнее ↗</a></div>
-      <div class="atlas-frame" id="atlas">
-
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="740" viewBox="0 0 1200 740" fill="none" role="img" aria-labelledby="title desc">
-<title id="title">Атлас маршрутов одного Mac</title>
-<desc id="desc">Иллюстрация с демо-данными. Видеосервис открыт через сторонний личный VPN. Рабочий портал portal.example.com и сеть 10.20.0.0/16 доступны через ocbar. Папки NAS 192.168.50.20 доступны напрямую по LAN. Маршрут выбирается по адресу назначения, а не по приложению.</desc>
-<defs>
-  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" stroke="#D9DFD5" stroke-width=".65"/></pattern>
-  <filter id="shadow" x="-20%" y="-30%" width="140%" height="180%"><feDropShadow dx="0" dy="10" stdDeviation="11" flood-color="#213528" flood-opacity=".10"/></filter>
-  <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#406C4B"/><stop offset="1" stop-color="#274833"/></linearGradient>
-  <style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#29372D}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.muted{fill:#7C887D}.label{font-size:11px;letter-spacing:1.5px}.body{font-size:13px}.small{font-size:11px}.heading{font-size:17px;font-weight:600}.route-personal,.route-work,.route-lan{transition:opacity .2s}svg[data-focus="personal"] .route-work,svg[data-focus="personal"] .route-lan,svg[data-focus="work"] .route-personal,svg[data-focus="work"] .route-lan,svg[data-focus="lan"] .route-personal,svg[data-focus="lan"] .route-work{opacity:.18}@media(prefers-reduced-motion:reduce){.route-personal,.route-work,.route-lan{transition:none}}</style>
-</defs>
-<rect width="1200" height="740" rx="24" fill="#F2F4ED"/>
-<rect x="24" y="24" width="1152" height="692" rx="16" fill="url(#grid)"/>
-<path d="M550 36C730 46 681 147 850 168S1102 95 1171 252M537 47C710 63 666 170 837 185S1091 121 1169 272M525 61C699 83 653 194 824 205S1088 146 1169 294M549 691C674 588 799 645 889 564S1001 397 1177 444M571 704C686 612 814 665 904 584S1015 420 1173 465" stroke="#D7DED2" stroke-width="1.2"/>
-<text x="43" y="49" class="label muted">АТЛАС СОЕДИНЕНИЙ / ПРИМЕР</text>
-<text x="1114" y="49" class="label muted">01—03</text>
-<g opacity=".55"><path d="M1140 94V66M1134 74L1140 66L1146 74" stroke="#85927F" stroke-linecap="round"/><text x="1135" y="108" class="small muted">N</text></g>
-<path d="M527 135V614" stroke="#CBD4C7" stroke-width="1.4" stroke-dasharray="3 7"/>
-<rect x="482" y="341" width="88" height="38" rx="19" fill="#F2F4ED" stroke="#D4DCD0"/>
-<text x="526" y="365" font-size="12" text-anchor="middle">Ваш Mac</text>
-
-<!-- A familiar browser window, entirely illustrated with demo data. -->
-<g class="route-personal">
-  <g filter="url(#shadow)">
-    <rect x="62" y="94" width="378" height="185" rx="12" fill="white" stroke="#D0D8CE"/>
-    <path d="M74 94H428Q440 94 440 106V133H62V106Q62 94 74 94" fill="#F8F9F6"/>
-    <path d="M62 133H440" stroke="#E4E8E0"/>
-    <circle cx="79" cy="113" r="4" fill="#EE827A"/><circle cx="93" cy="113" r="4" fill="#E8C76B"/><circle cx="107" cy="113" r="4" fill="#87BF85"/>
-    <path d="M126 110L122 114L126 118M141 110L145 114L141 118" stroke="#A2ACA1" stroke-width="1.3"/>
-    <rect x="164" y="102" width="238" height="22" rx="5" fill="#EDEFEA"/>
-    <text x="280" y="117" font-size="10" text-anchor="middle">video.example</text>
-    <rect x="78" y="149" width="23" height="16" rx="5" fill="#7787B4"/><path d="M87 153L94 157L87 161Z" fill="white"/>
-    <text x="109" y="162" font-size="13" font-weight="600">Видео</text>
-    <rect x="79" y="180" width="209" height="83" rx="5" fill="#DEE5DD"/>
-    <path d="M79 244L128 209L157 229L211 190L288 233V258Q288 263 283 263H84Q79 263 79 258Z" fill="#BCCBBB"/>
-    <circle cx="256" cy="200" r="9" fill="#F5F1DB"/>
-    <circle cx="184" cy="221" r="15" fill="#FFF" fill-opacity=".9"/><path d="M181 214L190 221L181 228Z" fill="#5B6A5A"/>
-    <text x="305" y="193" font-size="11" font-weight="500">Выходной</text><text x="305" y="210" font-size="11" font-weight="500">в горах</text>
-    <rect x="305" y="224" width="106" height="5" rx="2.5" fill="#E4E8E0"/><rect x="305" y="236" width="76" height="5" rx="2.5" fill="#E4E8E0"/>
-    <text x="305" y="257" class="small muted">Демо-видео · 12:08</text>
-  </g>
-  <path d="M440 186H550Q578 186 578 158V131Q578 115 595 115H747Q771 115 771 139V177H892" stroke="#7787B4" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="527" cy="186" r="5" fill="#7787B4" stroke="#F2F4ED" stroke-width="3"/>
-  <path d="M883 172L892 177L883 182" stroke="#7787B4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="607" y="92" width="234" height="51" rx="8" fill="#EEF0F7" stroke="#C6CEE2"/>
-  <circle cx="625" cy="114" r="5" fill="#7787B4"/>
-  <text x="639" y="111" font-size="12" font-weight="600">Личный VPN</text><text x="620" y="132" font-size="11" fill="#7787B4">TUN · прокси · WireGuard</text>
-  <text x="612" y="164" class="small muted">Внешний адрес назначения</text>
-  <g transform="translate(917 140)">
-    <path d="M0 20L39 0L78 20L39 40Z" fill="#E1E5F0" stroke="#B8C2D8"/><path d="M0 20V63L39 83V40Z" fill="#CFD6E6" stroke="#B8C2D8"/><path d="M39 40L78 20V63L39 83Z" fill="#EEF0F7" stroke="#B8C2D8"/>
-    <path d="M47 46L64 38V55L47 63Z" fill="#9CAACE"/><path d="M53 43L61 45L53 53Z" fill="white"/>
-  </g>
-  <text x="1021" y="170" class="heading">Видеосервис</text><text x="1021" y="191" class="body muted">Личный маршрут</text>
-  <text x="62" y="300" class="small muted">01 / ВНЕШНИЙ СЕРВИС</text>
-</g>
-
-<g class="route-work">
-  <g filter="url(#shadow)">
-    <rect x="105" y="330" width="364" height="169" rx="12" fill="white" stroke="#D0D8CE"/>
-    <path d="M117 330H457Q469 330 469 342V369H105V342Q105 330 117 330" fill="#F8F9F6"/>
-    <path d="M105 369H469" stroke="#E4E8E0"/>
-    <circle cx="122" cy="349" r="4" fill="#EE827A"/><circle cx="136" cy="349" r="4" fill="#E8C76B"/><circle cx="150" cy="349" r="4" fill="#87BF85"/>
-    <rect x="185" y="339" width="233" height="21" rx="5" fill="#EDEFEA"/><text x="300" y="354" font-size="10" text-anchor="middle">portal.example.com</text>
-    <rect x="121" y="383" width="27" height="27" rx="7" fill="#DFEADB"/><path d="M129 397L134 392L140 397L134 403Z" stroke="#668665" stroke-width="1.5"/>
-    <text x="158" y="400" font-size="15" font-weight="600">Рабочий портал</text>
-    <text x="121" y="431" font-size="11" class="muted">Мои проекты</text><text x="342" y="431" font-size="10" class="muted">Обновлено сегодня</text>
-    <rect x="121" y="441" width="330" height="42" rx="5" fill="#F4F6F0"/><circle cx="141" cy="462" r="8" fill="#D3E1CC"/>
-    <text x="158" y="459" font-size="11" font-weight="500">Командное пространство</text><text x="158" y="474" font-size="10" class="muted">Документы, задачи, встречи</text>
-  </g>
-  <path d="M469 417H587Q611 417 611 393V356Q611 332 635 332H803Q826 332 826 356V411H915" stroke="#4E7856" stroke-width="3.5" stroke-linecap="round"/>
-  <circle cx="527" cy="417" r="5" fill="#4E7856" stroke="#F2F4ED" stroke-width="3"/>
-  <path d="M906 406L915 411L906 416" stroke="#4E7856" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <g transform="translate(651 297)"><rect width="150" height="68" rx="12" fill="url(#green)"/>
-    <path d="M17 34H29L40 23H45M29 34L40 45H45" stroke="#BBDFAB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="30" width="8" height="8" rx="2" fill="#C7E5B9"/>
-    <text x="62" y="31" font-size="20" font-weight="600" style="fill:#fff">ocbar</text><text x="62" y="49" font-size="10" style="fill:#C7DEBD">OpenConnect</text>
-  </g>
-  <text x="652" y="391" class="mono" font-size="12" fill="#4E7856">10.20.0.0/16</text>
-  <g transform="translate(940 373)">
-    <path d="M0 20L39 0L78 20L39 40Z" fill="#DCE8D4" stroke="#ACC2A6"/><path d="M0 20V63L39 83V40Z" fill="#BACCAC" stroke="#ACC2A6"/><path d="M39 40L78 20V63L39 83Z" fill="#E8EFDF" stroke="#ACC2A6"/>
-    <path d="M48 45L68 35V61L48 71Z" fill="#8AAC83"/><path d="M53 45L63 40M53 52L63 47M53 59L63 54" stroke="#E8EFDF" stroke-width="2"/>
-  </g>
-  <text x="1040" y="404" class="heading">Работа</text><text x="1040" y="425" class="body muted">Сеть компании</text>
-  <text x="105" y="520" class="small muted">02 / ВЫБРАННАЯ РАБОЧАЯ СЕТЬ</text>
-</g>
-
-<g class="route-lan">
-  <g filter="url(#shadow)">
-    <rect x="62" y="551" width="377" height="134" rx="12" fill="white" stroke="#D0D8CE"/>
-    <path d="M74 551H427Q439 551 439 563V588H62V563Q62 551 74 551" fill="#F8F9F6"/>
-    <circle cx="79" cy="570" r="4" fill="#EE827A"/><circle cx="93" cy="570" r="4" fill="#E8C76B"/><circle cx="107" cy="570" r="4" fill="#87BF85"/>
-    <path d="M135 567L131 571L135 575M149 567L153 571L149 575" stroke="#A2ACA1" stroke-width="1.3"/>
-    <text x="188" y="575" font-size="12" font-weight="600">Домашний NAS</text><path d="M398 566H414M398 571H414M398 576H414" stroke="#A2ACA1"/>
-    <path d="M62 588H439" stroke="#E4E8E0"/>
-    <path d="M62 588H170V685H74Q62 685 62 673Z" fill="#EEF0EA"/>
-    <text x="77" y="608" font-size="9" class="muted">МЕСТА</text><rect x="71" y="618" width="92" height="23" rx="5" fill="#DDE5D7"/>
-    <text x="81" y="633" font-size="10">▣ Домашний NAS</text><text x="81" y="660" font-size="10" class="muted">▱ Документы</text>
-    <g fill="#9AC8E1" stroke="#82B4D0"><path d="M190 612H207L212 617H233V644H190Z"/><path d="M257 612H274L279 617H300V644H257Z"/><path d="M324 612H341L346 617H367V644H324Z"/></g>
-    <g font-size="10" text-anchor="middle"><text x="212" y="661">Фото</text><text x="278" y="661">Архив</text><text x="345" y="661">Проекты</text></g>
-  </g>
-  <path d="M439 617H653Q678 617 678 591V566Q678 548 697 548H891Q914 548 914 571V610H989" stroke="#AD9671" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="527" cy="617" r="5" fill="#AD9671" stroke="#F2F4ED" stroke-width="3"/>
-  <path d="M980 605L989 610L980 615" stroke="#AD9671" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="735" y="528" width="130" height="41" rx="8" fill="#F4EEE3" stroke="#D7C9AD"/><circle cx="753" cy="548" r="5" fill="#AD9671"/>
-  <text x="767" y="546" font-size="12" font-weight="600">Напрямую</text><text x="767" y="560" font-size="10" fill="#AD9671">локальная сеть / LAN</text>
-  <text x="722" y="603" class="mono" font-size="12" fill="#AD9671">192.168.50.20</text>
-  <g transform="translate(1010 572)"><path d="M0 20L34 3L68 20L34 37Z" fill="#ECE2D0" stroke="#C9B797"/><path d="M0 20V63L34 80V37Z" fill="#D7C9AE" stroke="#C9B797"/><path d="M34 37L68 20V63L34 80Z" fill="#F5EDDD" stroke="#C9B797"/><path d="M43 43L59 35V58L43 66Z" fill="#C8B48F"/><path d="M47 46L55 42M47 52L55 48" stroke="#F5EDDD"/><circle cx="55" cy="57" r="2" fill="#78966A"/></g>
-  <text x="1100" y="611" class="heading">NAS</text><text x="1100" y="632" class="body muted">Дома</text>
-</g>
-<text x="45" y="718" font-size="10" class="muted">Линии показывают трафик по адресам назначения. Окна — иллюстрация, не интерфейс ocbar.</text>
-</svg>
-
-
-      </div>
-      <div class="mobile-key" aria-label="Маршруты примера"><div class="legend"><i style="background:var(--personal)"></i>Видео <span class="trail">→ личный VPN</span></div><div class="legend"><i></i>Рабочий портал <span class="trail">→ ocbar / 10.20.0.0/16</span></div><div class="legend"><i style="background:var(--lan)"></i>Домашний NAS <span class="trail">→ LAN / 192.168.50.20</span></div></div>
-      <div class="caption"><p id="route-caption" aria-live="polite">Один Mac. Три назначения. Три пути.</p><p>Иллюстрация с демо-данными</p></div>
-      <aside class="personal-examples" aria-label="Примеры личного подключения"><div class="examples-title">Личное подключение — на ваш выбор</div><div class="client-tiles"><div><b class="client-monogram">TUN</b><span><strong>TUN-клиент</strong><small>Забирает маршруты на себя</small></span></div><div><b class="client-monogram">PRX</b><span><strong>Прокси-клиент</strong><small>Только настроенные приложения</small></span></div><div><b class="client-monogram">WG</b><span><strong>WireGuard</strong><small>И другие клиенты</small></span></div></div><p>Примеры сторонних клиентов и технологий. Настраиваются отдельно; совместная работа зависит от маршрутов и DNS. Клиент в режиме TUN забирает маршруты на себя, в режиме прокси — только настроенные приложения.</p></aside>
-      <p class="conditions">Пример предполагает отсутствие конфликтов маршрутов и DNS. ocbar управляет одной собственной сессией; личный VPN настраивается отдельно. Путь выбирается по сети или адресу назначения, а не по приложению.</p>
-    </section>
-
-    <section class="story" id="routes" aria-labelledby="routes-title">
-      <div class="section-head"><div><div class="eyebrow">01 / Маршруты</div><h2 id="routes-title">Рабочий VPN.<br>В нужных границах.</h2></div><p>В ocbar задайте сети, которым нужен рабочий туннель. Личный интернет и домашние устройства продолжат использовать свои маршруты.</p></div>
-      <figure class="brand-comparison"><div class="comparison-scroll" tabindex="0" aria-label="Сравнение Cisco AnyConnect и ocbar, на телефоне можно прокрутить"><img src="../assets/cisco-ocbar-ru.svg" width="1100" height="470" alt="Иллюстрация: Cisco AnyConnect с профилем полного туннеля и ocbar с выбранной рабочей сетью"></div><figcaption>Иллюстрация конфигураций, не скриншот. Cisco AnyConnect также поддерживает <a href="https://www.cisco.com/c/en/us/support/docs/security/anyconnect-secure-mobility-client/119006-configure-anyconnect-00.html">split tunneling</a>. Здесь показан профиль с полным туннелем; доступ к LAN зависит от настроек.</figcaption></figure><div class="comparison">
-        <div><div class="modes" role="tablist" aria-label="Сравнить маршрутизацию"><button id="selected-tab" type="button" role="tab" data-mode="selected" aria-selected="true" aria-controls="compare-panel"><span>ВЫБРАННЫЕ СЕТИ</span>Только рабочие адреса<br>через ocbar</button><button id="all-tab" type="button" role="tab" data-mode="all" aria-selected="false" aria-controls="compare-panel" tabindex="-1"><span>ПРИМЕР FULL TUNNEL</span>Cisco AnyConnect<br>Весь интернет через VPN</button></div><p class="compare-note" id="mode-copy">Выбран рабочий диапазон 10.20.0.0/16. Личный VPN и LAN — отдельные маршруты.</p></div>
-        <div class="compare-map" id="compare-panel" role="tabpanel" aria-labelledby="selected-tab" data-mode="selected"><div class="traffic-row"><span class="origin">Видео</span><span class="rail"><span class="node" id="internet-node">Личный VPN</span></span><span class="destination">Внешний сервис</span></div><div class="traffic-row"><span class="origin">Портал</span><span class="rail work"><span class="node" id="work-node">ocbar</span></span><span class="destination">10.20.0.0/16</span></div><div class="traffic-row"><span class="origin">Finder</span><span class="rail lan"><span class="node">Напрямую / LAN</span></span><span class="destination">Домашний NAS</span></div></div>
-      </div>
-      <p class="notice">Схематическое сравнение настроек. Полный туннель здесь означает профиль, направляющий интернет-трафик через VPN; доступ к LAN зависит от маршрутов профиля.</p>
-    </section>
-
-    <section class="story" id="dns" aria-labelledby="dns-title">
-      <div class="section-head"><div><div class="eyebrow">02 / Имена и адреса</div><h2 id="dns-title">Сначала найти.<br>Потом соединить.</h2></div><p>Split DNS направляет запросы рабочих имён к корпоративному DNS. Внешние имена разрешаются обычным резолвером. Маршруты определяют путь самого трафика.</p></div>
-      <img class="diagram" src="../assets/dns-ru.svg" alt="Пример split DNS: portal.example.com запрашивается у корпоративного DNS, example.org — у обычного резолвера. К найденному рабочему адресу трафик идёт через ocbar.">
-      <div class="dns-mobile" aria-label="Split DNS: поиск имени и маршрут к адресу"><article><strong>portal.example.com</strong><div class="dns-query">Запрос имени ↓<br>Корпоративный DNS<br>Ответ: <code>10.20.8.12</code></div><div class="dns-traffic"><span>Трафик к IP</span><b>→ ocbar → работа</b></div></article><article><strong>example.org</strong><div class="dns-query">Запрос имени ↓<br>Обычный резолвер<br>Ответ: внешний IP</div><div class="dns-traffic"><span>Трафик к IP</span><b>→ обычный маршрут</b></div></article></div><div class="dns-details"><span><strong>Пунктир</strong> — запрос имени</span><span><strong>Сплошная линия</strong> — трафик к IP</span><span>Рабочие DNS-зоны и серверы задаются в профиле.</span></div>
-    </section>
-
-    <section class="story" id="app" aria-labelledby="app-title">
-      <div class="section-head"><div><div class="eyebrow">03 / В строке меню</div><h2 id="app-title">Маршруты на карте.<br>Управление под рукой.</h2></div><p>Профили, подключение и логи — в строке меню macOS. Параметры сети собраны в редакторе профиля. Настоящие скриншоты ocbar с демонстрационными данными.</p></div>
-      <div class="screens"><figure class="screenshot"><span class="screen-label">A / ПОДКЛЮЧЕНИЕ</span><a href="../assets/menu-ru.png" target="_blank" rel="noopener" aria-label="Открыть скриншот меню ocbar крупнее"><img src="../assets/menu-ru.png" alt="Настоящее меню ocbar в светлой теме macOS" loading="lazy" width="1560" height="1221"></a><figcaption>Выбрать профиль, подключиться, открыть логи.</figcaption></figure><figure class="screenshot"><span class="screen-label">B / ПРОФИЛЬ</span><a href="../assets/profile-ru.png" target="_blank" rel="noopener" aria-label="Открыть скриншот редактора профиля ocbar крупнее"><img src="../assets/profile-ru.png" alt="Настоящий редактор профиля ocbar в светлой теме macOS" loading="lazy" width="2096" height="1416"></a><figcaption>Настройки подключения, выбранные маршруты и DNS.</figcaption></figure></div>
-      <div class="details-row">
-        <article><svg class="mini" viewBox="0 0 220 90" fill="none" aria-hidden="true"><rect x="6" y="12" width="62" height="63" rx="6" fill="#EEF2E7" stroke="#C6D4BA"/><path d="M42 12V28H68" stroke="#C6D4BA"/><text x="15" y="51" font-size="10" fill="#4E7856" font-family="monospace">.ocbar</text><path d="M83 45H127M119 39L127 45L119 51" stroke="#91A381" stroke-width="2"/><circle cx="165" cy="33" r="12" fill="#D3DFC8"/><path d="M144 68C144 45 186 45 186 68" fill="#E4EBD9" stroke="#BDCFAC"/><path d="M193 64L200 71L214 57" stroke="#73945E" stroke-width="2"/></svg><h3>Профиль — коллеге</h3><p>Файл <code>.ocbar</code> передаёт настройки подключения. Коллега входит в свою учётную запись сам.</p></article>
-        <article><svg class="mini" viewBox="0 0 220 90" fill="none" aria-hidden="true"><rect x="8" y="19" width="68" height="49" rx="7" fill="#EEF2E7" stroke="#C6D4BA"/><text x="22" y="48" font-family="monospace" font-size="12" fill="#698257">&gt;_ CSD</text><path d="M90 44H132M124 38L132 44L124 50" stroke="#91A381" stroke-width="2"/><path d="M148 16H193V70H148Z" fill="#E2E9D8" stroke="#BACDA9"/><path d="M148 27H193M148 58H193" stroke="#BACDA9"/><text x="151" y="46" font-size="9" fill="#698257" font-family="monospace">gateway</text></svg><h3>Свой CSD wrapper</h3><p>Можно указать пользовательский wrapper для проверки окружения. Решение о допуске принимает шлюз.</p></article>
-        <article><svg class="mini" viewBox="0 0 220 90" fill="none" aria-hidden="true"><rect x="6" y="21" width="67" height="44" rx="7" fill="#EEF2E7" stroke="#C6D4BA"/><text x="19" y="48" font-size="11" fill="#698257" font-family="monospace">SOCKS</text><path d="M87 43H123" stroke="#91A381" stroke-width="2"/><rect x="126" y="21" width="84" height="44" rx="7" fill="#E2E9D8" stroke="#BACDA9"/><text x="138" y="48" font-size="11" fill="#698257" font-family="monospace">ocproxy</text></svg><h3>Локальный SOCKS</h3><p>С <code>ocproxy</code> и <code>SystemProxy=off</code>: без root, системных маршрутов и изменения DNS. Приложение настраивается на SOCKS отдельно.</p></article>
-      </div>
-    </section>
-
-    <section class="story open-story" aria-labelledby="source-title"><div><div class="eyebrow">04 / Можно заглянуть внутрь</div><h2 id="source-title">Понятно не только<br>снаружи.</h2><p>Исходный код открыт под MIT. Можно изучить, как устроены подключение, маршруты и DNS, а логи помогают разобраться в конкретной сессии.</p><a class="source-link" href="https://github.com/ValeraGin/ocbar">Открыть исходники на GitHub ↗</a></div><img src="../assets/open-source-ru.svg" alt="Непрозрачный блок рядом с разложенной на доступные для изучения слои программой" loading="lazy"></section>
-</div></main><section class="closing"><div class="wrap"><div><span class="eyebrow">OCBAR / MACOS / OPENCONNECT</span><h2>Работа подключена.<br><em>Ваш Mac остаётся вашим.</em></h2></div><a class="lime-button" href="guide/">Начать с установки ↗</a></div></section><footer class="site-footer wrap"><a class="brand" href="#top"><img src="../assets/icon.svg" width="30" height="30" alt="">ocbar</a><nav aria-label="Ссылки проекта"><a href="guide/">Установка</a><a href="https://github.com/ValeraGin/ocbar">Исходный код</a><a href="https://github.com/ValeraGin/ocbar/issues">Обратная связь</a></nav><p>Для вашего совместимого VPN-шлюза. Открытый код · MIT.</p></footer><script src="../landing.js?v=20261016"></script></body></html>
+</head>
+<body>
+<a class="skip" href="#content">Перейти к содержимому</a>
+<header class="top wrap">
+  <a class="brand" href="./"><img src="../assets/icon.svg" width="28" height="28" alt="">ocbar</a>
+  <nav><a href="https://github.com/ValeraGin/ocbar">GitHub</a><span class="languages" aria-label="Язык"><a href=".././" lang="en" >EN</a> / <a href="../ru/" lang="ru" aria-current="page">RU</a></span></nav>
+</header>
+<main id="content" class="wrap">
+  <section class="hero">
+    <div>
+      <h1>Рабочий VPN в строке меню Mac</h1>
+      <p class="lead">Открытый клиент для AnyConnect-совместимых шлюзов на основе OpenConnect.</p>
+      <p class="actions"><a class="button" href="#install">Установить</a><a class="link" href="https://github.com/ValeraGin/ocbar">Исходники на GitHub ↗</a></p>
+    </div>
+    <figure><img src="../assets/demo-ru.gif" width="373" height="595" alt="Меню ocbar: подключение, выключение сети, пауза"><figcaption>Настоящее меню на демо-профиле.</figcaption></figure>
+  </section>
+  <section class="pros" aria-label="Чем удобен">
+    <div><h2>Пароль и код подставляются сами</h2><p>Логин, пароль и одноразовый код из Связки ключей, KeePassXC или своей команды. Окно входа появляется, только когда без человека не обойтись.</p></div>
+    <div><h2>Сети выбираешь ты, а не админ</h2><p>В туннель идут только сети из твоего профиля. Остальное, включая домашнюю сеть, идёт обычным путём. Сети переключаются прямо в меню, без переподключения.</p></div>
+    <div><h2>Умный DNS: свой и корпоративный сразу</h2><p>Рабочие домены спрашивают корпоративный DNS, всё остальное — твой обычный. Системный DNS не подменяется.</p></div>
+    <div><h2>Приложение, а не консоль</h2><p>Нативное меню macOS: подключиться, поставить на паузу, переключить сети, посмотреть журналы. Мастер настройки и редактор профиля; командная строка — для автоматизации.</p></div>
+    <div><h2>Переживает сон и смену сети</h2><p>Супервизор сам восстанавливает соединение после сна, смены Wi-Fi и обрыва связи и не открывает окно входа без спроса.</p></div>
+  </section>
+  <section class="install" id="install">
+    <h2>Установка</h2>
+    <div class="code"><pre id="commands">brew tap ValeraGin/ocbar
+brew trust ValeraGin/ocbar
+brew install ocbar
+sudo ocbar install
+ocbar app start</pre><button type="button" id="copy" data-done="Скопировано">Копировать</button></div>
+    <p>Homebrew собирает ocbar на твоём Mac. Команда с sudo ставит сетевого помощника, дальше мастер настройки добавит шлюз.</p>
+    <p class="muted">macOS 13+ · Command Line Tools · свой AnyConnect-совместимый шлюз</p>
+    <p><a class="link" href="guide/">Установка и первое подключение →</a></p>
+  </section>
+</main>
+<footer class="wrap">
+  <a href="https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.md">Если не работает</a>
+  <a href="https://github.com/ValeraGin/ocbar">GitHub</a>
+  <span>MIT · без телеметрии</span>
+  <span>Не связан с Cisco. AnyConnect обозначает совместимость протокола.</span>
+</footer>
+<script>
+document.getElementById("copy").addEventListener("click", function () {
+  var button = this, text = document.getElementById("commands").textContent;
+  var done = function () { var label = button.textContent; button.textContent = button.dataset.done; setTimeout(function () { button.textContent = label; }, 1600); };
+  var select = function () { var range = document.createRange(); range.selectNodeContents(document.getElementById("commands")); var selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, select); else select();
+});
+</script>
+</body>
+</html>
