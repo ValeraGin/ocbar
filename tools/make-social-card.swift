@@ -1,25 +1,42 @@
 import AppKit
-let size=NSSize(width:1200,height:630)
-let rep=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:1200,pixelsHigh:630,bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
+// Карточка для ссылок 1200×630: заголовок лендинга и настоящее меню.
+//   swift tools/make-social-card.swift <en|ru> <menu.png> <out-без-расширения>
+// Обычно её зовёт tools/social-card.sh: он же снимает меню из витрины.
+let args = CommandLine.arguments
+guard args.count == 4 else { print("usage: make-social-card.swift <en|ru> <menu.png> <out>"); exit(2) }
+let (lang, menuPath, out) = (args[1], args[2], args[3])
+let text: [String: (String, String, String)] = [
+    "en": ("Same AnyConnect VPN.", "Your rules.", "Open-source client for macOS · built on OpenConnect"),
+    "ru": ("Тот же AnyConnect.", "Твои правила.", "Открытый клиент для macOS · на основе OpenConnect"),
+]
+guard let (first, second, footer) = text[lang], let menu = NSImage(contentsOfFile: menuPath) else { exit(2) }
+let size = NSSize(width: 1200, height: 630)
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1200, pixelsHigh: 630, bitsPerSample: 8,
+                           samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                           bytesPerRow: 0, bitsPerPixel: 0)!
 NSGraphicsContext.saveGraphicsState()
-NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:rep)
-func color(_ hex:UInt32)->NSColor{NSColor(srgbRed:CGFloat((hex>>16)&255)/255,green:CGFloat((hex>>8)&255)/255,blue:CGFloat(hex&255)/255,alpha:1)}
-color(0x17201D).setFill();NSRect(origin:.zero,size:size).fill()
-let lime=color(0xC3F36B), paper=color(0xF4F6ED)
-func label(_ text:String,_ x:CGFloat,_ y:CGFloat,_ font:NSFont,_ c:NSColor){(text as NSString).draw(at:NSPoint(x:x,y:y),withAttributes:[.font:font,.foregroundColor:c])}
-NSImage(contentsOfFile:"app/Resources/AppIcon.icns")!.draw(in:NSRect(x:55,y:480,width:100,height:100))
-label("ocbar",165,505,.systemFont(ofSize:44,weight:.semibold),paper)
-label("Three routes.",70,310,NSFont(name:"Georgia",size:84)!,paper)
-label("One Mac.",70,210,NSFont(name:"Georgia-Italic",size:84)!,lime)
-label("OPENCONNECT FOR MACOS  /  OPEN SOURCE · MIT",74,65,.monospacedSystemFont(ofSize:17,weight:.regular),color(0xACB7AA))
-let lines:[(CGFloat,UInt32,String)]=[(410,0x7787B4,"Personal VPN"),(315,0xC3F36B,"Work / ocbar"),(220,0xAD9671,"Home NAS")]
-for(y,hex,title) in lines{
- color(hex).setStroke();let path=NSBezierPath();path.move(to:NSPoint(x:760,y:315));path.line(to:NSPoint(x:850,y:y));path.line(to:NSPoint(x:1105,y:y));path.lineWidth=3;path.stroke()
- color(0x17201D).setFill();NSRect(x:880,y:y-18,width:190,height:38).fill()
- label(title,890,y-9,.monospacedSystemFont(ofSize:19,weight:.medium),color(hex))
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+func color(_ hex: UInt32) -> NSColor {
+    NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255, green: CGFloat((hex >> 8) & 255) / 255,
+            blue: CGFloat(hex & 255) / 255, alpha: 1)
 }
-lime.setFill();NSBezierPath(roundedRect:NSRect(x:742,y:297,width:36,height:36),xRadius:7,yRadius:7).fill()
+func label(_ s: String, _ x: CGFloat, _ y: CGFloat, _ font: NSFont, _ c: NSColor) {
+    (s as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: [.font: font, .foregroundColor: c])
+}
+// Фон — как у страницы и анимации, чтобы карточка и сайт были одним целым.
+color(0xEEF0EA).setFill(); NSRect(origin: .zero, size: size).fill()
+let ink = color(0x17201D), muted = color(0x56605A)
+NSImage(contentsOfFile: "app/Resources/AppIcon.icns")!.draw(in: NSRect(x: 62, y: 500, width: 76, height: 76))
+label("ocbar", 150, 517, .systemFont(ofSize: 38, weight: .semibold), ink)
+let headline = NSFont.systemFont(ofSize: 62, weight: .bold)
+label(first, 66, 330, headline, ink)
+label(second, 66, 252, headline, ink)
+color(0xC3F36B).setFill()
+NSBezierPath(roundedRect: NSRect(x: 70, y: 214, width: 120, height: 12), xRadius: 6, yRadius: 6).fill()
+label(footer, 70, 70, .systemFont(ofSize: 22, weight: .regular), muted)
+// Меню справа, по высоте карточки с полями, прижато к верхнему краю, как в строке меню.
+let height: CGFloat = 520, width = menu.size.width * height / menu.size.height
+menu.draw(in: NSRect(x: 1200 - 56 - width, y: 630 - 56 - height, width: width, height: height))
 NSGraphicsContext.restoreGraphicsState()
-let dir="website/dist/assets/"
-try rep.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:dir+"social-card.png"))
-try rep.representation(using:.jpeg,properties:[.compressionFactor:0.9])!.write(to:URL(fileURLWithPath:dir+"social-card.jpg"))
+try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out + ".png"))
+try rep.representation(using: .jpeg, properties: [.compressionFactor: 0.88])!.write(to: URL(fileURLWithPath: out + ".jpg"))

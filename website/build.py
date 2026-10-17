@@ -3,6 +3,7 @@
 import argparse
 import html
 import json
+import re
 import shutil
 from pathlib import Path
 from string import Template
@@ -23,7 +24,8 @@ def metadata(page, base, canonical_suffix, alternatives):
     for code, suffix in alternatives:
         tags += f'<link rel="alternate" hreflang="{code}" href="{html.escape(site_url + suffix)}">\n'
     page = page.replace('</head>', tags + '</head>')
-    return page.replace('content="' + base + 'assets/social-card.jpg"', 'content="' + html.escape(site_url) + 'assets/social-card.jpg"')
+    return re.sub(r'content="' + re.escape(base) + r'(assets/social-card[-a-z]*\.jpg)"',
+                  lambda m: 'content="' + html.escape(site_url) + m.group(1) + '"', page)
 
 # Язык: английская страница — по умолчанию; если в браузере русский стоит раньше
 # английского, она сразу уводит на русскую. Выбор в переключателе EN/RU запоминается

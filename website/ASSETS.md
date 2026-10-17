@@ -10,10 +10,11 @@ The landing shows the real menu as an animation (`tools/demo-gif.sh`, demo profi
 The earlier route atlas, split-DNS, Cisco comparison and open-source illustrations
 remain only in `next/` and `concepts/`. No third-party stock images or remote fonts.
 
-`social-card.png` and its JPEG delivery copy use the new switch, typography and
-three route lines. Regenerate them from the repository root with
-`swift tools/make-social-card.swift`. They are programmatically drawn marketing artwork, not a
-screenshot. PNG is the master; JPEG is the web/Open Graph delivery asset.
+`social-card-en` and `social-card-ru` (PNG master, JPEG for Open Graph) show the
+landing headline and the real menu on the demo profile, connected. `social-card.*`
+is the English copy, also used as the GitHub social preview. Regenerate all of them
+from the repository root with `tools/social-card.sh` (draws with
+`tools/make-social-card.swift`), then upload the English PNG to GitHub settings.
 
 The menu and profile PNGs are actual native app renders from the rebranded
 build in `--stage` mode, with synthetic profiles. Website images use light
