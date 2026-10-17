@@ -24,6 +24,20 @@ def metadata(page, base, canonical_suffix, alternatives):
     page = page.replace('</head>', tags + '</head>')
     return page.replace('content="' + base + 'assets/social-card.jpg"', 'content="' + html.escape(site_url) + 'assets/social-card.jpg"')
 
+# Язык: английская страница — по умолчанию; если в браузере русский стоит раньше
+# английского, она сразу уводит на русскую. Выбор в переключателе EN/RU запоминается
+# и важнее браузера. Русская страница не уводит никуда: ссылку на /ru/ дают нарочно.
+# Скрипт в <head>, чтобы английская версия не мелькала перед переходом.
+LANGUAGE_SCRIPT = '''<script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
+try{c=localStorage.getItem(k)}catch(e){}
+document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
+if(a)try{localStorage.setItem(k,a.lang)}catch(e){}});
+if(d.lang!=="en")return;
+var w=c;if(!w){var l=navigator.languages||[navigator.language||""];
+for(var i=0;i<l.length;i++){var p=String(l[i]).toLowerCase().split("-")[0];if(p==="ru"||p==="en"){w=p;break}}}
+if(w==="ru")location.replace("%s"+location.hash)})()</script>
+'''
+
 for lang in ('en', 'ru'):
     content = json.loads((ROOT / f'src/{lang}.json').read_text())
     content = {k: html.escape(v, quote=True).replace('&lt;br&gt;', '<br>').replace('&lt;span&gt;', '<span>').replace('&lt;/span&gt;', '</span>') for k, v in content.items()}
@@ -37,6 +51,7 @@ for lang in ('en', 'ru'):
             en_current='aria-current="page"' if lang == 'en' else '',
             ru_current='aria-current="page"' if lang == 'ru' else '')
         variants = [('en', 'guide/'), ('ru', 'ru/guide/'), ('x-default', 'guide/')] if guide else [('en', ''), ('ru', 'ru/'), ('x-default', '')]
+        page = page.replace('</head>', LANGUAGE_SCRIPT % (base + 'ru/' + ('guide/' if guide else '')) + '</head>', 1)
         page = metadata(page, base, suffix, variants)
         dest = ROOT / 'dist' / suffix / 'index.html'
         dest.parent.mkdir(parents=True, exist_ok=True)

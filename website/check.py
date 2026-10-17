@@ -47,6 +47,7 @@ for path in DIST.rglob('*.html'):
     assert page.meta.get('description'), f'{path}: missing description'
     assert page.meta.get('og:image'), f'{path}: missing share card'
     assert page.meta.get('twitter:card') == 'summary_large_image'
+    assert '"ocbar-lang"' in path.read_text(), f'{path}: missing language detection'
 
 for path in (DIST / 'assets').glob('*.svg'):
     ET.parse(path)
