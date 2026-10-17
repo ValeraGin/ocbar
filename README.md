@@ -86,12 +86,14 @@ directories, and it only touches what it created itself. See
   proxy with no routes, no DNS changes and no root at all.
 - **English and Russian**: the app, the sign-in windows and CLI messages
   follow the system language.
-- **Menu bar app**: a status card with the profile, its address and one action
-  button (Connect, Disconnect, Sign in, Resume), traffic, and network and zone
-  toggles on a second page. Settings hold the profiles (chosen and switched
-  there), the profile editor, notification settings and diagnostics with
-  logs; a first-run wizard walks through system component → profile → first
-  login.
+- **Menu bar app**: a menu like the system Wi‑Fi and Bluetooth modules — a VPN
+  switch in the header, profiles as rows (the connected one shows its session
+  time and speed; click another to connect it), networks and DNS zones as
+  checkmarks that expand in place, pause and the usual commands below. Hold ⌥
+  while opening it for connection details: tunnel address, gateway, MTU,
+  resolvers, traffic, latency. Settings hold the profile editor, notification
+  settings and diagnostics with logs; a first-run wizard walks through system
+  component → profile → first login.
 
 ## Try it without a VPN
 

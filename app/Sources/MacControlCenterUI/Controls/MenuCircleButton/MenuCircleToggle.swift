@@ -425,7 +425,11 @@ public struct MenuCircleToggle<Label: View>: View {
     }
 
     private var buttonForeColor: Color {
+        // ocbar: значок без круга (галочка) — цветом текста, иначе в светлой
+        // теме белая галочка пропадает на светлом фоне меню.
         let base: Color = switch isOn {
+        case true where !style.hasColor:
+            Color(NSColor.textColor)
         case true:
             switch colorScheme {
             case .dark:

@@ -3,6 +3,20 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.19.0 — 2026-10-18
+
+- The menu looks and behaves like the system Wi‑Fi and Bluetooth modules: a VPN
+  switch in the header, profiles as rows with a round icon (click another profile
+  to connect it), networks and DNS zones as checkmarks that expand in place, and
+  plain menu commands below. The connected profile shows its session time and
+  download speed; the traffic chart and the second "Networks and DNS" page are gone.
+- Hold ⌥ while opening the menu for connection details: tunnel address, gateway,
+  MTU, resolvers, total traffic, latency and the access check.
+- The menu uses the system accent colour and the standard menu width.
+- Menu components come from MacControlCenterUI 2.7.4 (MIT), vendored in
+  `app/Sources/MacControlCenterUI` so the Homebrew build still needs no network.
+- README screenshots, the animation and the social cards show the new menu.
+
 ## 0.18.0 — 2026-10-16
 
 Needs `sudo ocbar install` once: the privileged helper is now 0.8.3.

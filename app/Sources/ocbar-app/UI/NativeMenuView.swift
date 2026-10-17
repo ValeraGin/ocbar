@@ -15,6 +15,9 @@ struct NativeMenuView: View {
     @State private var optionHeld = false
     @State private var flagsMonitor: Any?
 
+    /// Сведения о соединении без ⌥ — для кадров README.
+    var showDetails = false
+
     /// Ширина системных меню: по ней MenuProbe находит окно меню.
     static let width = MenuWidth.currentPlatform().width
 
@@ -66,11 +69,11 @@ struct NativeMenuView: View {
         }
         .background(shortcuts)
         .onAppear {
-            optionHeld = NSEvent.modifierFlags.contains(.option) || CommandLine.arguments.contains("--option")
+            optionHeld = showDetails || NSEvent.modifierFlags.contains(.option)
             if !stage {
                 Notifier.refreshAllowed()
                 flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-                    optionHeld = event.modifierFlags.contains(.option)
+                    optionHeld = showDetails || event.modifierFlags.contains(.option)
                     return event
                 }
             }

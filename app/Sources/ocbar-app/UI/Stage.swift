@@ -306,13 +306,14 @@ struct ScreenshotMenuView: View {
         return args.firstIndex(of: "--frame").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
     }()
 
+    // Без --frame — кадр для README: меню и оно же со сведениями (как с ⌥).
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
             if let frame {
                 single(frame)
             } else {
                 menu()
-                menu(expandDetails: true)
+                menu(details: true)
             }
         }
         .padding(24)
@@ -320,39 +321,26 @@ struct ScreenshotMenuView: View {
         .background(Color(nsColor: .underPageBackgroundColor))
     }
 
-    // Сценарий демо: отключено → подключение → подключено → сети и DNS →
-    // выключить сеть → пауза. Неизвестное имя — подключённое меню.
+    // Сценарий демо (tools/demo-gif.sh): отключено → подключение → подключено →
+    // выключить сеть → пауза. Остальные кадры — состояния для проверки глазами.
+    // Неизвестное имя — подключённое меню.
     @ViewBuilder private func single(_ name: String) -> some View {
         switch name {
-        case "down": menu(status: Fixture.status(.down), active: false)
-        case "connecting": menu(status: Fixture.status(.starting), active: false, busy: L("Подключаюсь…"))
-        case "networks": menu(expandDetails: true)
-        case "network-busy": menu(expandDetails: true, busy: L("Переключаю %@…", "172.16.0.0/12"))
-        case "network-off": menu(status: Self.withoutSecondRoute(), expandDetails: true)
-        case "pausing": menu(status: Self.withoutSecondRoute(), busy: L("Ставлю на паузу…"))
-        case "paused": menu(status: Fixture.status(.paused), active: false)
-        case "native-connected": native(Fixture.status(.connected))
-        case "native-paused": native(Fixture.status(.paused))
-        case "native-down": native(Fixture.status(.down))
-        case "native-starting": native(Fixture.status(.starting))
-        case "native-lost": native(Fixture.status(.lost))
-        case "native-login": native(Fixture.status(.needsLogin))
-        case "native-foreign": native(Fixture.status(.foreign))
-        case "native-missing": native(Fixture.status(.missing))
-        case "native-proxy": native(Fixture.proxy())
-        case "native-woke": native(Fixture.woke())
+        case "down": menu(Fixture.status(.down))
+        case "connecting": menu(Fixture.status(.starting), busy: L("Подключаюсь…"))
+        case "network-busy": menu(busy: L("Переключаю %@…", "172.16.0.0/12"))
+        case "network-off": menu(Self.withoutSecondRoute())
+        case "pausing": menu(Self.withoutSecondRoute(), busy: L("Ставлю на паузу…"))
+        case "paused": menu(Fixture.status(.paused))
+        case "details": menu(details: true)
+        case "lost": menu(Fixture.status(.lost))
+        case "login": menu(Fixture.status(.needsLogin))
+        case "foreign": menu(Fixture.status(.foreign))
+        case "missing": menu(Fixture.status(.missing))
+        case "proxy": menu(Fixture.proxy())
+        case "woke": menu(Fixture.woke())
         default: menu()
         }
-    }
-
-    // Пробное меню в духе Wi‑Fi/Bluetooth (NativeMenuView) на тех же демо-данных.
-    private func native(_ status: Status) -> some View {
-        NativeMenuView()
-            .environmentObject(StatusStore(preview: status, samples: Fixture.samples(active: true),
-                                           latency: "41 " + L("мс"), busy: nil, actionNote: nil))
-            .fixedSize(horizontal: false, vertical: true)
-            .background(RoundedRectangle(cornerRadius: 12).fill(.regularMaterial))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line))
     }
 
     private static func withoutSecondRoute() -> Status {
@@ -361,16 +349,13 @@ struct ScreenshotMenuView: View {
         return s
     }
 
-    private func menu(status: Status = Fixture.status(.connected), active: Bool = true,
-                      expandDetails: Bool = false, expandProfiles: Bool = false,
+    private func menu(_ status: Status = Fixture.status(.connected), details: Bool = false,
                       busy: String? = nil) -> some View {
-        MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles)
-            .environmentObject(StatusStore(preview: status,
-                                           samples: Fixture.samples(active: active),
+        NativeMenuView(showDetails: details)
+            .environmentObject(StatusStore(preview: status, samples: Fixture.samples(active: true),
                                            latency: "41 " + L("мс"), busy: busy, actionNote: nil))
             .fixedSize(horizontal: false, vertical: true)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .windowBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line))
     }
 }
-

@@ -10,7 +10,7 @@ app="$root/app/.build/ocbar.app/Contents/MacOS/ocbar-app"
 command -v ffmpeg >/dev/null && command -v magick >/dev/null \
     || { echo "demo-gif: нужны ffmpeg и magick (brew install ffmpeg imagemagick)" >&2; exit 1; }
 # Сценарий: кадр и сколько секунд он на экране.
-frames=(down:1.4 connecting:1.0 connected:1.8 networks:1.6 network-busy:0.7 network-off:1.6 pausing:0.7 paused:2.2)
+frames=(down:1.4 connecting:1.0 connected:2.2 network-busy:0.7 network-off:1.6 pausing:0.7 paused:2.2)
 bg="#EEF0EA"   # фон сайта, чтобы анимация не выглядела вырезанной
 tmp=$(mktemp -d /private/tmp/ocbar-demo.XXXXXX)
 trap 'rm -rf "$tmp"' EXIT
