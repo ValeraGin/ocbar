@@ -334,6 +334,13 @@ struct ScreenshotMenuView: View {
         case "native-connected": native(Fixture.status(.connected))
         case "native-paused": native(Fixture.status(.paused))
         case "native-down": native(Fixture.status(.down))
+        case "native-starting": native(Fixture.status(.starting))
+        case "native-lost": native(Fixture.status(.lost))
+        case "native-login": native(Fixture.status(.needsLogin))
+        case "native-foreign": native(Fixture.status(.foreign))
+        case "native-missing": native(Fixture.status(.missing))
+        case "native-proxy": native(Fixture.proxy())
+        case "native-woke": native(Fixture.woke())
         default: menu()
         }
     }

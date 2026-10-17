@@ -39,6 +39,11 @@ public enum MacControlCenterMenuBuilder {
         [expression]
     }
 
+    // ocbar: группа пунктов из вспомогательного свойства с тем же построителем.
+    public static func buildExpression(_ expression: [any View]) -> [any View] {
+        expression
+    }
+
     public static func buildExpression(_ expression: Void) -> [any View] {
         [any View]()
     }

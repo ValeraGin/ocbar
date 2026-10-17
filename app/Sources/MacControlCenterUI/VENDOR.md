@@ -13,3 +13,5 @@ SwiftUI-компоненты в стиле меню Пункта управле�
 - убран импорт `MenuBarExtraAccess` (`MacControlCenterUI.swift`,
   `Menu/MacControlCenterMenu.swift`, `Menu Abstracts/MenuBody.swift`): привязку
   «меню открыто» ocbar передаёт сам.
+- `MacControlCenterMenuBuilder` принимает массив пунктов (`buildExpression([any View])`):
+  меню ocbar собирает секции во вспомогательных свойствах.

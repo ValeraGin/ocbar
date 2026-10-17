@@ -503,3 +503,8 @@
 "UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути" = "UpstreamProxy: use http://host:port or socks5://host:port without credentials or a path";
 "Прокси для подключения" = "Connection proxy";
 "HTTP CONNECT или SOCKS5 без пароля. Вход и VPN идут через этот прокси; DTLS выключается. Для SSO нужна macOS 14 или новее. Пусто — обычное подключение." = "HTTP CONNECT or SOCKS5 without credentials. Login and VPN use this proxy; DTLS is disabled. SSO requires macOS 14 or later. Leave empty for a normal connection.";
+"Подключение VPN" = "VPN connection";
+"Системный SOCKS: не включён" = "System-wide SOCKS: not on";
+"Системный SOCKS: выключен в профиле" = "System-wide SOCKS: off in the profile";
+"Системный SOCKS: включён на %@" = "System-wide SOCKS: on for %@";
+"Выйти из ocbar · туннель останется" = "Quit ocbar · the tunnel stays up";

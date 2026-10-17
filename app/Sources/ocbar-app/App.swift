@@ -15,7 +15,7 @@ struct OcbarApp: App {
 
     var body: some Scene {
         MenuBarExtra(isInserted: $inMenuBar) {
-            MenuView(nav: MenuView.MenuNav.shared).environmentObject(store)
+            NativeMenuView().environmentObject(store)
         } label: {
             Image(nsImage: MenuBarIcon.image(for: store.status))
         }

@@ -39,7 +39,7 @@ enum MenuProbe {
 
     /// Окно меню: то, чья ширина совпадает с шириной меню.
     private static func menuWindow() -> NSWindow? {
-        NSApp.windows.first { $0.isVisible && abs($0.frame.width - MenuView.width) < 2 }
+        NSApp.windows.first { $0.isVisible && abs($0.frame.width - NativeMenuView.width) < 2 }
     }
 
     private static var heights: [String: CGFloat] = [:]
@@ -85,7 +85,7 @@ enum MenuProbe {
         if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
         resizeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: nil, queue: nil) { note in
-            if let w = note.object as? NSWindow, abs(w.frame.width - MenuView.width) < 2 {
+            if let w = note.object as? NSWindow, abs(w.frame.width - NativeMenuView.width) < 2 {
                 resizes += 1
                 AppLog.write(String(format: "проверка меню: перестройка → h=%.0f верх=%.0f", w.frame.height, w.frame.maxY))
             }
