@@ -8,7 +8,7 @@
   "title": "ocbar — same AnyConnect VPN, your rules",
   "description": "Open-source client for AnyConnect-compatible VPN gateways on macOS: password and TOTP filled in for you, your own networks and DNS, a native menu instead of a terminal.",
   "h1": "Same AnyConnect VPN. Your rules.",
-  "lead": "An open-source client for AnyConnect-compatible gateways, built on OpenConnect.",
+  "lead": "Your networks, your DNS, your menu. Open source, built on OpenConnect.",
   "install_cta": "Install",
   "source_cta": "Source on GitHub",
   "demo_alt": "ocbar menu: connect, switch off a network, pause",
