@@ -155,7 +155,7 @@
 "Режим подключения" = "Connection mode";
 "Режим — свойство профиля: новый режим начнёт действовать со следующего подключения." = "The mode belongs to the profile: a new mode takes effect on the next connection.";
 "Порт" = "Port";
-"порт v2ray/Xray — часто занят" = "the v2ray/Xray port — often taken";
+"часто занят другим прокси-клиентом" = "often taken by another proxy client";
 "Включать системный SOCKS" = "Set the system-wide SOCKS proxy";
 "Параметры SOCKS" = "SOCKS settings";
 "Сети и DNS применяются только в режиме «Туннель»." = "Networks and DNS apply in Tunnel mode only.";
@@ -467,7 +467,7 @@
 "Dtls «%@» — on или off" = "Dtls “%@” — on or off";
 "прокси-режим: нужен ocproxy (brew install ocproxy); маршруты и зоны из профиля не применяются, ходят только программы, которым указан SOCKS" = "proxy mode: needs ocproxy (brew install ocproxy); the profile's networks and zones are not applied, only programs pointed at the SOCKS proxy get through";
 "порт SOCKS %@ вне диапазона 1024-65535" = "SOCKS port %@ is outside 1024-65535";
-"порт 10808 — SOCKS v2ray/Xray по умолчанию, часто занят — лучше другой" = "port 10808 is the default v2ray/Xray SOCKS port and is often taken — better pick another";
+"порт 10808 часто занят другим прокси-клиентом — лучше другой" = "port 10808 is often taken by another proxy client — better pick another";
 "порт SOCKS «%@» — не число" = "SOCKS port “%@” is not a number";
 "SystemProxy = «%@» — ocbar включает системный SOCKS только при on, так что сейчас это off" = "SystemProxy = “%@” — ocbar sets the system-wide SOCKS only for on, so this means off";
 "системный SOCKS имеет смысл только в прокси-режиме" = "the system-wide SOCKS only makes sense in proxy mode";

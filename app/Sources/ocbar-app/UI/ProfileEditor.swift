@@ -591,7 +591,7 @@ struct ProfileEditorView: View {
                 LabeledContent(L("Порт")) {
                     HStack(spacing: 8) {
                         if doc.proxyPort.trimmed == "10808" {
-                            Text(L("порт v2ray/Xray — часто занят")).font(.system(size: 11)).foregroundStyle(Palette.warn)
+                            Text(L("часто занят другим прокси-клиентом")).font(.system(size: 11)).foregroundStyle(Palette.warn)
                         }
                         TextField("", text: $doc.proxyPort, prompt: Text("11080"))
                             .labelsHidden().font(.ocMono).frame(width: 90)

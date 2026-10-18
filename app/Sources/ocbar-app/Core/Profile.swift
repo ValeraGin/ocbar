@@ -535,7 +535,7 @@ enum ProfileCheck {
         if !port.isEmpty {
             if digits(port, 1...5), let n = Int(port) {
                 if n < 1024 || n > 65535 { err(L("порт SOCKS %@ вне диапазона 1024-65535", n)) }
-                if n == 10808 { warn(L("порт 10808 — SOCKS v2ray/Xray по умолчанию, часто занят — лучше другой")) }
+                if n == 10808 { warn(L("порт 10808 часто занят другим прокси-клиентом — лучше другой")) }
             } else {
                 err(L("порт SOCKS «%@» — не число", port))
             }
