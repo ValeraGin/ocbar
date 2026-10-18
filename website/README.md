@@ -20,9 +20,6 @@ own templates and their existing URLs. `dist/landing.css` styles the landing,
 `assets/demo.gif` and `assets/ru/demo.gif` to `dist/assets/demo-{en,ru}.gif`; the page
 background matches the animation background `#EEF0EA`. Generated HTML is tracked.
 
-`next/` and `concepts/` preserve earlier, larger designs (route atlas, Cisco
-comparison, split-DNS diagrams). Neither directory is included in a production upload.
-
 ## Publish
 
 Main site — GitHub Pages: [English](https://valeragin.github.io/ocbar/) ·

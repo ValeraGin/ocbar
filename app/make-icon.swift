@@ -1,6 +1,6 @@
 #!/usr/bin/env swift
 //
-// Лаймовый свитч на графите. Та же геометрия в AppMark и website/next/assets/icon.svg.
+// Лаймовый свитч на графите. Та же геометрия в AppMark и website/dist/assets/icon.svg.
 // swift make-icon.swift <каталог.iconset>
 
 import AppKit

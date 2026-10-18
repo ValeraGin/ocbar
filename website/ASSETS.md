@@ -7,8 +7,7 @@ and `icon.svg` match the app's `app/make-icon.swift` and SwiftUI `AppMark`.
 Brand accent: #C3F36B. The image represents one input and two separate routes.
 
 The landing shows the real menu as an animation (`tools/demo-gif.sh`, demo profile).
-The earlier route atlas, split-DNS, Cisco comparison and open-source illustrations
-remain only in `next/` and `concepts/`. No third-party stock images or remote fonts.
+No third-party stock images or remote fonts.
 
 `social-card-en` and `social-card-ru` (PNG master, JPEG for Open Graph) show the
 landing headline and the real menu on the demo profile, connected. `social-card.*`

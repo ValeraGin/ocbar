@@ -372,7 +372,7 @@ struct TightLabel: LabelStyle {
 }
 
 // Лаймовый свитч: один вход и два независимых маршрута.
-// Геометрия соответствует website/next/assets/icon.svg и make-icon.swift.
+// Геометрия соответствует website/dist/assets/icon.svg и make-icon.swift.
 struct AppMark: View {
     var size: CGFloat = 22
 
