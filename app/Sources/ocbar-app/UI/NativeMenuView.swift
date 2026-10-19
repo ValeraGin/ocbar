@@ -14,6 +14,8 @@ struct NativeMenuView: View {
     // Подробности соединения — как у Wi‑Fi: меню, открытое с зажатой ⌥.
     @State private var optionHeld = false
     @State private var flagsMonitor: Any?
+    @State private var contentHeight: CGFloat = 0
+    @ObservedObject private var probe = MenuProbeState.shared
 
     /// Сведения о соединении без ⌥ — для кадров README.
     var showDetails = false
@@ -43,7 +45,8 @@ struct NativeMenuView: View {
             profilesSection
             MenuSection(divider: false) { banners }
             if store.cancelTitle != nil || [.needsLogin, .down, .foreign].contains(s.presentation) {
-                MenuSection(divider: false) { extraActions }
+                Divider()
+                extraActions
             }
             if look.details, s.isProxySession {
                 MenuSection(L("Прокси SOCKS")) { proxyDetails }
@@ -64,9 +67,23 @@ struct NativeMenuView: View {
             if optionHeld, look.details {
                 MenuSection(L("Сведения о соединении")) { connectionDetails }
             }
+            if probe.extra > 0 { Color.clear.frame(height: probe.extra) }
             Divider()
             commands
         }
+        // Окно меню система увеличивает под содержимое, но не уменьшает.
+        // Предел по содержимому (windowResizability в App) это лечит на
+        // macOS 26; MenuWindowFit подгоняет окно по измеренной высоте там,
+        // где проверить нечем. Проверка — ocbar://debug-menu (MenuProbe).
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { g in
+            Color.clear.preference(key: MenuHeightKey.self, value: g.size.height)
+        })
+        .onPreferenceChange(MenuHeightKey.self) { h in
+            contentHeight = h
+            probe.contentHeight = h
+        }
+        .background(MenuWindowFit(height: contentHeight, width: Self.width))
         .background(shortcuts)
         .onAppear {
             optionHeld = showDetails || NSEvent.modifierFlags.contains(.option)
@@ -192,28 +209,20 @@ struct NativeMenuView: View {
 
     // --- дополнительные действия ------------------------------------------
 
-    @ViewBuilder
-    private var extraActions: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let title = store.cancelTitle {
-                Button(title) { store.cancelCurrent() }.buttonStyle(.link)
-            }
-            switch s.presentation {
-            case .needsLogin:
-                Button(L("Войти")) { store.connect(profile: target, show: true) }
-                    .buttonStyle(.borderedProminent).disabled(!idle)
-                HStack {
-                    Button(L("Войти и запомнить вход…")) { store.connect(profile: target, teach: true) }
-                        .disabled(!idle)
-                    Spacer()
-                    Button(L("Не подключаться")) { store.disconnect() }
-                }
-                .buttonStyle(.link).font(.system(size: 11))
-            case .down, .foreign:
-                Button(L("Подключить и запомнить вход…")) { store.connect(profile: target, teach: true) }
-                    .buttonStyle(.link).font(.system(size: 11)).disabled(!canConnect)
-            default:
-                EmptyView()
+    // Как строки «Другие сети…» у Wi‑Fi: действия — обычные строки меню, а не
+    // кнопки и ссылки посреди него.
+    @MacControlCenterMenuBuilder
+    private var extraActions: [any View] {
+        if let title = store.cancelTitle {
+            command(title) { store.cancelCurrent() }
+        }
+        if s.presentation == .needsLogin {
+            command(L("Войти…"), enabled: idle) { store.connect(profile: target, show: true) }
+            command(L("Войти и запомнить вход…"), enabled: idle) { store.connect(profile: target, teach: true) }
+            command(L("Не подключаться")) { store.disconnect() }
+        } else if [.down, .foreign].contains(s.presentation) {
+            command(L("Подключить и запомнить вход…"), enabled: canConnect) {
+                store.connect(profile: target, teach: true)
             }
         }
     }

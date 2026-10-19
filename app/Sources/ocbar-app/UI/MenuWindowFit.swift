@@ -8,9 +8,12 @@ import SwiftUI
 // верхний край на месте.
 struct MenuWindowFit: NSViewRepresentable {
     let height: CGFloat
+    /// Ширина окна меню: по ней подгонка узнаёт своё окно.
+    var width: CGFloat = MenuView.width
 
     final class Probe: NSView {
         var desired: CGFloat = 0 { didSet { apply() } }
+        var width: CGFloat = MenuView.width
         private var observer: NSObjectProtocol?
         private var fixing = false
 
@@ -21,7 +24,7 @@ struct MenuWindowFit: NSViewRepresentable {
             // Только окно самого меню (оно ровно в ширину меню). Витрина и
             // кадры README держат несколько меню в одном окне — подгонка
             // сжимала его до высоты одного и обрезала кадр.
-            guard abs(window.frame.width - MenuView.width) < 2 else { return }
+            guard abs(window.frame.width - width) < 2 else { return }
             fixing = true
             defer { fixing = false }
             // Предел размера — та же высота: попытка системы поставить окно
@@ -59,16 +62,19 @@ struct MenuWindowFit: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> Probe { Probe() }
-    func updateNSView(_ view: Probe, context: Context) { view.desired = height }
+    func updateNSView(_ view: Probe, context: Context) {
+        view.width = width
+        view.desired = height
+    }
 }
 
 extension MenuWindowFit {
     /// Не показывать промежуточные кадры до конца перерисовки: при смене
     /// экрана SwiftUI успевает разложить содержимое «с запасом» (на 22 точки
     /// выше) и окно на миг дёргается.
-    static func freezeUntilFlush() {
+    static func freezeUntilFlush(width: CGFloat = MenuView.width) {
         guard let window = NSApp.windows.first(where: {
-            $0.isVisible && abs($0.frame.width - MenuView.width) < 2
+            $0.isVisible && abs($0.frame.width - width) < 2
         }) else { return }
         window.disableScreenUpdatesUntilFlush()
     }

@@ -20,16 +20,26 @@ struct OcbarApp: App {
             Image(nsImage: MenuBarIcon.image(for: store.status))
         }
         .menuBarExtraStyle(.window)
+        // Предел окна — по содержимому, а не только минимум: иначе система
+        // окно меню увеличивает, но не уменьшает (D71).
+        .windowResizability(.contentSize)
 
+        // Ссылки ocbar:// (уведомления от клиента, проверки) разбирает
+        // AppDelegate. Без пустого handlesExternalEvents SwiftUI на каждую
+        // ссылку открывал бы окно настроек.
         Window(L("Настройка ocbar"), id: WindowID.settings) { SettingsWindow() }
+            .handlesExternalEvents(matching: [])
         Window(L("Первый запуск ocbar"), id: WindowID.setup) { SetupView().tint(Palette.control).accentColor(Palette.control) }
             .defaultSize(width: 740, height: 560)
+            .handlesExternalEvents(matching: [])
 
         Window(L("Журналы ocbar"), id: WindowID.logs) { LogsView() }
             .defaultSize(width: 880, height: 540)
+            .handlesExternalEvents(matching: [])
 
         Window(L("Диагностика ocbar"), id: WindowID.diagnostics) { DiagnosticsView() }
             .defaultSize(width: 760, height: 620)
+            .handlesExternalEvents(matching: [])
     }
 }
 
