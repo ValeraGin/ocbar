@@ -3,6 +3,16 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.19.1 — 2026-10-19
+
+- The menu window is exactly as tall as its content again. Since 0.19.0 it
+  grew but never shrank, so after a state change the menu hung low under an
+  empty area below the menu bar icon.
+- Sign-in actions in the menu are plain menu rows: "Sign in…", "Sign in and
+  learn the form…", "Stay disconnected", "Connect and learn the form…".
+- Notifications from the client no longer open the Settings window.
+- The profile editor's port warning no longer names specific proxy clients.
+
 ## 0.19.0 — 2026-10-18
 
 - The menu looks and behaves like the system Wi‑Fi and Bluetooth modules: a VPN
