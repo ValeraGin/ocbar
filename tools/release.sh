@@ -50,6 +50,25 @@ publish() {
     ocbar app stop >/dev/null 2>&1 || true
     ocbar app start
     echo "release: ocbar $ver выпущен"
+    menu_check
+}
+
+# Живое меню после выпуска: приложение само открывает меню, меняет его высоту
+# и пишет итог в app.log (MenuProbe). В 0.19.0 окно перестало сжиматься, а
+# вердикт «ИТОГ ПЛОХО» лежал в журнале, и его никто не видел.
+menu_check() {
+    local log="$HOME/Library/Logs/ocbar/app.log" tok n v
+    sleep 5
+    tok=$(tr -d '[:space:]' < "$HOME/Library/Application Support/ocbar/notify.token" 2>/dev/null || true)
+    [ -n "$tok" ] || { echo "release: проверка меню пропущена — нет токена приложения" >&2; return 0; }
+    n=$(wc -l < "$log" 2>/dev/null || echo 0)
+    open -g "ocbar://debug-menu?token=$tok"
+    sleep 10
+    v=$(tail -n +"$((n + 1))" "$log" 2>/dev/null | grep 'проверка меню: ИТОГ' | tail -1 | sed 's/^.*проверка меню: //')
+    case "$v" in
+        "ИТОГ ОК"*) echo "release: меню — $v" ;;
+        *) echo "release: меню — ${v:-итога нет} (подробности: grep 'проверка меню' $log)" >&2 ;;
+    esac
 }
 
 if [ -n "$publish_only" ]; then
