@@ -4,8 +4,8 @@ class Ocbar < Formula
   # Стабильная версия — тег и коммит: версия берётся из имени тега, а хеш
   # архива не нужно считать заранее.
   url "https://github.com/ValeraGin/ocbar.git",
-      tag:      "v0.19.0",
-      revision: "f6c1cffa0b0fedb12932b8a71e42d89014613511"
+      tag:      "v0.19.1",
+      revision: "480271db7c242406a3500b00280aacdfc41b90ff"
   license "MIT"
   head "https://github.com/ValeraGin/ocbar.git", branch: "main"
 
