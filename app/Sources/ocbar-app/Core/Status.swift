@@ -87,6 +87,8 @@ struct Status {
     var systemSocksRefused = ""
     var wokeAfterConnect: Date?   // мак спал после подключения — повод проверить туннель
     var linkLostSince: Date?      // ставит супервизор, когда проба не проходит
+    /// Идёт ocbar connect: этап из connect.stage (gateway, login, window…).
+    var connectStage = ""
     var access = ""               // ok | fail | unknown — проверка доступа супервизором
     var accessAt: Date?
     var routes: [RouteEntry] = []
@@ -103,6 +105,8 @@ struct Status {
         case .paused:    return .paused
         case .starting:  return .starting
         case .down:
+            // Вход ещё идёт, туннеля нет — но подключение уже началось.
+            if !connectStage.isEmpty { return .starting }
             if needsLogin { return .needsLogin }
             if foreign { return .foreign }
             return .down
@@ -145,6 +149,7 @@ struct Status {
         s.systemSocksRefused = w.system_socks_refused ?? ""
         s.wokeAfterConnect = date(w.woke_after_connect)
         s.linkLostSince = date(w.link_lost)
+        s.connectStage = w.connect_stage ?? ""
         s.foreign = w.foreign ?? false
         s.supervisor = w.supervisor ?? false
         s.iface = w.iface ?? ""
@@ -178,6 +183,7 @@ struct Status {
         var profile: String?
         var paused: Bool?
         var needs_login: Bool?
+        var connect_stage: String?
         var tundev: String?
         var ip: String?
         var since: Int?
@@ -225,4 +231,26 @@ func humanSince(_ date: Date?, now: Date = Date()) -> String {
     if s >= 3600 { return "\(s / 3600)\(L("ч")) \((s % 3600) / 60)\(L("м"))" }
     if s >= 60 { return "\(s / 60)\(L("м"))" }
     return "\(s)\(L("с "))"
+}
+
+/// Шаг подключения для меню: что сейчас происходит и сколько из четырёх
+/// шагов пройдено. Этапы пишут клиент и ocbar-auth (connect.stage).
+struct ConnectStep {
+    let title: String
+    let index: Int
+    /// Ждёт человека — окно входа открыто.
+    let waitsForHuman: Bool
+    static let total = 4
+
+    static func of(_ s: Status) -> ConnectStep? {
+        guard s.presentation == .starting else { return nil }
+        switch s.connectStage {
+        case "gateway":  return .init(title: L("Связываюсь со шлюзом"), index: 1, waitsForHuman: false)
+        case "hostscan": return .init(title: L("Проверяю устройство"), index: 1, waitsForHuman: false)
+        case "login":    return .init(title: L("Вхожу"), index: 2, waitsForHuman: false)
+        case "window":   return .init(title: L("Ждёт вас в окне входа"), index: 2, waitsForHuman: true)
+        case "session":  return .init(title: L("Получаю сессию"), index: 3, waitsForHuman: false)
+        default:         return .init(title: L("Поднимаю туннель"), index: 4, waitsForHuman: false)
+        }
+    }
 }

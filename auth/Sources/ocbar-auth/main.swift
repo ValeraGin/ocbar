@@ -795,6 +795,7 @@ var webAuth: WebAuth?
 
 DispatchQueue.global().async {
     do {
+        Stage.set("gateway")
         var r = try runInit(args, http: http)
         Log.info("шлюз: \(r.methods.joined(separator: ", ")), cookie \(r.request.tokenCookieName)")
         // Проверка соответствия устройства: если шлюз прислал <host-scan> и в
@@ -806,6 +807,7 @@ DispatchQueue.global().async {
         let hostScanToken = args.csdWrapper?.isEmpty == false ? hostScan?.token : nil
         if let hs = hostScan {
             if let wrapper = args.csdWrapper, !wrapper.isEmpty {
+                Stage.set("hostscan")
                 Log.info("шлюз требует проверку устройства (HostScan) — запускаю \(wrapper)")
                 let res = CSD.run(.init(wrapper: wrapper, host: r.postURL.host ?? "",
                                         port: r.postURL.port,
@@ -846,6 +848,7 @@ DispatchQueue.global().async {
         opts.teach = args.teachOut != nil && !args.noWindow
         opts.teachOn = args.teachOn
         if !opts.fillHosts.isEmpty { Log.debug("автозаполнение разрешено на: \(opts.fillHosts.joined(separator: ", "))") }
+        Stage.set("login")
         DispatchQueue.main.async {
             webAuth = WebAuth(request: r.request, options: opts) { result in
                 switch result {
@@ -859,6 +862,7 @@ DispatchQueue.global().async {
                     default: exit(1)
                     }
                 case .success(let token):
+                    Stage.set("session")
                     DispatchQueue.global().async {
                         do {
                             let body = VPNProtocol.replyRequest(version: args.version, deviceID: args.deviceID,

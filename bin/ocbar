@@ -42,6 +42,7 @@ SKIP_NETS="$USER_STATE/skip-networks"    # сети, где автоподклю
 ACCESS="$USER_STATE/access"              # итог проверки доступа: "<ok|fail|unknown> <время>"
 AUTOCONNECT="$USER_STATE/autoconnect"    # политика автоподключения: manual | resume | always <профиль>
 CONNECTING="$USER_STATE/connecting"      # идёт ocbar connect: номер процесса
+CONNECT_STAGE="$USER_STATE/connect.stage" # на каком этапе подключение — для меню
 SUP_PID="$USER_STATE/supervisor.pid"
 SUP_CODE="$USER_STATE/supervisor.code-mtime"   # с какой версией скрипта он работает
 NEEDS_LOGIN="$USER_STATE/needs-login"    # автоподключение упёрлось во вход, ждём человека
@@ -1559,6 +1560,7 @@ authenticate() { # печатает "token hash post_url"
            OCBAR_TOTP_CODE="$code" OCBAR_TOTP_COMMAND="$totp_cmd" OCBAR_KEYCHAIN_SERVICE="$P_SVC" OCBAR_PROFILE_NAME="$P_TITLE" \
            OCBAR_PASSWORD_SOURCE="$(password_source)" OCBAR_TOTP_SOURCE="$P_TOTP" \
            OCBAR_TOTP_ALGORITHM="$P_TOTP_ALG" OCBAR_TOTP_DIGITS="$P_TOTP_DIGITS" OCBAR_TOTP_PERIOD="$P_TOTP_PERIOD" \
+           OCBAR_STAGE_FILE="$CONNECT_STAGE" \
            "$auth" "${args[@]}" 2> >(auth_log_tee)) || {
         local rc=$?
         case $rc in
@@ -1581,6 +1583,7 @@ authenticate() { # печатает "token hash post_url"
 # отвечает человек — окном ocbar-auth или в терминале. Итог тот же, что у
 # authenticate: "token hash post_url", дальше туннель поднимает хелпер.
 authenticate_password() { # печатает "token hash post_url"
+    stage_set login
     # Автоподключение не зовёт человека: код из SMS без него не получить.
     if [ "${OCBAR_SILENT:-}" = 1 ]; then
         printf '%socbar: парольная группа — код из SMS вводит человек%s\n' "$c_yel" "$c_off" >&2
@@ -1759,8 +1762,16 @@ connect_in_progress() {
     p=$(head -1 "$CONNECTING" 2>/dev/null || true)
     case "$p" in ''|*[!0-9]*) return 1 ;; esac
     age=$(( $(date +%s) - $(stat -f %m "$CONNECTING" 2>/dev/null || echo 0) ))
-    if ! kill -0 "$p" 2>/dev/null || [ "$age" -gt 1200 ]; then rm -f "$CONNECTING"; return 1; fi
+    if ! kill -0 "$p" 2>/dev/null || [ "$age" -gt 1200 ]; then rm -f "$CONNECTING" "$CONNECT_STAGE"; return 1; fi
     return 0
+}
+
+# Этап подключения для меню: gateway → hostscan → login → window → session →
+# tunnel. Этапы входа пишет ocbar-auth (OCBAR_STAGE_FILE), остальные — мы.
+stage_set() {
+    [ "$DRY_RUN" = 1 ] && return 0
+    mkdir -p "$USER_STATE" 2>/dev/null || true
+    printf '%s\n' "$1" > "$CONNECT_STAGE.tmp" 2>/dev/null && mv -f "$CONNECT_STAGE.tmp" "$CONNECT_STAGE" 2>/dev/null || true
 }
 
 build_spec() { # cookie → stdin для tunnel-start
@@ -1823,6 +1834,7 @@ do_connect() { # профиль уже загружен
     # Номер этой (под)оболочки, а не $$: супервизор подключает в подоболочке,
     # и $$ там — сам супервизор, живой всегда.
     state_write "$CONNECTING" "$(exec sh -c 'echo $PPID')"
+    stage_set gateway
     local token hash post_url out rc=0
     TEACH_OUT=""
     [ -n "${P_FILE:-}" ] && TEACH_OUT=$(mktemp "${TMPDIR:-/tmp}/ocbar-teach.XXXXXX")
@@ -1836,9 +1848,9 @@ do_connect() { # профиль уже загружен
     if [ -n "$TEACH_OUT" ]; then apply_teach "$TEACH_OUT" || true; rm -f "$TEACH_OUT"; fi
     # 5 — «нужен человек»: не ошибка, а решение, которое принимает не скрипт.
     case "$(auth_rc_action "$rc")" in
-        human|network) rm -f "$CONNECTING"; return "$rc" ;;
+        human|network) rm -f "$CONNECTING" "$CONNECT_STAGE"; return "$rc" ;;
     esac
-    [ "$rc" = 0 ] || { rm -f "$CONNECTING"; return "$rc"; }
+    [ "$rc" = 0 ] || { rm -f "$CONNECTING" "$CONNECT_STAGE"; return "$rc"; }
     parse_auth_result "$out"
     [ -n "$token" ] || die "аутентификация не вернула токен"
     # КРИТИЧНО: подключаться надо к тому узлу, что выдал cookie. Балансировщик
@@ -1858,10 +1870,11 @@ do_connect() { # профиль уже загружен
             if port_open "$P_PROXY_PORT"; then die "порт 127.0.0.1:$P_PROXY_PORT не освободился после отключения [$cur]"; fi
         fi
     fi
+    stage_set tunnel
     if [ "${P_KIND:-tunnel}" = proxy ]; then
         proxy_start "$connect_url" "$hash" "$token"
         state_write "$DESIRED" "$P_NAME"
-        rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
+        rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" "$CONNECT_STAGE" 2>/dev/null || true
         log "подключён (прокси): $P_NAME → SOCKS 127.0.0.1:$(proxy_port), адрес $(penv_get IP4)"
         notify_event "ocbar: подключено (прокси)" "$P_TITLE · SOCKS 127.0.0.1:$(proxy_port)"
         report_health || true
@@ -1878,7 +1891,7 @@ do_connect() { # профиль уже загружен
     [ "$(tun_state)" = connected ] || die "туннель не поднялся за 40 с (STATE=$(env_get STATE)), см. $OC_LOG"
     log "подключён: $P_NAME → $(env_get TUNDEV) $(env_get IP4)"
     state_write "$DESIRED" "$P_NAME"
-    rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" 2>/dev/null || true
+    rm -f "$NEEDS_LOGIN" "$LINK_LOST" "$CONNECTING" "$CONNECT_STAGE" 2>/dev/null || true
     notify_event "ocbar: подключено" "$P_TITLE · $(env_get TUNDEV) · $(env_get IP4)"
     report_health || true
 }
@@ -2366,6 +2379,7 @@ cmd_status() {
     if [ "$short" = 1 ]; then
         printf 'access=%s\naccess_at=%s\n' "$(access_state)" "$(head -1 "$ACCESS" 2>/dev/null | awk '{print $2}')"
         printf 'paused=%s\nneeds_login=%s\n' "$(is_paused && echo 1 || echo 0)" "$([ -f "$NEEDS_LOGIN" ] && echo 1 || echo 0)"
+        if connect_in_progress; then printf 'connect_stage=%s\n' "$(head -1 "$CONNECT_STAGE" 2>/dev/null || echo gateway)"; fi
         # Потеря связи — состояние живого туннеля, о котором знает только
         # супервизор. Без него отметка устаревает мгновенно (он же её и
         # снимает), поэтому мёртвый супервизор её не показывает.

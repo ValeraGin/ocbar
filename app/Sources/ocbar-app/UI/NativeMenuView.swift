@@ -143,6 +143,16 @@ struct NativeMenuView: View {
         } else {
             MenuSection(divider: false) {
                 ForEach(s.profiles) { profile in profileRow(profile) }
+                // Прогресс подключения: четыре шага — шлюз, вход, сессия,
+                // туннель. Подпись шага — у строки профиля.
+                if let step = ConnectStep.of(s) {
+                    ProgressView(value: Double(step.index), total: Double(ConnectStep.total))
+                        .progressViewStyle(.linear)
+                        .controlSize(.small)
+                        .tint(step.waitsForHuman ? Palette.warn : Color(nsColor: .controlAccentColor))
+                        .animation(.easeInOut(duration: 0.3), value: step.index)
+                        .accessibilityLabel(L("Подключение: шаг %@ из %@", "\(step.index)", "\(ConnectStep.total)"))
+                }
                 // Пояснение — под списком: у строки профиля высота строки меню,
                 // длинный текст в ней наезжал бы на следующий профиль.
                 if let note = look.note {
@@ -184,8 +194,9 @@ struct NativeMenuView: View {
 
     // Состояние словами; то, что требует внимания, — цветом состояния.
     private var subtitle: some View {
-        let alarm = [.lost, .paused, .needsLogin].contains(s.presentation)
-        var parts = [look.subtitle]
+        let step = ConnectStep.of(s)
+        let alarm = [.lost, .paused, .needsLogin].contains(s.presentation) || step?.waitsForHuman == true
+        var parts = [step.map { "\($0.title) · \($0.index)/\(ConnectStep.total)" } ?? look.subtitle]
         if look.showsTime { parts.append(humanSince(s.since)) }
         if s.presentation == .connected, !s.isProxySession {
             parts.append("↓ " + Size.rate(store.currentDown))

@@ -114,7 +114,8 @@ final class StatusStore: ObservableObject {
         guard !isPreview else { return }
         statusTimer?.invalidate()
         trafficTimer?.invalidate()
-        let period: TimeInterval = menuOpen ? 2 : 6
+        // Пока идёт подключение и меню открыто, шаги сменяются за секунды.
+        let period: TimeInterval = menuOpen ? (status.presentation == .starting ? 1 : 2) : 6
         statusTimer = Timer.scheduledTimer(withTimeInterval: period, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -174,7 +175,9 @@ final class StatusStore: ObservableObject {
         guard started >= appliedStart else { return }
         appliedStart = started
         let wasDevice = status.tundev
+        let wasStarting = status.presentation == .starting
         status = s
+        if wasStarting != (s.presentation == .starting) { retune() }
         // Последний подключённый профиль — к нему ведёт «Подключить» в меню:
         // выбор профиля живёт в настройках, а не в меню.
         if !s.profile.isEmpty, !isPreview { UserDefaults.standard.set(s.profile, forKey: "LastProfile") }

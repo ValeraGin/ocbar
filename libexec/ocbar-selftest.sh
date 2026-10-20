@@ -289,6 +289,15 @@ STUB
     is "status: код 0" 0 "$rc"
     : > "$tmp/state/needs-login"; rc=0; run status >/dev/null || rc=$?; rm -f "$tmp/state/needs-login"
     is "status: код 0 и при флаге «нужен вход»" 0 "$rc"
+    # Этап подключения для меню: виден, пока жив процесс ocbar connect, и
+    # пропадает вместе с ним.
+    printf '%s\n' $$ > "$tmp/state/connecting"; printf 'window\n' > "$tmp/state/connect.stage"
+    out=$(run status --short 2>&1 || true)
+    has "status: этап подключения, пока идёт connect" "connect_stage=window" "$out"
+    printf '999999\n' > "$tmp/state/connecting"
+    out=$(run status --short 2>&1 || true)
+    hasnt "status: этап пропал вместе с процессом connect" "connect_stage=" "$out"
+    is "status: отметки подключения убраны" "" "$(ls "$tmp/state/connecting" "$tmp/state/connect.stage" 2>/dev/null)"
     rc=0; run profiles >/dev/null || rc=$?
     is "profiles: код 0, когда у последнего профиля нет описания" 0 "$rc"
 

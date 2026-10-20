@@ -294,6 +294,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
                                         : (webView.url?.host ?? "форма входа"))))
             return
         }
+        Stage.set("window")
         NSApp.setActivationPolicy(.regular)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

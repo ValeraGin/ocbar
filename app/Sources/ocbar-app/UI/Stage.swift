@@ -94,7 +94,7 @@ enum Fixture {
         case .paused:
             s.state = .paused; s.paused = true
             s.zones = s.zones.map { ZoneEntry(zone: $0.zone, dns: $0.dns, applied: false, enabled: $0.enabled) }
-        case .starting: s.state = .starting
+        case .starting: s.state = .starting; s.connectStage = "login"
         case .needsLogin:
             s.state = .down; s.needsLogin = true
             s.tundev = ""; s.ip = ""; s.gateway = ""
@@ -328,6 +328,8 @@ struct ScreenshotMenuView: View {
         switch name {
         case "down": menu(Fixture.status(.down))
         case "connecting": menu(Fixture.status(.starting), busy: L("Подключаюсь…"))
+        case "connecting-window": menu(Self.connecting("window"), busy: L("Подключаюсь…"))
+        case "connecting-tunnel": menu(Self.connecting("tunnel"), busy: L("Подключаюсь…"))
         case "network-busy": menu(busy: L("Переключаю %@…", "172.16.0.0/12"))
         case "network-off": menu(Self.withoutSecondRoute())
         case "pausing": menu(Self.withoutSecondRoute(), busy: L("Ставлю на паузу…"))
@@ -341,6 +343,12 @@ struct ScreenshotMenuView: View {
         case "woke": menu(Fixture.woke())
         default: menu()
         }
+    }
+
+    private static func connecting(_ stage: String) -> Status {
+        var s = Fixture.status(.starting)
+        s.connectStage = stage
+        return s
     }
 
     private static func withoutSecondRoute() -> Status {

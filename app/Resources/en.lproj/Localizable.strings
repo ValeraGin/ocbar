@@ -509,3 +509,10 @@
 "Системный SOCKS: выключен в профиле" = "System-wide SOCKS: off in the profile";
 "Системный SOCKS: включён на %@" = "System-wide SOCKS: on for %@";
 "Выйти из ocbar · туннель останется" = "Quit ocbar · the tunnel stays up";
+"Связываюсь со шлюзом" = "Contacting the gateway";
+"Проверяю устройство" = "Checking the device";
+"Вхожу" = "Signing in";
+"Ждёт вас в окне входа" = "Waiting for you in the sign-in window";
+"Получаю сессию" = "Getting the session";
+"Поднимаю туннель" = "Bringing up the tunnel";
+"Подключение: шаг %@ из %@" = "Connecting: step %@ of %@";
