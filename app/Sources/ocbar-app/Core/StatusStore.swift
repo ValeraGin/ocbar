@@ -114,8 +114,9 @@ final class StatusStore: ObservableObject {
         guard !isPreview else { return }
         statusTimer?.invalidate()
         trafficTimer?.invalidate()
-        // Пока идёт подключение и меню открыто, шаги сменяются за секунды.
-        let period: TimeInterval = menuOpen ? (status.presentation == .starting ? 1 : 2) : 6
+        // Пока идёт подключение, шаги сменяются за секунды — и в меню, и на
+        // значке в строке меню.
+        let period: TimeInterval = status.presentation == .starting ? 1 : (menuOpen ? 2 : 6)
         statusTimer = Timer.scheduledTimer(withTimeInterval: period, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }

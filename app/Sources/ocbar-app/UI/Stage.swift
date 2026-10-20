@@ -367,3 +367,44 @@ struct ScreenshotMenuView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line))
     }
 }
+
+// Значок в строке меню во всех состояниях и на каждом шаге подключения —
+// проверить глазами: --stage --screenshot icons.
+struct ScreenshotIconsView: View {
+    private func status(_ p: Presentation, stage: String = "") -> Status {
+        var s = Fixture.status(p)
+        s.connectStage = stage
+        return s
+    }
+
+    private func cell(_ title: String, _ s: Status, blink: Bool = false) -> some View {
+        VStack(spacing: 6) {
+            Image(nsImage: MenuBarIcon.image(for: s, blink: blink))
+                .resizable().interpolation(.high).frame(width: 78, height: 54)
+            Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center).frame(width: 104)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                cell("connected", status(.connected))
+                cell("down", status(.down))
+                cell("paused", status(.paused))
+                cell("lost", status(.lost))
+                cell("needsLogin", status(.needsLogin))
+            }
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(["gateway", "login", "window", "session", "tunnel"], id: \.self) { stage in
+                    let s = status(.starting, stage: stage)
+                    cell(ConnectStep.of(s)?.title ?? stage, s)
+                }
+                cell("login, blink", status(.starting, stage: "login"), blink: true)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}

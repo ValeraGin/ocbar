@@ -52,10 +52,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             NativeMenuView().environmentObject(store)
         }
         iconWatch = store.$status
-            .map { MenuBarIcon.image(for: $0) }
             .receive(on: DispatchQueue.main)
-            .sink { menu.image = $0 }
+            .sink { [weak self] status in self?.showIcon(status) }
         Self.menu = menu
+    }
+
+    // Пока идёт подключение, текущая часть значка мигает раз в полсекунды.
+    private var blinkTimer: Timer?
+    private var blinkOn = false
+    private var iconStatus = Status()
+
+    @MainActor private func showIcon(_ status: Status) {
+        iconStatus = status
+        let starting = status.presentation == .starting
+        if starting, blinkTimer == nil {
+            blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.blinkOn.toggle()
+                    Self.menu?.image = MenuBarIcon.image(for: self.iconStatus, blink: self.blinkOn)
+                }
+            }
+            RunLoop.main.add(blinkTimer!, forMode: .common)
+        } else if !starting {
+            blinkTimer?.invalidate(); blinkTimer = nil; blinkOn = false
+        }
+        Self.menu?.image = MenuBarIcon.image(for: status, blink: blinkOn)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -134,7 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // при съёмке: высота зависит от языка, замер SwiftUI её занижает.
         let size: NSSize = screenshot == "menu" ? NSSize(width: 780, height: 1400)
             : screenshot == "settings" ? NSSize(width: 1048, height: 708)
-            : screenshot == "setup" ? NSSize(width: 800, height: 660) : NSSize(width: 1500, height: 2400)
+            : screenshot == "setup" ? NSSize(width: 800, height: 660)
+            : screenshot == "icons" ? NSSize(width: 980, height: 360) : NSSize(width: 1500, height: 2400)
         // Кадр README — в окне без рамки: окно с заголовком система подгоняет
         // под экран, и за его краем кадр обрезался по высоте.
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 60, y: 60), size: size),
@@ -156,6 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let host = NSHostingView(rootView: ScreenshotSettingsView())
             host.sizingOptions = []
             window.contentView = host
+        } else if screenshot == "icons" {
+            window.contentView = NSHostingView(rootView: ScreenshotIconsView())
         } else if screenshot == "setup" {
             window.contentView = NSHostingView(rootView: SetupView()
                 .frame(width: 760, height: 620)
@@ -230,7 +255,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 // Компактный свитч в строке меню. Цвета сохраняют смысл состояний,
 // пауза дополнительно обозначена двумя штрихами.
 enum MenuBarIcon {
-    static func image(for status: Status) -> NSImage {
+    /// Значок: вход слева, развилка на две ветки. Пока идёт подключение,
+    /// схема заполняется слева направо по шагам (ConnectStep): пройденное —
+    /// цветом, текущая часть мигает (`blink`), остальное приглушено.
+    static func image(for status: Status, blink: Bool = false) -> NSImage {
         let color: NSColor
         var paused = false
         switch status.presentation {
@@ -244,18 +272,22 @@ enum MenuBarIcon {
         case .missing:    color = .systemRed
         }
         let dim = status.presentation == .down || status.presentation == .foreign
+        // Части схемы по ходу подключения: точка входа, линия до развилки,
+        // верхняя ветка, нижняя ветка.
+        let step = ConnectStep.of(status)
         let size = NSSize(width: 26, height: 18)
         let image = NSImage(size: size, flipped: false) { rect in
-            color.withAlphaComponent(dim ? 0.75 : 1).set()
-            let routes = NSBezierPath()
-            routes.move(to: NSPoint(x: 4, y: 9)); routes.line(to: NSPoint(x: 11, y: 9))
-            routes.line(to: NSPoint(x: 18, y: 15)); routes.line(to: NSPoint(x: 22, y: 15))
-            routes.move(to: NSPoint(x: 11, y: 9)); routes.line(to: NSPoint(x: 18, y: 3))
-            routes.line(to: NSPoint(x: 22, y: 3))
-            routes.lineWidth = 1.8; routes.lineCapStyle = .round; routes.lineJoinStyle = .round
-            routes.stroke()
-            for (x, y) in [(2.0, 7.0), (20.0, 13.0), (20.0, 1.0)] {
-                NSBezierPath(roundedRect: NSRect(x: x, y: y, width: 4, height: 4), xRadius: 1, yRadius: 1).fill()
+            for part in 0..<4 {
+                let tint: NSColor
+                if let step {
+                    if part < step.index - 1 { tint = color }
+                    else if part == step.index - 1 { tint = color.withAlphaComponent(blink ? 0.35 : 1) }
+                    else { tint = NSColor.systemGray.withAlphaComponent(0.45) }
+                } else {
+                    tint = color.withAlphaComponent(dim ? 0.75 : 1)
+                }
+                tint.set()
+                draw(part: part)
             }
             if paused {
                 color.set()
@@ -266,7 +298,26 @@ enum MenuBarIcon {
             return true
         }
         image.isTemplate = false
-        image.accessibilityDescription = "ocbar"
+        image.accessibilityDescription = step.map { "ocbar: \($0.title)" } ?? "ocbar"
         return image
+    }
+
+    private static func draw(part: Int) {
+        func line(_ points: [NSPoint]) {
+            let path = NSBezierPath()
+            path.move(to: points[0])
+            for p in points.dropFirst() { path.line(to: p) }
+            path.lineWidth = 1.8; path.lineCapStyle = .round; path.lineJoinStyle = .round
+            path.stroke()
+        }
+        func dot(_ x: CGFloat, _ y: CGFloat) {
+            NSBezierPath(roundedRect: NSRect(x: x, y: y, width: 4, height: 4), xRadius: 1, yRadius: 1).fill()
+        }
+        switch part {
+        case 0: dot(2, 7)
+        case 1: line([NSPoint(x: 4, y: 9), NSPoint(x: 11, y: 9)])
+        case 2: line([NSPoint(x: 11, y: 9), NSPoint(x: 18, y: 15), NSPoint(x: 22, y: 15)]); dot(20, 13)
+        default: line([NSPoint(x: 11, y: 9), NSPoint(x: 18, y: 3), NSPoint(x: 22, y: 3)]); dot(20, 1)
+        }
     }
 }
