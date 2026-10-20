@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import Combine
+import FluidMenuBarExtra
 
 // Приложение меню-бара ocbar. Автор: ValeraGin — Ignatkovich Valery, MIT.
 // Заменяет плагин SwiftBar: то же состояние из
@@ -8,21 +10,13 @@ import AppKit
 @main
 struct OcbarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var store = StatusStore.shared
-    // Витрина показывает окно и значок в меню-баре не заводит: иначе рядом с
-    // живым приложением появлялся бы второй такой же значок.
-    @State private var inMenuBar = !CommandLine.arguments.contains("--stage")
+    // Меню — панель FluidMenuBarExtra (AppDelegate). Пустая скрытая сцена
+    // остаётся, чтобы SwiftUI при запуске не открывал первое окно сам — как
+    // у Maccy.
+    @State private var placeholder = false
 
     var body: some Scene {
-        MenuBarExtra(isInserted: $inMenuBar) {
-            NativeMenuView().environmentObject(store)
-        } label: {
-            Image(nsImage: MenuBarIcon.image(for: store.status))
-        }
-        .menuBarExtraStyle(.window)
-        // Предел окна — по содержимому, а не только минимум: иначе система
-        // окно меню увеличивает, но не уменьшает (D71).
-        .windowResizability(.contentSize)
+        MenuBarExtra("", isInserted: $placeholder) { EmptyView() }
 
         // Ссылки ocbar:// (уведомления от клиента, проверки) разбирает
         // AppDelegate. Без пустого handlesExternalEvents SwiftUI на каждую
@@ -45,6 +39,24 @@ struct OcbarApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var stageWindow: NSWindow?
+    private var iconWatch: AnyCancellable?
+
+    /// Меню в строке состояния. Своё окно, а не MenuBarExtra(.window): то не
+    /// сжималось под содержимое и не давало ни окна, ни значка (D71, разбор
+    /// 2026-10-20 в журнале).
+    static private(set) var menu: FluidMenuBarExtra?
+
+    @MainActor private func installMenu() {
+        let store = StatusStore.shared
+        let menu = FluidMenuBarExtra(title: "ocbar", image: MenuBarIcon.image(for: store.status)) {
+            NativeMenuView().environmentObject(store)
+        }
+        iconWatch = store.$status
+            .map { MenuBarIcon.image(for: $0) }
+            .receive(on: DispatchQueue.main)
+            .sink { menu.image = $0 }
+        Self.menu = menu
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Только значок в меню-баре: ни в Dock, ни в переключателе приложений
@@ -84,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if CommandLine.arguments.contains("--stage") { openStage() }
         else {
+            installMenu()
             AppLog.write("запуск \(AppInfo.version); ocbar: "
                 + (OcbarClient.shared.binary ?? "не найден — " + OcbarClient.shared.lookupNote)  // i18n: не интерфейс
                 + "; ⌥⌘P: " + (GlobalHotkeys.shared.isRegistered("pause") ? "занята нами" : "не досталась"))  // i18n: не интерфейс

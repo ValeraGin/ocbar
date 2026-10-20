@@ -15,9 +15,15 @@ let package = Package(
             path: "Sources/MacControlCenterUI",
             exclude: ["LICENSE", "VENDOR.md"]
         ),
+        // Вендорная копия FluidMenuBarExtra (MIT): см. Sources/FluidMenuBarExtra/VENDOR.md.
+        .target(
+            name: "FluidMenuBarExtra",
+            path: "Sources/FluidMenuBarExtra",
+            exclude: ["LICENSE", "VENDOR.md"]
+        ),
         .executableTarget(
             name: "ocbar-app",
-            dependencies: ["MacControlCenterUI"],
+            dependencies: ["MacControlCenterUI", "FluidMenuBarExtra"],
             path: "Sources/ocbar-app",
             linkerSettings: [
                 .linkedFramework("AppKit"),

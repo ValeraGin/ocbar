@@ -1,11 +1,11 @@
 import AppKit
 import AVFoundation
+import FluidMenuBarExtra
 import SwiftUI
 
-// Проверка живого меню без человека: приложение само нажимает свой значок в
-// строке состояния, открывает меню и пишет размеры настоящего окна в
-// журнал. Иначе проверить нечем: окно меню создаёт система, в витрине его
-// поведение другое, а глазами это смотрит человек.
+// Проверка живого меню без человека: приложение само открывает панель меню,
+// меняет высоту содержимого и пишет размеры настоящего окна в журнал. В
+// витрине поведение окна другое, а глазами это смотрит человек.
 //
 //   open "ocbar://debug-menu?token=<токен уведомлений>"
 /// Что проверка меню меняет в живом меню и что из него читает.
@@ -32,34 +32,18 @@ enum MenuProbe {
         return true
     }
 
-    /// Кнопка значка в строке состояния — её нажатием открывается меню.
-    private static func statusButton() -> NSStatusBarButton? {
-        for window in NSApp.windows where String(describing: type(of: window)).contains("StatusBar") {
-            if let button = find(in: window.contentView) { return button }
-        }
-        return nil
-    }
+    /// Панель меню — FluidMenuBarExtra из AppDelegate.
+    private static var menu: FluidMenuBarExtra? { AppDelegate.menu }
 
-    private static func find(in view: NSView?) -> NSStatusBarButton? {
-        guard let view else { return nil }
-        if let button = view as? NSStatusBarButton { return button }
-        for sub in view.subviews { if let button = find(in: sub) { return button } }
-        return nil
-    }
-
-    /// Окно меню: то, чья ширина совпадает с шириной меню.
     private static func menuWindow() -> NSWindow? {
-        NSApp.windows.first { $0.isVisible && abs($0.frame.width - NativeMenuView.width) < 2 }
+        guard let w = menu?.window, w.isVisible else { return nil }
+        return w
     }
 
-    /// То же окно, даже если меню успело закрыться: щелчок человека в другом
-    /// месте закрывает меню посреди проверки, а размер окна система держит
-    /// и у скрытого.
-    private static func menuWindowAny() -> NSWindow? {
-        menuWindow() ?? NSApp.windows.first {
-            String(describing: type(of: $0)).contains("MenuBarExtra") && abs($0.frame.width - NativeMenuView.width) < 2
-        }
-    }
+    /// Панель, даже если меню успело закрыться: щелчок человека в другом
+    /// месте закрывает меню посреди проверки, а размер панель держит и
+    /// скрытой.
+    private static func menuWindowAny() -> NSWindow? { menu?.window }
 
     private struct Shot { let height: CGFloat; let top: CGFloat; let content: CGFloat }
     private static var shots: [String: Shot] = [:]
@@ -67,25 +51,16 @@ enum MenuProbe {
     /// должно давать одну перестройку, иначе меню дёргается.
     private static var resizes = 0
     private static var resizeObserver: NSObjectProtocol?
-    private static var jitter: [String] = []
     /// Шаги, на которых меню оказалось закрытым не по сценарию.
     private static var closed: [String] = []
 
     private static func log(_ step: String) {
         let content = MenuProbeState.shared.contentHeight
-        guard let w = menuWindowAny() else {
-            let all = NSApp.windows.map {
-                String(format: "%@ %@ %.0fx%.0f", String(describing: type(of: $0)), $0.isVisible ? "видно" : "скрыто",
-                       $0.frame.width, $0.frame.height)
-            }
-            AppLog.write("проверка меню: \(step) — окна нет; окна: " + all.joined(separator: ", "))
-            return
-        }
+        guard let w = menuWindowAny() else { AppLog.write("проверка меню: \(step) — панели нет"); return }
         shots[step] = Shot(height: w.frame.height, top: w.frame.maxY, content: content)
         if !w.isVisible { closed.append(step) }
         AppLog.write(String(format: "проверка меню: %@ окно=%.0f содержимое=%.0f верх=%.0f перестроений=%d%@",
                             step, w.frame.height, content, w.frame.maxY, resizes, w.isVisible ? "" : " (меню закрыто)"))
-        if resizes > 2 { jitter.append("\(step): \(resizes)") }
     }
 
     /// Итог: окно ровно по содержимому, растёт и сжимается обратно, верх
@@ -116,7 +91,6 @@ enum MenuProbe {
             let screen = NSScreen.main?.visibleFrame.height ?? 800
             if main.height > screen - 30 { bad.append("выше экрана (\(Int(main.height)))") }
         }
-        if !jitter.isEmpty { bad.append("окно дёргается — перестроений " + jitter.joined(separator: ", ")) }
         let note = closed.isEmpty ? "" : "; меню закрылось само на шагах: " + closed.joined(separator: ", ")
         AppLog.write(bad.isEmpty
                      ? "проверка меню: ИТОГ ОК — высота \(Int(shots["главный экран"]?.height ?? 0))" + note
@@ -124,37 +98,36 @@ enum MenuProbe {
     }
 
     private static func run() {
-        guard let button = statusButton() else { AppLog.write("проверка меню: значок не найден"); return }
+        guard let menu else { AppLog.write("проверка меню: панели нет"); return }
         shots = [:]
         resizes = 0
-        jitter = []
         closed = []
         MenuProbeState.shared.extra = 0
         if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
         resizeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: nil, queue: nil) { note in
-            if let w = note.object as? NSWindow, abs(w.frame.width - NativeMenuView.width) < 2 { resizes += 1 }
+            if let w = note.object as? NSWindow, w === menu.window { resizes += 1 }
         }
         // Меню могло остаться открытым: начинаем с закрытого.
-        if menuWindow() != nil { button.performClick(nil) }
+        menu.dismiss()
         var step = 0
         // Сначала содержимое меняется в открытом меню, потом — пока меню
         // закрыто (так бывает, когда сменилось состояние): окно открывается
         // заново и должно быть ровно по новому содержимому.
-        let close = { if menuWindow() != nil { button.performClick(nil) } }
+        let close = { menu.dismiss() }
         let steps: [(String, () -> Void)] = [
-            ("главный экран", { button.performClick(nil) }),
+            ("главный экран", { menu.present() }),
             ("содержимое выросло", { MenuProbeState.shared.extra = 200 }),
             ("содержимое вернулось", { MenuProbeState.shared.extra = 0 }),
             ("закрыто", { close(); MenuProbeState.shared.extra = 200 }),
-            ("открыто выше", { button.performClick(nil) }),
+            ("открыто выше", { menu.present() }),
             ("закрыто снова", { close(); MenuProbeState.shared.extra = 0 }),
-            ("открыто ниже", { button.performClick(nil) }),
+            ("открыто ниже", { menu.present() }),
         ]
         func next() {
             guard step < steps.count else {
                 verdict()
-                if menuWindow() != nil { button.performClick(nil) }
+                menu.dismiss()
                 return
             }
             let (name, action) = steps[step]

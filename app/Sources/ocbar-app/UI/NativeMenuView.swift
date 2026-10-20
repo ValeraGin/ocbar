@@ -9,12 +9,14 @@ struct NativeMenuView: View {
     @EnvironmentObject var store: StatusStore
     @ObservedObject private var notify = NotifyState.shared
     @Environment(\.openWindow) private var openWindow
+    // Панель меню живёт всё время работы приложения: onAppear у неё один, при
+    // запуске. Открыто ли меню, говорит scenePhase от FluidMenuBarExtra.
+    @Environment(\.scenePhase) private var scenePhase
     @State private var networksExpanded = true
     @State private var zonesExpanded = false
     // Подробности соединения — как у Wi‑Fi: меню, открытое с зажатой ⌥.
     @State private var optionHeld = false
     @State private var flagsMonitor: Any?
-    @State private var contentHeight: CGFloat = 0
     @ObservedObject private var probe = MenuProbeState.shared
 
     /// Сведения о соединении без ⌥ — для кадров README.
@@ -71,38 +73,41 @@ struct NativeMenuView: View {
             Divider()
             commands
         }
-        // Окно меню система увеличивает под содержимое, но не уменьшает.
-        // Предел по содержимому (windowResizability в App) это лечит на
-        // macOS 26; MenuWindowFit подгоняет окно по измеренной высоте там,
-        // где проверить нечем. Проверка — ocbar://debug-menu (MenuProbe).
-        .fixedSize(horizontal: false, vertical: true)
+        // Высоту меню панель подгоняет сама (FluidMenuBarExtra); здесь её
+        // меряем только для проверки ocbar://debug-menu (MenuProbe).
         .background(GeometryReader { g in
             Color.clear.preference(key: MenuHeightKey.self, value: g.size.height)
         })
-        .onPreferenceChange(MenuHeightKey.self) { h in
-            contentHeight = h
-            probe.contentHeight = h
-        }
-        .background(MenuWindowFit(height: contentHeight, width: Self.width))
+        .onPreferenceChange(MenuHeightKey.self) { probe.contentHeight = $0 }
         .background(shortcuts)
-        .onAppear {
-            optionHeld = showDetails || NSEvent.modifierFlags.contains(.option)
-            if !stage {
-                Notifier.refreshAllowed()
+        .onAppear { if stage { opened() } }
+        .onChange(of: scenePhase) { phase in
+            guard !stage else { return }
+            if phase == .active { opened() } else { closed() }
+        }
+    }
+
+    private func opened() {
+        optionHeld = showDetails || NSEvent.modifierFlags.contains(.option)
+        if !stage {
+            Notifier.refreshAllowed()
+            if flagsMonitor == nil {
                 flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
                     optionHeld = showDetails || event.modifierFlags.contains(.option)
                     return event
                 }
             }
-            store.menuOpen = true
-            store.detailsOpen = true
-            store.refresh()
         }
-        .onDisappear {
-            store.menuOpen = false; store.detailsOpen = false
-            if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
-            flagsMonitor = nil
-        }
+        store.menuOpen = true
+        store.detailsOpen = true
+        store.refresh()
+    }
+
+    private func closed() {
+        store.menuOpen = false; store.detailsOpen = false
+        optionHeld = showDetails
+        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+        flagsMonitor = nil
     }
 
     // --- заголовок ---------------------------------------------------------
