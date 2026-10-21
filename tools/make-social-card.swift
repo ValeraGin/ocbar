@@ -34,8 +34,10 @@ label(second, 66, 252, headline, ink)
 color(0xC3F36B).setFill()
 NSBezierPath(roundedRect: NSRect(x: 70, y: 214, width: 120, height: 12), xRadius: 6, yRadius: 6).fill()
 label(footer, 70, 70, .systemFont(ofSize: 22, weight: .regular), muted)
-// Меню справа, по высоте карточки с полями, прижато к верхнему краю, как в строке меню.
-let height: CGFloat = 520, width = menu.size.width * height / menu.size.height
+// Меню справа, прижато к верхнему краю, как в строке меню: по высоте карточки с
+// полями, но не шире правой колонки — заголовок слева не перекрывается.
+let scale = min(520 / menu.size.height, 400 / menu.size.width)
+let height = menu.size.height * scale, width = menu.size.width * scale
 menu.draw(in: NSRect(x: 1200 - 56 - width, y: 630 - 56 - height, width: width, height: height))
 NSGraphicsContext.restoreGraphicsState()
 try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out + ".png"))

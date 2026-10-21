@@ -70,7 +70,7 @@ for path, page in pages.items():
             assert unquote(url.fragment) in pages[dest].ids, f'{path}: broken anchor {target}'
         checked += 1
 for lang in ('en', 'ru'):
-    for screen in ('menu', 'profile'):
+    for screen in ('profile',):
         assert (DIST / f'assets/{screen}-{lang}.png').is_file()
 keys = [set(json.loads((ROOT / f'src/{lang}.json').read_text())) for lang in ('en', 'ru')]
 assert keys[0] == keys[1], f'Translation keys differ: {keys[0] ^ keys[1]}'

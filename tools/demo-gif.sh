@@ -1,7 +1,8 @@
 #!/bin/bash
 # Анимация для README и сайта: assets/demo.gif (английский интерфейс) и
-# assets/ru/demo.gif. Кадры — настоящее меню в витрине на демо-профиле
-# (--stage --screenshot menu --frame …), вне экрана; сеть и VPN не трогаются.
+# assets/ru/demo.gif. Кадры — настоящее меню на демо-профиле, снятое с экрана
+# (tools/menu-capture.sh): на время съёмки откроется демо-меню; сеть и VPN не
+# трогаются.
 #   tools/demo-gif.sh            нужны app/make-app.sh, ffmpeg и ImageMagick
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,15 +18,8 @@ trap 'rm -rf "$tmp"' EXIT
 for lang in en ru; do
     out="$root/assets/demo.gif"; [ "$lang" = ru ] && out="$root/assets/ru/demo.gif"
     dir="$tmp/$lang"; mkdir -p "$dir"
-    for item in "${frames[@]}"; do
-        name=${item%%:*}
-        "$app" --stage --light --screenshot menu --frame "$name" --shot "$dir/$name.raw.png" \
-            -AppleLanguages "($lang)" >/dev/null 2>&1
-        # Серый фон витрины — в фон сайта (и в скруглённых углах меню), затем
-        # срезаем до самого меню.
-        magick "$dir/$name.raw.png" -fuzz 6% -fill "$bg" -draw "color 0,0 floodfill" \
-            -trim +repage "$dir/$name.png"
-    done
+    names=(); for item in "${frames[@]}"; do names+=("${item%%:*}"); done
+    "$root/tools/menu-capture.sh" "$lang" light "$dir" "${names[@]}"
     # Общий холст по самому большому кадру: меню прижато к верху, как в строке меню.
     w=0; h=0
     for item in "${frames[@]}"; do
@@ -36,8 +30,12 @@ for lang in en ru; do
     list="$dir/list.txt"; : > "$list"
     for item in "${frames[@]}"; do
         name=${item%%:*}
-        magick "$dir/$name.png" -background "$bg" -gravity north -extent "${w}x${h}" \
-            -bordercolor "$bg" -border 32 -resize 50% "$dir/$name.final.png"
+        # Кадр с экрана в своём масштабе: на Retina — вдвое, на обычном — как есть.
+        scale=100; (( w > 600 )) && scale=50
+        # Прозрачные углы меню — в фон: иначе кадры GIF накладываются друг на друга.
+        # PNG24: почти серый кадр magick пишет серым PNG, и concat его теряет.
+        magick "$dir/$name.png" -background "$bg" -alpha remove -alpha off -gravity north -extent "${w}x${h}" \
+            -bordercolor "$bg" -border 32 -resize "${scale}%" PNG24:"$dir/$name.final.png"
         printf "file '%s'\nduration %s\n" "$dir/$name.final.png" "${item##*:}" >> "$list"
     done
     # concat берёт длительность последнего кадра, только если он повторён.

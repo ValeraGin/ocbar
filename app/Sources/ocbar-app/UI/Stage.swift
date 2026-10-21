@@ -243,6 +243,13 @@ enum DemoMenu {
                                    latency: "41 " + L("мс"))
     private static var last = ""
     private static var timer: Timer?
+    /// Где открывать меню для кадров (левый верхний угол меню).
+    static var anchor = NSPoint(x: 200, y: 800)
+
+    static func open() {
+        guard let menu = AppDelegate.hosted?.menu else { return }
+        menu.popUp(positioning: nil, at: anchor, in: nil)
+    }
 
     static var stateFile: String {
         ProcessInfo.processInfo.environment["OCBAR_DEMO_STATE"] ?? NSTemporaryDirectory() + "ocbar-demo-state"
@@ -250,11 +257,21 @@ enum DemoMenu {
 
     static func start() {
         apply("connected")
+        // Таймер в режиме .common и вызов прямо из него: пока меню открыто,
+        // цикл событий в режиме меню, а главная очередь может стоять.
         let t = Timer(timeInterval: 0.2, repeats: true) { _ in
-            Task { @MainActor in poll() }
+            MainActor.assumeIsolated { poll() }
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        // OCBAR_DEMO_OPEN=1 — меню открывается само, как от щелчка по значку:
+        // съёмке не нужен ни Accessibility, ни щелчок по экрану.
+        if ProcessInfo.processInfo.environment["OCBAR_DEMO_OPEN"] == "1" {
+            let open = Timer(timeInterval: 1.0, repeats: false) { _ in
+                MainActor.assumeIsolated { open() }
+            }
+            RunLoop.main.add(open, forMode: .common)
+        }
     }
 
     private static func poll() {
@@ -269,6 +286,7 @@ enum DemoMenu {
         let parts = raw.split(separator: ":").map(String.init)
         let name = parts.first ?? "connected"
         store.optionAtOpen = parts.contains("option")
+
         var busy: String?
         let status: Status
         switch name {

@@ -104,9 +104,15 @@ final class HostedMenu: NSObject {
         set { statusItem.button?.image = newValue }
     }
 
+    private(set) var isOpen = false
+
     private func opened() {
+        isOpen = true
         // Сведения о соединении — как у Wi‑Fi: меню, открытое с зажатой ⌥.
-        store.optionAtOpen = NSEvent.modifierFlags.contains(.option)
+        // В демо-меню их задаёт кадр, а не клавиша.
+        if !CommandLine.arguments.contains("--demo-menu") {
+            store.optionAtOpen = NSEvent.modifierFlags.contains(.option)
+        }
         Notifier.refreshAllowed()
         store.menuOpen = true
         store.detailsOpen = true
@@ -114,6 +120,7 @@ final class HostedMenu: NSObject {
     }
 
     private func closed() {
+        isOpen = false
         store.menuOpen = false
         store.detailsOpen = false
     }
@@ -405,7 +412,8 @@ struct MenuContent: View {
         Button(L("Настройки…")) { WindowBridge.open(WindowID.settings) }
             .keyboardShortcut(",")
         Button(L("Диагностика и журналы…")) { WindowBridge.open(WindowID.diagnostics) }
-        if UserDefaults.standard.bool(forKey: "DeveloperMode") {
+        // Режим разработчика — не для кадров README: в демо-меню его нет.
+        if UserDefaults.standard.bool(forKey: "DeveloperMode"), !CommandLine.arguments.contains("--stage") {
             Button(L("Сбросить вход")) { store.logout() }.disabled(!canConnect)
         }
         Button {

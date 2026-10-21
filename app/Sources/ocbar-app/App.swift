@@ -39,6 +39,7 @@ struct OcbarApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var stageWindow: NSWindow?
     private var iconWatch: AnyCancellable?
+    private var demoBackdrop: NSWindow?
 
     /// Меню в строке состояния — NSMenu из SwiftUI-описания (HostedMenu,
     /// NSHostingMenu): размер, место, клавиатура и закрытие — у системы,
@@ -63,8 +64,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if CommandLine.arguments.contains("--dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }
         WindowBridge.install()
         let hosted = HostedMenu(store: DemoMenu.store)
+        // Меню строки состояния берёт тему системы, а не приложения: тему
+        // кадра задаём самому меню.
+        if CommandLine.arguments.contains("--light") { hosted.menu.appearance = NSAppearance(named: .aqua) }
+        if CommandLine.arguments.contains("--dark") { hosted.menu.appearance = NSAppearance(named: .darkAqua) }
         Self.hosted = hosted
         DemoMenu.start()
+        // Меню для кадров открывается не под значком, а в половине экрана без
+        // указателя: под указателем система подсвечивает пункт. Под меню —
+        // ровный фон своего окна: меню полупрозрачное, и без него в кадр
+        // размытием попадало бы то, что лежит на экране.
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main {
+            let f = screen.visibleFrame
+            let left = NSEvent.mouseLocation.x > f.midX
+            DemoMenu.anchor = NSPoint(x: left ? f.minX + 80 : f.maxX - 480, y: f.maxY - 40)
+            if let i = CommandLine.arguments.firstIndex(of: "--backdrop"), i + 1 < CommandLine.arguments.count {
+                let v = Int(CommandLine.arguments[i + 1].dropFirst(), radix: 16) ?? 0xEEF0EA
+                let color = NSColor(srgbRed: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255,
+                                    blue: CGFloat(v & 0xFF) / 255, alpha: 1)
+                let rect = NSRect(x: DemoMenu.anchor.x - 60, y: max(f.minY, f.maxY - 1000),
+                                  width: 560, height: min(1000, f.height))
+                let backdrop = NSWindow(contentRect: rect, styleMask: .borderless, backing: .buffered, defer: false)
+                backdrop.backgroundColor = color
+                backdrop.level = .floating
+                backdrop.ignoresMouseEvents = true
+                backdrop.isReleasedWhenClosed = false
+                backdrop.orderFrontRegardless()
+                demoBackdrop = backdrop
+            }
+        }
         iconWatch = DemoMenu.store.$status
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in self?.showIcon(status) }

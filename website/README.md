@@ -40,12 +40,12 @@ a portable local preview and removes sitemap/robots files.
 ## Screenshots and assets
 
 `tools/screenshots.sh` refreshes README screenshots in `assets/` and `assets/ru/`.
-`tools/demo-gif.sh` rebuilds the README animation `assets/demo.gif` and `assets/ru/demo.gif`
-from the real menu on the demo profile.
-For the website, render `--stage --light --screenshot menu` and
-`--stage --light --screenshot settings --tab 0` into
-`dist/assets/menu-LANG.png` and `profile-LANG.png`, with `-AppleLanguages '(LANG)'`.
-Use only demonstration profiles, never `--live` for public images.
+`tools/demo-gif.sh` rebuilds the README animation `assets/demo.gif` and `assets/ru/demo.gif`,
+`tools/social-card.sh` the link cards in `dist/assets/`.
+The menu is a real NSMenu and is captured from the screen (`tools/menu-capture.sh`,
+the `--stage --demo-menu` app on demonstration profiles): while it runs, a second ocbar
+icon and the open demo menu appear on screen. Windows are rendered off screen.
+Use only demonstration profiles for public images.
 
 SVG route, DNS, comparison and open-source illustrations are localized for both
 languages. `mark.svg`/`icon.svg` match the native app switch. The social card uses
