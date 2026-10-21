@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Carbon.HIToolbox
 import AppKit
 import SwiftUI
@@ -21,6 +22,22 @@ enum SelfTest {
         }
 
         print("ocbar-app selftest")
+
+        check("язык: явный русский", AppLanguage.resolve("ru", preferred: ["en-US"]) == "ru")
+        check("язык: явный английский", AppLanguage.resolve("en", preferred: ["ru-RU"]) == "en")
+        check("язык: системный", AppLanguage.resolve("system", preferred: ["en-US"]) == "en")
+        check("язык: OCBAR_LANG главнее настройки", AppLanguage.resolve("ru", environment: "en") == "en")
+        check("язык: неизвестное значение", AppLanguage.resolve("bad", preferred: ["ru-RU"]) == "ru")
+
+        let languageDomain = "ru.ocbar.selftest.language.\(UUID().uuidString)"
+        let languageDefaults = UserDefaults(suiteName: languageDomain)!
+        let language = AppLanguage(defaults: languageDefaults)
+        let languageChanged = DispatchSemaphore(value: 0)
+        withObservationTracking { _ = language.translate("Общие") } onChange: { languageChanged.signal() }
+        language.selection = "en"
+        check("язык: L вызывает обновление интерфейса", languageChanged.wait(timeout: .now()) == .success)
+        check("язык: выбор сохранён", AppLanguage(defaults: languageDefaults).selection == "en")
+        languageDefaults.removePersistentDomain(forName: languageDomain)
 
         // --- разбор профиля ---
         let sample = """

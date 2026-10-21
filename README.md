@@ -23,13 +23,27 @@ ocbar does not provide VPN servers.
 
 **Status:** a single-author tool used daily on a real AnyConnect gateway
 with a Keycloak identity provider. The app, the sign-in windows and the CLI
-follow the system language (English or Russian); the longer guides,
+support English and Russian, selectable in Settings; the longer guides,
 [INSTALL.md](INSTALL.md) and [TROUBLESHOOTING.md](TROUBLESHOOTING.md), are in
 Russian; the first-connection problems are also in
 [TROUBLESHOOTING.en.md](TROUBLESHOOTING.en.md). Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 > Not affiliated with Cisco. "AnyConnect" is used only to describe protocol
 > compatibility.
+
+## Quick install
+
+Open Terminal and run:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)"
+```
+
+The [installer](install.sh) offers to install missing Apple Command Line Tools
+and Homebrew, installs ocbar and its helper, and opens the menu app. It asks for
+administrator access when needed. [Options and profile bundles](INSTALL.md#быстрая-установка-одной-командой).
+Choose English, Russian or System default in Settings → General → Interface language.
+
 
 ## Why
 

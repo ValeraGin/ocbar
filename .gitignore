@@ -17,3 +17,6 @@ __pycache__/
 
 # Local browser verification artifacts
 .playwright-mcp/
+
+# Private installation bundles
+.local/

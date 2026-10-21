@@ -204,6 +204,15 @@ STUB
     is "CSD: путь с пробелом — один аргумент" "$tmp/External Scripts/csd.sh" \
         "$(sed -n '/^--csd-wrapper$/{n;p;}' "$tmp/csd-args")"
     is "upstream: SSO получает явный прокси" "http://127.0.0.1:10808" "$(sed -n '/^--upstream-proxy$/{n;p;}' "$tmp/csd-args")"
+    # install должен видеть .ocbar именно пользователя sudo, а не root.
+    mkdir -p "$tmp/csd-home/.config/ocbar/profiles"
+    printf '[Connection]\nUrl = vpn.example.test\nCsdWrapper = %s\n' "$tmp/External Scripts/csd.sh" > "$tmp/csd-home/.config/ocbar/profiles/office.ocbar"
+    printf '#!/bin/bash\nexit 0\n' > "$tmp/csd-home/legacy-csd.sh"
+    printf '[legacy]\ncsd_wrapper = ~/legacy-csd.sh\n' > "$tmp/csd-home/.config/ocbar/profiles.conf"
+    out=$(run _selftest-fn install_csd_steps "$tmp/csd-home")
+    has "install CSD: профиль-файл пользователя" "$(printf '%q' "$tmp/External Scripts/csd.sh")" "$out"
+    has "install CSD: старый профиль и ~ пользователя" "$tmp/csd-home/legacy-csd.sh" "$out"
+    is "install CSD: оба формата" 2 "$(printf '%s\n' "$out" | grep -c '^install -o root')"
     rm -f "$tmp/External Scripts/csd.sh"
     out=$(OCBAR_AUTH="$tmp/auth-stub" OCBAR_CSD_ARGS="$tmp/csd-args" run _selftest-fn sso_auth csd; echo "rc=$?")
     has "CSD: отсутствующий скрипт — ошибка" "rc=1" "$out"
@@ -902,6 +911,14 @@ STUB
     done
     is "справка: каждая команда описана на обоих языках" "" "${miss# }"
     is "справка: команда status --json описана" 2 "$(printf '%s\n%s' "$hru" "$hen" | grep -c 'status \[--short|--json\]')"
+
+    # Выбор языка проверяем без чтения и изменения живых defaults.
+    is "язык: сохранённый английский важнее системы" en "$(run _selftest-fn cli_language en 'ru-RU')"
+    is "язык: системный выбор" ru "$(run _selftest-fn cli_language system 'ru-RU')"
+    is "язык: неизвестная настройка — по системе" en "$(run _selftest-fn cli_language bad 'en-US')"
+    is "язык: неизвестный язык системы — русский" ru "$(run _selftest-fn cli_language system 'de-DE')"
+    hru=$(OCBAR_LANG=ru run --help)
+    has "язык: OCBAR_LANG главнее настройки" "OpenConnect для macOS" "$hru"
 
     # Подключение в процессе: живой процесс — да, мёртвый — нет и отметка
     # убрана, мусор — нет. И супервизор при отметке не вмешивается.

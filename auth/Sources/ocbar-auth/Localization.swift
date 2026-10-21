@@ -4,7 +4,7 @@ import Foundation
 /// (app/…/Localization.swift): пропущенный перевод показывается по-русски, а
 /// не ключом. Бандла у ocbar-auth нет — это голый файл в libexec, — поэтому
 /// перевод лежит в коде (Translations.swift), а язык выбирается тем же
-/// правилом, что у приложения: первый из ru/en в языках системы, иначе ru.
+/// правилом, что у приложения: сохранённый выбор, затем языки системы.
 /// OCBAR_LANG=ru|en — явно (самопроверки, снимки окон).
 ///
 /// Журнал и ответы для ocbar (Log.*, out) не переводятся: их читает клиент
@@ -12,6 +12,8 @@ import Foundation
 enum Lang {
     static var current: String = {
         if let forced = ProcessInfo.processInfo.environment["OCBAR_LANG"], ["ru", "en"].contains(forced) { return forced }
+        if let saved = UserDefaults(suiteName: "ru.ocbar.app")?.string(forKey: "InterfaceLanguage"),
+           ["ru", "en"].contains(saved) { return saved }
         return Bundle.preferredLocalizations(from: ["ru", "en"], forPreferences: Locale.preferredLanguages).first ?? "ru"
     }()
 }

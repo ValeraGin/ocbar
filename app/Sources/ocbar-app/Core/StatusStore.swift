@@ -398,7 +398,7 @@ enum Size {
         let digits = (value < 10 && i > 0) ? 1 : 0
         // Разделитель дробной части — по языку интерфейса: «1,4 МБ» и «1.4 MB».
         let out = String(format: "%.\(digits)f %@", value, units[i])
-        let ru = Locale.preferredLanguages.first?.hasPrefix("ru") ?? false
+        let ru = AppLanguage.shared.current == "ru"
         return ru ? out.replacingOccurrences(of: ".", with: ",") : out
     }
     static func bytes(_ v: UInt64) -> String { bytes(Double(v)) }

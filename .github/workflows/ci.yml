@@ -22,13 +22,13 @@ jobs:
       - uses: actions/checkout@v5
       - name: Shell syntax
         run: |
-          for f in bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh tools/server-lab/*.sh; do
+          for f in install.sh bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh tools/server-lab/*.sh; do
             bash -n "$f"
           done
       - name: ShellCheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck >/dev/null
-          shellcheck -S error bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh
+          shellcheck -S error install.sh bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh
           shellcheck -S error tools/server-lab/*.sh
           python3 -m compileall -q libexec/*.py tools/*test.py tools/server-lab/*.py
       - name: Перевод интерфейса
@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 tools/macos-vpn-test-selftest.py
           python3 tools/macos-path-test-selftest.py
+          python3 tools/installer-selftest.py
       - name: Formula syntax
         run: ruby -c Formula/ocbar.rb
       - name: Markdown links

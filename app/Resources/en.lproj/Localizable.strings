@@ -499,3 +499,7 @@
 "сети и DNS сняты, сессия жива" = "networks and DNS are off, the session is alive";
 "шлюз не пускает к ресурсу или не хватает сети в профиле" = "the gateway blocks the resource, or the profile lacks a network";
 "Скорость" = "Speed";
+
+"Язык интерфейса" = "Interface language";
+"Как в системе" = "System default";
+"Язык меняется сразу, в том числе в новых окнах входа." = "The language changes immediately, including in new sign-in windows.";

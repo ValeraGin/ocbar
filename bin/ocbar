@@ -96,16 +96,25 @@ c_red=$'\033[31m'; c_grn=$'\033[32m'; c_yel=$'\033[33m'; c_dim=$'\033[2m'; c_off
 [ -t 1 ] || { c_red=""; c_grn=""; c_yel=""; c_dim=""; c_off=""; }
 # printf '%-Ns' считает БАЙТЫ — кириллица съезжает. Паддинг руками.
 pad() { local out="$1" w="${2:-26}"; while [ "${#out}" -lt "$w" ]; do out="$out "; done; printf '%s' "$out"; }
-# Язык сообщений — как у приложения: OCBAR_LANG=ru|en, иначе первый из ru/en
+# Язык сообщений — OCBAR_LANG=ru|en, затем выбор в приложении, затем ru/en
 # в языках системы, иначе ru. Определяется один раз, при первом сообщении.
 # Переводится то, что читает человек (ok/warn/bad/skip/info/die, уведомления);
 # журнал (log) и машинный вывод (--short, --json) — нет.
 _CLI_LANG="${OCBAR_LANG:-}"
 case "$_CLI_LANG" in ru|en) ;; *) _CLI_LANG="" ;; esac
+cli_lang_select() { # сохранённый выбор, список языков macOS
+    case "${1:-}" in ru|en) printf '%s' "$1"; return ;; esac
+    local lang
+    lang=$(printf '%s\n' "${2:-}" | tr -d ' "(),' | grep -E '^(ru|en)' | head -1 | cut -c1-2 || true)
+    printf '%s' "${lang:-ru}"
+}
 cli_lang_init() {
+    case "${OCBAR_LANG:-}" in ru|en) _CLI_LANG="$OCBAR_LANG"; return 0 ;; esac
     [ -n "$_CLI_LANG" ] && return 0
-    _CLI_LANG=$(defaults read -g AppleLanguages 2>/dev/null | tr -d ' "(),' | grep -E '^(ru|en)' | head -1 | cut -c1-2 || true)
-    _CLI_LANG="${_CLI_LANG:-ru}"
+    local saved
+    saved=$(defaults read ru.ocbar.app InterfaceLanguage 2>/dev/null || true)
+    _CLI_LANG=$(cli_lang_select "$saved" "$(defaults read -g AppleLanguages 2>/dev/null || true)")
+    export OCBAR_LANG="$_CLI_LANG"
 }
 T() { # сообщение → на языке сообщений
     cli_lang_init
@@ -3377,6 +3386,23 @@ cmd_supervise() {
 }
 
 # --------------------------------------------------------------- install ----
+# Команды копирования CSD из профилей устанавливаемого пользователя.
+install_csd_steps() { # домашний каталог пользователя
+    local user_home="$1" p f csd
+    local PROFILE_DIR="$user_home/.config/ocbar/profiles"
+    local PROFILES="$user_home/.config/ocbar/profiles.conf"
+    local PROFILE_ORDER="$user_home/.config/ocbar/profiles.order"
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        f="$PROFILE_DIR/$p.ocbar"
+        if [ -f "$f" ]; then csd=$(pf_get "$f" Connection CsdWrapper)
+        else csd=$(profile_get "$p" csd_wrapper); fi
+        csd="${csd/#\~/$user_home}"
+        [ -n "$csd" ] && [ -f "$csd" ] || continue
+        printf 'install -o root -g wheel -m 755 %q %q\n' "$csd" "$LIBDIR/csd/$(basename "$csd")"
+    done <<< "$(profile_list)"
+}
+
 # Единственная команда с sudo. Каждое действие печатается; --dry-run — только печать.
 cmd_install() {
     local trust_only=0 a; for a in "$@"; do case "$a" in --trust) trust_only=1 ;; esac; done
@@ -3398,12 +3424,10 @@ cmd_install() {
         steps+=("install -o root -g wheel -m 755 $src_helper $HELPER_INSTALLED")
         # Режим full убран — его штатный скрипт больше не нужен.
         [ -e "$LIBDIR/vpnc-script-full" ] && steps+=("rm -f $LIBDIR/vpnc-script-full")
-        local p csd
-        while read -r p; do
-            [ -n "$p" ] || continue
-            csd=$(OCBAR_CONFIG_DIR="$home/.config/ocbar" profile_get "$p" csd_wrapper); csd="${csd/#\~/$home}"
-            [ -n "$csd" ] && [ -f "$csd" ] && steps+=("install -o root -g wheel -m 755 $csd $LIBDIR/csd/$(basename "$csd")")
-        done <<< "$(PROFILES="$home/.config/ocbar/profiles.conf" profile_list)"
+        local csd_step
+        while IFS= read -r csd_step; do
+            [ -z "$csd_step" ] || steps+=("$csd_step")
+        done <<< "$(install_csd_steps "$home")"
     fi
     steps+=("install -o root -g wheel -m 755 $oc $LIBDIR/openconnect")
     steps+=("$HELPER_INSTALLED trust")
@@ -4067,6 +4091,8 @@ case "${1:-}" in
     _selftest-fn)
         shift; [ -n "${OCBAR_SELFTEST_HELPER:-}" ] || die "_selftest-fn — только для selftest (нет OCBAR_SELFTEST_HELPER)"
         case "${1:-}" in
+            install_csd_steps) install_csd_steps "${2:-}" ;;
+            cli_language) cli_lang_select "${2:-}" "${3:-}" ;;
             helper_supports_upstream) helper_supports_upstream ;;
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
             app_sync_copy) app_sync_copy "${2:-}" ;;

@@ -3,6 +3,18 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## Unreleased
+
+- Choose System default, Russian or English in Settings → General. The menu
+  and open views update immediately; new sign-in windows and CLI messages use
+  the same preference. `OCBAR_LANG` remains an explicit override.
+- `install.sh` provides a one-command macOS setup: offers missing Apple tools
+  and Homebrew, installs ocbar and its helper, enables the menu app at login,
+  and optionally imports a supplied profile with its CSD script.
+
+- Helper setup now copies CSD scripts from single-file profiles in the installing
+  user’s home, with shell-quoted paths; legacy profiles still work.
+
 ## 0.20.0 — 2026-10-21
 
 Needs macOS 14.4 or newer.

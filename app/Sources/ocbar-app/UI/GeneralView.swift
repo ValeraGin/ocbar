@@ -4,6 +4,7 @@ import SwiftUI
 // живёт в LaunchAgent, его ставит CLI, поэтому переключатель спрашивает и
 // меняет состояние через `ocbar app autostart`.
 struct GeneralView: View {
+    @Bindable private var language = AppLanguage.shared
     @ObservedObject private var store = StatusStore.shared
     @State private var autostart = false
     @State private var policy = "resume"
@@ -14,6 +15,15 @@ struct GeneralView: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker(L("Язык интерфейса"), selection: $language.selection) {
+                    Text(L("Как в системе")).tag("system")
+                    Text("Русский").tag("ru") // i18n: не интерфейс — название языка на нём самом
+                    Text("English").tag("en")
+                }
+            } footer: {
+                footnote(L("Язык меняется сразу, в том числе в новых окнах входа."))
+            }
             Section {
                 Toggle(L("Запускать при входе в систему"), isOn: Binding(get: { autostart }, set: { set($0) }))
                     .disabled(busy)
