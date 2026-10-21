@@ -517,3 +517,13 @@
 "Поднимаю туннель" = "Bringing up the tunnel";
 "Подключение: шаг %@ из %@" = "Connecting: step %@ of %@";
 "Сбросить вход" = "Reset sign-in";
+"Журнал…" = "Log…";
+"Мак просыпался после подключения (%@)" = "The Mac woke after connecting (%@)";
+"Отключить VPN" = "Disconnect VPN";
+"Подключить VPN" = "Connect VPN";
+"Проверка доступа не проходит" = "The access check fails";
+"Системный SOCKS не включён" = "System-wide SOCKS is not on";
+"Супервизор не запущен" = "The supervisor is not running";
+"автоподключения не будет" = "there will be no auto-connect";
+"сети и DNS сняты, сессия жива" = "networks and DNS are off, the session is alive";
+"шлюз не пускает к ресурсу или не хватает сети в профиле" = "the gateway blocks the resource, or the profile lacks a network";

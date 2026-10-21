@@ -43,10 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Меню в строке состояния — не MenuBarExtra(.window): то не сжималось
     /// под содержимое и не давало ни окна, ни значка (D71, разбор 2026-10-20
-    /// в журнале). По умолчанию — обычное NSMenu (ClassicMenu); ключ
-    /// MenuStyle = panel — панель в стиле Пункта управления (FluidMenuBarExtra).
+    /// в журнале). По умолчанию — NSMenu из SwiftUI-описания (HostedMenu,
+    /// NSHostingMenu); ключ MenuStyle = panel — панель в стиле Пункта
+    /// управления (FluidMenuBarExtra).
     static private(set) var menu: FluidMenuBarExtra?
-    static private(set) var classic: ClassicMenu?
+    static private(set) var hosted: HostedMenu?
 
     @MainActor private func installMenu() {
         let store = StatusStore.shared
@@ -56,9 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 NativeMenuView().environmentObject(store)
             }
         } else {
-            let classic = ClassicMenu(store: store)
-            classic.image = MenuBarIcon.image(for: store.status)
-            Self.classic = classic
+            let hosted = HostedMenu(store: store)
+            hosted.image = MenuBarIcon.image(for: store.status)
+            Self.hosted = hosted
         }
         iconWatch = store.$status
             .receive(on: DispatchQueue.main)
@@ -67,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @MainActor private func setIcon(_ image: NSImage) {
         Self.menu?.image = image
-        Self.classic?.image = image
+        Self.hosted?.image = image
     }
 
     // Пока идёт подключение, текущая часть значка мигает раз в полсекунды.
@@ -101,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             var code = SelfTest.run()
             code += SelfTest.audit()
             code += SelfTest.editorProbe()
+            code += SelfTest.hostedMenu()
             if CommandLine.arguments.contains("--live-actions") { code += SelfTest.liveActions() }
             // Итог по всем частям: строка «selftest: всё OK» выше — только
             // про разбор и правила, проба редактора идёт после неё.

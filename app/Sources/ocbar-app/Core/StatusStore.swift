@@ -27,6 +27,8 @@ final class StatusStore: ObservableObject {
     // идёт, показываем то, что человек попросил.
     @Published private(set) var pendingRoutes: [String: Bool] = [:]
     @Published private(set) var pendingZones: [String: Bool] = [:]
+    /// Меню открыто с зажатой ⌥ — показать сведения о соединении.
+    @Published var optionAtOpen = false
     @Published var menuOpen = false { didSet { retune(); if menuOpen { refreshHelperState() } } }
     // Беда, о которой status не расскажет: без NOPASSWD хелпер спросит
     // пароль в терминале, которого у меню нет, и действие просто не пройдёт.

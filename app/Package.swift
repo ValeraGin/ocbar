@@ -7,7 +7,7 @@ import PackageDescription
 // в libexec/ocbar-helper.
 let package = Package(
     name: "ocbar-app",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS("14.4")],
     targets: [
         // Вендорная копия MacControlCenterUI (MIT): см. Sources/MacControlCenterUI/VENDOR.md.
         .target(

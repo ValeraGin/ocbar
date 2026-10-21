@@ -98,13 +98,16 @@ enum MenuProbe {
     }
 
     @MainActor private static func run() {
-        // Классическое NSMenu: размер, место и закрытие — у системы, мерить
-        // нечего. Проверяем, что меню собирается из живого состояния.
-        if let classic = AppDelegate.classic {
-            classic.build()
-            let n = classic.menu.items.count
-            AppLog.write(n > 3 ? "проверка меню: ИТОГ ОК — классическое меню, пунктов \(n)"
-                               : "проверка меню: ИТОГ ПЛОХО — классическое меню почти пустое (\(n))")
+        // NSMenu из SwiftUI (NSHostingMenu): размер, место и закрытие — у
+        // системы, мерить нечего. Проверяем, что меню собралось из живого
+        // состояния: пункты есть, у текущего профиля — вторая строка.
+        if let hosted = AppDelegate.hosted {
+            hosted.menu.update()
+            let items = hosted.menu.items
+            let subtitles = items.compactMap { $0.subtitle }.filter { !$0.isEmpty }
+            AppLog.write(items.count > 3 && !subtitles.isEmpty
+                         ? "проверка меню: ИТОГ ОК — меню NSHostingMenu, пунктов \(items.count)"
+                         : "проверка меню: ИТОГ ПЛОХО — пунктов \(items.count), подзаголовков \(subtitles.count)")
             return
         }
         guard let menu else { AppLog.write("проверка меню: панели нет"); return }
