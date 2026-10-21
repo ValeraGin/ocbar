@@ -191,6 +191,14 @@ Hin $'cookie=x\n' tunnel-start vpn.example.com "$HASH" split vpn.login@corp "" w
 check 2 "--csd-user — локальный пользователь, а не логин VPN" \
     all rc0 'has "--csd-user $ME "' 'hasnt "--csd-user vpn.login@corp"'
 
+# Имя встроенного скрипта должно проходить реальную проверку хелпера.
+printf '[Connection]\nCsdScriptBase64 = %s\n' "$(printf '#!/bin/bash\nexit 0\n' | base64 | tr -d '\n')" > "$T/inline.ocbar"
+INLINE_CSD=$(/usr/bin/python3 "$HERE/../libexec/ocbar-csd.py" materialize "$T/inline.ocbar" "$PFX/libexec/ocbar/csd" 755) || exit 2
+fresh
+Hin $'cookie=x\n' tunnel-start vpn.example.com "$HASH" split user "" "$(basename "$INLINE_CSD")"
+check 2 "встроенный CSD: имя и скрипт приняты хелпером" \
+    all rc0 'has "--csd-wrapper $PFX/libexec/ocbar/csd/$(basename "$INLINE_CSD")"' 'has "--csd-user $ME "'
+
 # ------------------------------------------------------------------ 3 ----
 /bin/sleep 300 & SPID=$!; BG="$BG $SPID"
 fresh; echo "$SPID" > "$ST/openconnect.pid"

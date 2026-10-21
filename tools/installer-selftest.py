@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Installer scenarios in a fake macOS environment. No downloads, sudo or live settings."""
 import os
+import base64
 from pathlib import Path
 import pty
 import select
@@ -18,7 +19,7 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0'):
+def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocbar=''):
     tmp = tempfile.TemporaryDirectory(prefix='ocbar installer test ')
     base = Path(tmp.name)
     fake = base / 'bin'
@@ -29,7 +30,7 @@ def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501
     log.touch()
     clean_env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
     env = dict(clean_env, HOME=str(base / 'home'), PATH=f'{fake}:/usr/bin:/bin:/usr/sbin:/sbin',
-               TEST_BASE=str(base), TEST_LOG=str(log))
+               TEST_BASE=str(base), TEST_LOG=str(log), TEST_OLD=old_ocbar)
     # Only replace the fallback Homebrew locations so a real local brew cannot be used.
     script = (ROOT / 'install.sh').read_text().replace('/opt/homebrew/bin/brew', shlex.quote(str(fake / 'brew')))
     script = script.replace('/usr/local/bin/brew', shlex.quote(str(fake / 'brew')))
@@ -49,6 +50,7 @@ case "$1" in
     --prefix) if [ "$#" = 1 ]; then echo "$TEST_BASE/prefix"; else echo "$TEST_BASE/prefix"; fi ;;
     list) [ -f "$TEST_BASE/installed" ] ;;
     install|reinstall) touch "$TEST_BASE/installed" ;;
+    upgrade) if [ "$TEST_OLD" = upgradable ]; then touch "$TEST_BASE/inline-supported"; fi ;;
     help) exit 0 ;;
 esac
 '''
@@ -62,12 +64,16 @@ cp "$TEST_BASE/brew-template" "$TEST_BASE/bin/brew"
 EOF
 ''')
     executable(base / 'prefix/bin/ocbar', '''echo "ocbar $*" >> "$TEST_LOG"
+if [ -n "$TEST_OLD" ] && [ ! -f "$TEST_BASE/inline-supported" ] && [ "$1" = profile-check ]; then exit 0; fi
 case "$1" in
     profile-check|import) exec /bin/bash ''' + shlex.quote(str(ROOT / 'bin/ocbar')) + ''' "$@" ;;
 esac
 ''')
     profile = base / 'office.ocbar'
     profile.write_text('[Connection]\nName = Office\nUrl = vpn.example.test/employees\nCsdWrapper = /old/path\n\n[Routes]\n10.0.0.0/8\n\n[DNS]\nexample.test = vpn\n')
+    if embedded:
+        encoded = base64.b64encode(b'#!/bin/bash\nexit 0\n').decode()
+        profile.write_text(profile.read_text().replace('CsdWrapper = /old/path', 'CsdScriptBase64 = ' + encoded))
     csd = base / 'wrapper with spaces.sh'
     csd.write_text('#!/bin/bash\nexit 0\n')
 
@@ -173,6 +179,36 @@ def main():
         assert dst.read_text().endswith('# local edit\n')
         assert (base / 'calls').read_text().count('ocbar import') == 1
     print('OK: fresh install, dependency prompts, CSD, helper order and safe retry')
+
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', '--language', 'ru', embedded=True)
+    with tmp:
+        assert code == 0, output
+        profile = base / 'home/.config/ocbar/profiles/office.ocbar'
+        assert 'CsdScriptBase64 =' in profile.read_text() and 'CsdWrapper' not in profile.read_text()
+        extracted = list((base / 'home/.config/ocbar/csd').glob('inline-*.sh'))
+        assert len(extracted) == 1 and extracted[0].read_bytes() == b'#!/bin/bash\nexit 0\n'
+    print('OK: one-file profile installation needs no --csd argument')
+
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', '--csd', 'CSD', embedded=True)
+    with tmp:
+        assert code == 0, output
+        profile = base / 'home/.config/ocbar/profiles/office.ocbar'
+        assert 'CsdWrapper =' in profile.read_text() and 'CsdScriptBase64' not in profile.read_text()
+    print('OK: an explicit external script replaces the embedded source')
+
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', embedded=True, old_ocbar='upgradable')
+    with tmp:
+        assert code == 0, output
+        assert 'brew upgrade ValeraGin/ocbar/ocbar' in (base / 'calls').read_text()
+        assert (base / 'home/.config/ocbar/profiles/office.ocbar').exists()
+    print('OK: older ocbar is upgraded before importing an embedded script')
+
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', embedded=True, old_ocbar='unavailable')
+    with tmp:
+        assert code != 0 and 'cannot read CsdScriptBase64' in output, output
+        assert 'ocbar import' not in (base / 'calls').read_text()
+        assert 'sudo ' not in (base / 'calls').read_text()
+    print('OK: unsupported releases cannot silently skip embedded CSD')
 
     tmp, base, code, output, _ = scenario('--no-start', '--no-autostart')
     with tmp:

@@ -115,6 +115,19 @@ ocbar="$("$brew_bin" --prefix ocbar)/bin/ocbar"
 [ -x "$ocbar" ] || fail 'Homebrew did not provide the ocbar executable'
 
 if [ -n "$profile" ] && [ "$skip_profile" = 0 ]; then
+    # Older releases accepted unknown profile keys and would silently omit CSD.
+    if [ -z "$csd" ] && grep -Eiq '^[[:space:]]*CsdScriptBase64[[:space:]]*=' "$profile"; then
+        printf '[Connection]\nUrl = vpn.example.test\nCsdScriptBase64 = !\n' > "$work/csd-capability.ocbar"
+        if "$ocbar" profile-check "$work/csd-capability.ocbar" >/dev/null 2>&1; then
+            if [ "$head" = 0 ]; then
+                "$brew_bin" upgrade "$formula"
+                ocbar="$("$brew_bin" --prefix ocbar)/bin/ocbar"
+            fi
+            if "$ocbar" profile-check "$work/csd-capability.ocbar" >/dev/null 2>&1; then
+                fail 'Installed ocbar cannot read CsdScriptBase64. A newer release or --head is required.'
+            fi
+        fi
+    fi
     # Validate before copying scripts or asking for administrator access.
     "$ocbar" profile-check "$profile"
     if [ -n "$csd" ]; then
@@ -130,7 +143,7 @@ if [ -n "$profile" ] && [ "$skip_profile" = 0 ]; then
         # Only the Connection section is changed; routes, DNS and auth rules survive.
         awk -v target="$target" '
             /^\[/ { connection=(tolower($0) ~ /^\[connection\][[:space:]]*$/) }
-            connection && tolower($0) ~ /^[[:space:]]*csdwrapper[[:space:]]*=/ { next }
+            connection && tolower($0) ~ /^[[:space:]]*(csdwrapper|csdscriptbase64)[[:space:]]*=/ { next }
             { print }
             tolower($0) ~ /^\[connection\][[:space:]]*$/ { print "CsdWrapper = " target }
         ' "$profile" > "$work/$name.ocbar"

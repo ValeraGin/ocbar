@@ -674,6 +674,7 @@ load_profile() {
     P_AUTH=$(profile_get "$p" auth);  P_AUTH="${P_AUTH:-sso}"
     P_UA=$(profile_get "$p" useragent); P_UA="${P_UA:-AnyConnect Windows 4.10.06079}"
     P_SVC=$(profile_get "$p" keychain_service); P_SVC="${P_SVC:-ru.ocbar.client}"
+    P_CSD_INLINE=0
     P_CSD=$(profile_get "$p" csd_wrapper)
     # Откуда брать одноразовый код. Источников несколько, и ни один не
     # «главный»: keychain — секрет в связке ключей, keepassxc — готовый код из
@@ -802,6 +803,14 @@ load_profile_file() { # файл имя
     P_USER=$(pf_get "$f" Connection User); P_USER="${P_USER:-$(id -un)}"
     P_UA=$(pf_get "$f" Connection UserAgent); P_UA="${P_UA:-AnyConnect Windows 4.10.06079}"
     P_CSD=$(pf_get "$f" Connection CsdWrapper); P_CSD="${P_CSD/#\~/$HOME}"
+    P_CSD_INLINE=0
+    if [ -n "$(pf_get "$f" Connection CsdScriptBase64)" ]; then
+        local csd_tool csd_name
+        csd_tool=$(libexec_file ocbar-csd.py) || die "CsdScriptBase64: missing ocbar-csd.py"
+        csd_name=$(/usr/bin/python3 "$csd_tool" name "$f") || die "CsdScriptBase64: invalid embedded script"
+        P_CSD_INLINE=1
+        P_CSD="$CONFIG_DIR/csd/$csd_name"
+    fi
     P_MODE=split
     P_AUTH=$(pf_get "$f" Connection Auth); P_AUTH="${P_AUTH:-sso}"
     # Как пускать трафик: tunnel — интерфейс и маршруты (сегодняшний путь),
@@ -1513,8 +1522,17 @@ cmd_secret() {
 }
 
 # --------------------------------------------------------------- connect ----
+# Декодируем по требованию: status/profile-check остаются только чтением.
+prepare_csd() {
+    [ "${P_CSD_INLINE:-0}" = 1 ] || return 0
+    local tool
+    tool=$(libexec_file ocbar-csd.py) || die "CsdScriptBase64: missing ocbar-csd.py"
+    P_CSD=$(/usr/bin/python3 "$tool" materialize "$P_FILE" "$CONFIG_DIR/csd") \
+        || die "CsdScriptBase64: could not extract embedded script"
+}
 # Аутентификация → JSON от ocbar-auth. Секреты — только через окружение.
 authenticate() { # печатает "token hash post_url"
+    prepare_csd
     local auth; auth=$(auth_path) || die "не найден ocbar-auth — собрать: (cd auth && swift build -c release)"
     local -a args=(--url "$P_URL" --useragent "$P_UA")
     [ -z "${P_UPSTREAM:-}" ] || args+=(--upstream-proxy "$P_UPSTREAM")
@@ -1592,6 +1610,7 @@ authenticate() { # печатает "token hash post_url"
 # отвечает человек — окном ocbar-auth или в терминале. Итог тот же, что у
 # authenticate: "token hash post_url", дальше туннель поднимает хелпер.
 authenticate_password() { # печатает "token hash post_url"
+    prepare_csd
     stage_set login
     # Автоподключение не зовёт человека: код из SMS без него не получить.
     if [ "${OCBAR_SILENT:-}" = 1 ]; then
@@ -2039,6 +2058,7 @@ proxy_precheck() { # [1 — переключение с живой сессии]
 }
 
 proxy_start() { # url servercert cookie
+    prepare_csd
     local url="$1" hash="$2" cookie="$3" oc ocp
     oc=$(openconnect_bin) || die "нет openconnect"
     ocp=$(ocproxy_bin) || ocp=ocproxy
@@ -2746,6 +2766,12 @@ cmd_import() {
     mkdir -p "$PROFILE_DIR"
     local dst="$PROFILE_DIR/$name.ocbar"
     [ -f "$dst" ] && die "профиль [$name] уже есть: $dst (удалите или укажите другое имя)"
+    if [ -n "$(pf_get "$src" Connection CsdScriptBase64)" ]; then
+        local csd_tool
+        csd_tool=$(libexec_file ocbar-csd.py) || die "CsdScriptBase64: missing ocbar-csd.py"
+        /usr/bin/python3 "$csd_tool" materialize "$src" "$CONFIG_DIR/csd" >/dev/null \
+            || die "CsdScriptBase64: could not extract embedded script"
+    fi
     cp "$src" "$dst"; chmod 600 "$dst"
     ok "профиль [$name] импортирован" "$dst"
     info ""
@@ -2774,7 +2800,9 @@ cmd_export() {
         printf 'Url         = %s\n' "$P_URL"
         printf 'User        = %s\n' "$P_USER"
         printf 'UserAgent   = %s\n' "$P_UA"
-        if [ -n "${P_CSD:-}" ]; then printf 'CsdWrapper  = %s\n' "$P_CSD"; fi
+        if [ "${P_CSD_INLINE:-0}" = 1 ]; then
+            printf 'CsdScriptBase64 = %s\n' "$(pf_get "$P_FILE" Connection CsdScriptBase64)"
+        elif [ -n "${P_CSD:-}" ]; then printf 'CsdWrapper  = %s\n' "$P_CSD"; fi
         if [ "${P_AUTH:-sso}" != sso ]; then printf 'Auth        = %s\n' "$P_AUTH"; fi
         if [ "${P_KIND:-tunnel}" != tunnel ]; then printf 'Mode        = %s\n' "$P_KIND"; fi
         if [ "${P_KIND:-tunnel}" != tunnel ] || [ "${P_SYS_PROXY:-off}" != off ] \
@@ -3395,6 +3423,13 @@ install_csd_steps() { # домашний каталог пользователя
     while IFS= read -r p; do
         [ -n "$p" ] || continue
         f="$PROFILE_DIR/$p.ocbar"
+        if [ -f "$f" ] && [ -n "$(pf_get "$f" Connection CsdScriptBase64)" ]; then
+            local tool
+            tool=$(libexec_file ocbar-csd.py) || return 1
+            /usr/bin/python3 "$tool" name "$f" >/dev/null || return 1
+            printf '/usr/bin/python3 %q materialize %q %q 755\n' "$tool" "$f" "$LIBDIR/csd"
+            continue
+        fi
         if [ -f "$f" ]; then csd=$(pf_get "$f" Connection CsdWrapper)
         else csd=$(profile_get "$p" csd_wrapper); fi
         csd="${csd/#\~/$user_home}"
@@ -3424,10 +3459,11 @@ cmd_install() {
         steps+=("install -o root -g wheel -m 755 $src_helper $HELPER_INSTALLED")
         # Режим full убран — его штатный скрипт больше не нужен.
         [ -e "$LIBDIR/vpnc-script-full" ] && steps+=("rm -f $LIBDIR/vpnc-script-full")
-        local csd_step
+        local csd_step csd_steps
+        csd_steps=$(install_csd_steps "$home") || die "CsdScriptBase64: invalid embedded script"
         while IFS= read -r csd_step; do
             [ -z "$csd_step" ] || steps+=("$csd_step")
-        done <<< "$(install_csd_steps "$home")"
+        done <<< "$csd_steps"
     fi
     steps+=("install -o root -g wheel -m 755 $oc $LIBDIR/openconnect")
     steps+=("$HELPER_INSTALLED trust")

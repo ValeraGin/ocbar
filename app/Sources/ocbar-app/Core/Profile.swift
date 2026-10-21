@@ -26,6 +26,7 @@ struct ProfileDoc {
     var user = ""
     var userAgent = ""
     var csdWrapper = ""
+    var csdScriptBase64 = ""
     var upstreamProxy = ""
     var auth = ""           // пусто = sso
     // Строки секции [Routes] как есть: сеть — первое слово (как `read -r n _`
@@ -79,6 +80,21 @@ struct ProfileDoc {
     // при записи не пишется — о нём предупреждает проверка.
     var duplicates: [String] = []
 
+    /// Тот же формат, что у libexec/ocbar-csd.py. Проверка ничего не запускает.
+    static func csdScriptIssue(_ encoded: String) -> String? {
+        guard encoded.count <= ((256 * 1024 + 2) / 3) * 4 else {
+            return L("Встроенный CSD-скрипт больше 256 КиБ")
+        }
+        guard let data = Data(base64Encoded: encoded), data.base64EncodedString() == encoded else {
+            return L("CsdScriptBase64: некорректный Base64")
+        }
+        guard data.count <= 256 * 1024 else { return L("Встроенный CSD-скрипт больше 256 КиБ") }
+        guard String(data: data, encoding: .utf8) != nil, !data.contains(0), data.starts(with: [0x23, 0x21]) else {
+            return L("CSD-скрипт должен быть в UTF-8, начинаться с #! и не содержать нулевых байтов")
+        }
+        return nil
+    }
+
     static let defaultUserAgent = "AnyConnect Windows 4.10.06079"
 
     // Строки User-Agent, которыми клиенты AnyConnect представляются шлюзу.
@@ -102,7 +118,7 @@ struct ProfileDoc {
 
     // Ключи, которые редактор понимает, по секциям (в нижнем регистре).
     static let knownKeys: [String: Set<String>] = [
-        "connection": ["name", "description", "url", "user", "useragent", "csdwrapper", "upstreamproxy", "auth", "mode", "notifications"],
+        "connection": ["name", "description", "url", "user", "useragent", "csdwrapper", "csdscriptbase64", "upstreamproxy", "auth", "mode", "notifications"],
         "auth": ["password", "passwordcommand", "totp", "totpcommand", "totpalgorithm", "totpdigits", "totpperiod",
                  "keepassentry", "keepassdb", "keepasskeychain", "keychainservice", "idphosts", "rules"],
         "proxy": ["port", "systemproxy"],
@@ -225,6 +241,7 @@ struct ProfileDoc {
         case ("connection", "user"): user = value
         case ("connection", "useragent"): userAgent = value
         case ("connection", "csdwrapper"): csdWrapper = value
+        case ("connection", "csdscriptbase64"): csdScriptBase64 = value
         case ("connection", "upstreamproxy"): upstreamProxy = value
         case ("connection", "auth"): auth = value
         case ("connection", "mode"): mode = value.isEmpty ? "tunnel" : value
@@ -267,6 +284,7 @@ struct ProfileDoc {
         if !user.isEmpty { out += kv("User", 11, user) }
         out += kv("UserAgent", 11, userAgent.isEmpty ? Self.defaultUserAgent : userAgent)
         if !csdWrapper.isEmpty { out += kv("CsdWrapper", 11, csdWrapper) }
+        if !csdScriptBase64.isEmpty { out += kv("CsdScriptBase64", 15, csdScriptBase64) }
         if !upstreamProxy.isEmpty { out += kv("UpstreamProxy", 13, upstreamProxy) }
         if !auth.isEmpty && auth != "sso" { out += kv("Auth", 11, auth) }
         if mode != "tunnel" { out += kv("Mode", 11, mode) }
@@ -546,6 +564,10 @@ enum ProfileCheck {
         }
         if d.systemProxy && d.mode != "proxy" {
             warn(L("системный SOCKS имеет смысл только в прокси-режиме"))
+        }
+        if !d.csdScriptBase64.isEmpty {
+            if !d.csdWrapper.isEmpty { err(L("Укажите CsdWrapper или встроенный CSD-скрипт, только один вариант")) }
+            if let why = ProfileDoc.csdScriptIssue(d.csdScriptBase64) { err(why) }
         }
         if !d.csdWrapper.isEmpty, d.csdWrapper.contains(" ") {
             warn(L("путь CsdWrapper с пробелом — хелпер берёт только имя файла из своего каталога"))

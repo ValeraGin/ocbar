@@ -322,6 +322,31 @@ struct ProfileEditorView: View {
         }
     }
 
+    private func chooseCsdScript() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                guard data.count <= 256 * 1024 else {
+                    issues.append(Issue(level: .error, text: L("Встроенный CSD-скрипт больше 256 КиБ")))
+                    return
+                }
+                let encoded = data.base64EncodedString()
+                if let why = ProfileDoc.csdScriptIssue(encoded) {
+                    issues.append(Issue(level: .error, text: why)); return
+                }
+                doc.csdWrapper = ""
+                doc.csdScriptBase64 = encoded
+                touched()
+            } catch {
+                issues.append(Issue(level: .error, text: L("Не удалось прочитать CSD-скрипт: %@", error.localizedDescription)))
+            }
+        }
+    }
+
     private func connectThis() {
         guard let name = loadedName else { return }
         store.connect(profile: name)
@@ -401,7 +426,16 @@ struct ProfileEditorView: View {
                 }
                 field(L("Имя файла"), $doc.fileName, hint: L("имя.ocbar в ~/.config/ocbar/profiles"))
                 userAgentField
-                field("CsdWrapper", $doc.csdWrapper, hint: L("если шлюз просит проверку соответствия"))
+                if doc.csdScriptBase64.isEmpty {
+                    field("CsdWrapper", $doc.csdWrapper, hint: L("если шлюз просит проверку соответствия"))
+                    Button(L("Встроить CSD-скрипт…")) { chooseCsdScript() }
+                } else {
+                    LabeledContent("CSD") {
+                        Text(L("Скрипт встроен в профиль"))
+                        Button(L("Заменить…")) { chooseCsdScript() }
+                        Button(L("Удалить")) { doc.csdScriptBase64 = ""; touched() }
+                    }
+                }
                 if ["auto", "keychain"].contains(doc.totp) || doc.totpAlgorithm != "SHA1"
                     || doc.totpDigits != "6" || doc.totpPeriod != "30" {
                     totpParamsRow

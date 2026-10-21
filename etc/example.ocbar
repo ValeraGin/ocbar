@@ -15,6 +15,8 @@ User        = alice
 UserAgent   = AnyConnect Windows 4.10.06079
 # UpstreamProxy = http://127.0.0.1:10808  # HTTP CONNECT/SOCKS5 без пароля; вход и VPN; DTLS off
 # CsdWrapper = ~/vpn/csd-post.sh      # внешний скрипт HostScan; нужен chmod u+x
+# CsdScriptBase64 = ...               # вместо CsdWrapper: скрипт внутри профиля
+# Встроить файл можно кнопкой «Встроить CSD-скрипт…» в редакторе профиля.
 # Mode      = tunnel                  # tunnel (по умолчанию) | proxy — локальный SOCKS
 #                                     # через ocproxy (brew install ocproxy), без root
 

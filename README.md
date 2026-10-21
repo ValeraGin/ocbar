@@ -226,6 +226,20 @@ report for ocbar to submit. ocbar waits for the gateway, then resumes SSO.
 Missing files, execution errors and non-zero exit codes stop sign-in.
 Whether the report satisfies the device policy is decided by the gateway.
 
+### Embed CSD in a portable profile
+
+In the profile editor's advanced settings, choose **Embed CSD script…**.
+The file is stored in `[Connection] CsdScriptBase64`, as one line of Base64.
+The editor and `ocbar export` preserve it, so a colleague needs just one `.ocbar`.
+Use a UTF-8 script starting with `#!`, up to 256 KiB. Choose either
+`CsdWrapper` or `CsdScriptBase64`.
+
+Import extracts the script into `~/.config/ocbar/csd/`; `sudo ocbar install`
+prepares its system copy. The installer handles both steps with `--profile`
+alone, without `--csd`. Reading, validating and importing never run the script.
+After changing the embedded script, rerun `sudo ocbar install` to update its
+system copy.
+
 ### Connecting through an upstream proxy
 
 Set `[Connection] UpstreamProxy = http://127.0.0.1:10808` or

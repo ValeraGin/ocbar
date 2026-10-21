@@ -38,6 +38,7 @@ jobs:
           python3 tools/macos-vpn-test-selftest.py
           python3 tools/macos-path-test-selftest.py
           python3 tools/installer-selftest.py
+          python3 tools/embedded-csd-selftest.py
       - name: Formula syntax
         run: ruby -c Formula/ocbar.rb
       - name: Markdown links

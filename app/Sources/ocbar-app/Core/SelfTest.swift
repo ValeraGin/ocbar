@@ -100,6 +100,17 @@ enum SelfTest {
         // Ключи, которых редактор не знает, должны пережить запись: молча
         // потерять чужую строку — худшее, что может сделать редактор.
         check("upstream сохранён после редактирования", ProfileDoc.parse(doc.render(), fileName: "sample").upstreamProxy == "http://127.0.0.1:10808")
+        var embedded = doc
+        let csdData = Data("#!/bin/bash\nprintf '[Auth]\\n# keep me\\n'\n".utf8)
+        embedded.csdScriptBase64 = csdData.base64EncodedString()
+        let csdAgain = ProfileDoc.parse(embedded.render(), fileName: "embedded")
+        check("CSD: встроенный скрипт переживает редактирование", csdAgain.csdScriptBase64 == embedded.csdScriptBase64)
+        check("CSD: корректный скрипт принят", ProfileDoc.csdScriptIssue(embedded.csdScriptBase64) == nil)
+        check("CSD: некорректный Base64 отвергнут", ProfileDoc.csdScriptIssue("!") != nil)
+        check("CSD: бинарный файл отвергнут", ProfileDoc.csdScriptIssue(Data([0, 1, 2]).base64EncodedString()) != nil)
+        check("CSD: слишком большой скрипт отвергнут", ProfileDoc.csdScriptIssue(String(repeating: "A", count: 350000)) != nil)
+        embedded.csdWrapper = "/tmp/external.sh"
+        check("CSD: конфликт источников отвергнут", ProfileCheck.check(embedded).contains { $0.level == .error && $0.text.contains("CsdWrapper") })
         let rendered = doc.render()
         check("незнакомый ключ сохранён", rendered.contains("БудущийКлюч"), rendered)
         check("незнакомая секция сохранена", rendered.contains("[СовсемНоваяСекция]"))

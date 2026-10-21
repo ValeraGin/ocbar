@@ -5,6 +5,11 @@ release to its tag and commit.
 
 ## Unreleased
 
+- Profiles can embed their CSD wrapper in `CsdScriptBase64`. Import extracts
+  it automatically; helper setup prepares the system copy. The profile editor
+  can embed or replace a script, and exports preserve it. One-file installation
+  only needs `--profile`, without a separate CSD download.
+
 - Choose System default, Russian or English in Settings → General. The menu
   and open views update immediately; new sign-in windows and CLI messages use
   the same preference. `OCBAR_LANG` remains an explicit override.

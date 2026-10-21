@@ -503,3 +503,12 @@
 "Язык интерфейса" = "Interface language";
 "Как в системе" = "System default";
 "Язык меняется сразу, в том числе в новых окнах входа." = "The language changes immediately, including in new sign-in windows.";
+"Встроенный CSD-скрипт больше 256 КиБ" = "The embedded CSD script exceeds 256 KiB";
+"CsdScriptBase64: некорректный Base64" = "CsdScriptBase64: invalid Base64";
+"CSD-скрипт должен быть в UTF-8, начинаться с #! и не содержать нулевых байтов" = "The CSD script must be UTF-8, start with #! and contain no NUL bytes";
+"Укажите CsdWrapper или встроенный CSD-скрипт, только один вариант" = "Choose either CsdWrapper or an embedded CSD script";
+"Встроить CSD-скрипт…" = "Embed CSD script…";
+"Скрипт встроен в профиль" = "The script is embedded in the profile";
+"Заменить…" = "Replace…";
+"Не удалось прочитать CSD-скрипт: %@" = "Could not read the CSD script: %@";
+"Удалить" = "Remove";
