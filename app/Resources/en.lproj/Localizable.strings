@@ -516,3 +516,4 @@
 "Получаю сессию" = "Getting the session";
 "Поднимаю туннель" = "Bringing up the tunnel";
 "Подключение: шаг %@ из %@" = "Connecting: step %@ of %@";
+"Сбросить вход" = "Reset sign-in";

@@ -405,20 +405,18 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(action(L("Настройки…"), key: ",") { WindowBridge.open(WindowID.settings) })
         menu.addItem(action(L("Диагностика и журналы…")) { WindowBridge.open(WindowID.diagnostics) })
+        // «Выйти из ocbar» коротко; что туннель останется — второй строкой
+        // мелко: длинный пункт задавал ширину всему меню.
+        let quit = action(L("Выйти из ocbar"), key: "q") { NSApplication.shared.terminate(nil) }
+        if up { quit.attributedTitle = twoLines(L("Выйти из ocbar"), L("туннель останется"), color: .secondaryLabelColor) }
+        menu.addItem(quit)
         if UserDefaults.standard.bool(forKey: "DeveloperMode") {
             // Только для проверок: прячется под ⌥ вместо «Выйти из ocbar».
-            let logout = action(L("Выйти совсем (сброс входа)"), key: "q", mods: [.command, .option], enabled: canConnect) {
+            let logout = action(L("Сбросить вход"), key: "q", mods: [.command, .option], enabled: canConnect) {
                 [weak self] in self?.store.logout()
             }
             logout.isAlternate = true
-            menu.addItem(action(up ? L("Выйти из ocbar · туннель останется") : L("Выйти из ocbar"), key: "q") {
-                NSApplication.shared.terminate(nil)
-            })
             menu.addItem(logout)
-        } else {
-            menu.addItem(action(up ? L("Выйти из ocbar · туннель останется") : L("Выйти из ocbar"), key: "q") {
-                NSApplication.shared.terminate(nil)
-            })
         }
     }
 
