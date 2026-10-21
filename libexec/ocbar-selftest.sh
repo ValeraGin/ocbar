@@ -894,9 +894,11 @@ STUB
     local cmds c hru hen miss=""
     cmds=$(sed -n '/^case "\${1:-}" in$/,/^esac$/p' "$SELF" | grep -oE '^    [a-z][a-z-]*(\|[a-z-]+)*\)' | tr -d ' )' | tr '|' '\n')
     hru=$(OCBAR_LANG=ru run --help 2>&1 || true); hen=$(OCBAR_LANG=en run --help 2>&1 || true)
+    # Без конвейера: grep -q выходит на первом совпадении, printf получает
+    # SIGPIPE, и под pipefail найденная строка считалась бы пропавшей.
     for c in $cmds; do
-        printf '%s' "$hru" | grep -Eq "ocbar $c( |$)" || miss="$miss ru:$c"
-        printf '%s' "$hen" | grep -Eq "ocbar $c( |$)" || miss="$miss en:$c"
+        grep -Eq "ocbar $c( |$)" <<< "$hru" || miss="$miss ru:$c"
+        grep -Eq "ocbar $c( |$)" <<< "$hen" || miss="$miss en:$c"
     done
     is "справка: каждая команда описана на обоих языках" "" "${miss# }"
     is "справка: команда status --json описана" 2 "$(printf '%s\n%s' "$hru" "$hen" | grep -c 'status \[--short|--json\]')"
