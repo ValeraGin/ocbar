@@ -16,7 +16,10 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
     private var optionAtOpen = false
     private var rebuildQueued = false
 
-    static let width: CGFloat = 300
+    /// Свои виды (шапка, полоска, пояснения) не задают ширину меню: она — по
+    /// самому длинному обычному пункту, а виды подстраиваются под неё.
+    private static let floorWidth: CGFloat = 200
+    private var relayouts: [(CGFloat) -> Void] = []
 
     init(store: StatusStore) {
         self.store = store
@@ -24,7 +27,6 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
         super.init()
         menu.delegate = self
         menu.autoenablesItems = false
-        menu.minimumWidth = Self.width
         // Колонки галочек в главном меню нет: поднятый профиль отмечен цветом
         // значка, а не галочкой, и текст встаёт ближе к краю. В подменю сетей
         // и зон галочки остаются — там это переключатели.
@@ -84,6 +86,7 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
 
     func build() {
         menu.removeAllItems()
+        relayouts = []
         menu.addItem(header())
         menu.addItem(.separator())
         profiles()
@@ -94,16 +97,21 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
         if optionAtOpen, look.details { details() }
         menu.addItem(.separator())
         commands()
+        // Ширина — по обычным пунктам; свои виды растягиваем до неё. Меряем
+        // копию: замер самого меню меняет его раскладку — пункты без значка
+        // переставали выравниваться по тексту пунктов со значком.
+        let width = max((menu.copy() as? NSMenu)?.size.width ?? 0, Self.floorWidth)
+        relayouts.forEach { $0(width) }
     }
 
     // Шапка — свой вид: свитч в нём меню не закрывает, как у Wi‑Fi.
     private func header() -> NSMenuItem {
-        let v = NSView(frame: NSRect(x: 0, y: 0, width: Self.width, height: 30))
+        let v = NSView(frame: NSRect(x: 0, y: 0, width: Self.floorWidth, height: 30))
         let label = NSTextField(labelWithString: "VPN")
         label.font = .systemFont(ofSize: 13, weight: .bold)
         label.frame = NSRect(x: 14, y: 6, width: 60, height: 18)
         v.addSubview(label)
-        let sw = NSSwitch(frame: NSRect(x: Self.width - 14 - 38, y: 5, width: 38, height: 20))
+        let sw = NSSwitch()
         sw.controlSize = .small
         sw.state = up ? .on : .off
         sw.isEnabled = !(s.presentation == .missing || (!up && !canConnect))
@@ -111,19 +119,28 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
         sw.action = #selector(switchChanged(_:))
         sw.setAccessibilityLabel(L("Подключение VPN"))
         v.addSubview(sw)
+        var spin: NSProgressIndicator?
+        var text: NSTextField?
         if let busy = store.busy {
-            let spin = NSProgressIndicator(frame: NSRect(x: Self.width - 14 - 38 - 20, y: 8, width: 14, height: 14))
-            spin.style = .spinning
-            spin.controlSize = .small
-            spin.startAnimation(nil)
-            v.addSubview(spin)
-            let text = NSTextField(labelWithString: busy)
-            text.font = .systemFont(ofSize: 11)
-            text.textColor = .secondaryLabelColor
-            text.alignment = .right
-            text.lineBreakMode = .byTruncatingTail
-            text.frame = NSRect(x: 80, y: 7, width: Self.width - 80 - 14 - 38 - 26, height: 16)
-            v.addSubview(text)
+            let p = NSProgressIndicator()
+            p.style = .spinning
+            p.controlSize = .small
+            p.startAnimation(nil)
+            v.addSubview(p)
+            spin = p
+            let t = NSTextField(labelWithString: busy)
+            t.font = .systemFont(ofSize: 11)
+            t.textColor = .secondaryLabelColor
+            t.alignment = .right
+            t.lineBreakMode = .byTruncatingTail
+            v.addSubview(t)
+            text = t
+        }
+        relayouts.append { w in
+            v.frame.size.width = w
+            sw.frame = NSRect(x: w - 14 - 38, y: 5, width: 38, height: 20)
+            spin?.frame = NSRect(x: w - 14 - 38 - 20, y: 8, width: 14, height: 14)
+            text?.frame = NSRect(x: 64, y: 7, width: max(0, w - 64 - 14 - 38 - 26), height: 16)
         }
         let item = NSMenuItem()
         item.view = v
@@ -180,8 +197,8 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
     }
 
     private func progressItem(_ step: ConnectStep) -> NSMenuItem {
-        let v = NSView(frame: NSRect(x: 0, y: 0, width: Self.width, height: 12))
-        let bar = NSProgressIndicator(frame: NSRect(x: 14, y: 3, width: Self.width - 28, height: 6))
+        let v = NSView(frame: NSRect(x: 0, y: 0, width: Self.floorWidth, height: 12))
+        let bar = NSProgressIndicator()
         bar.style = .bar
         bar.isIndeterminate = false
         bar.controlSize = .small
@@ -190,6 +207,10 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
         bar.doubleValue = Double(step.index)
         bar.setAccessibilityLabel(L("Подключение: шаг %@ из %@", "\(step.index)", "\(ConnectStep.total)"))
         v.addSubview(bar)
+        relayouts.append { w in
+            v.frame.size.width = w
+            bar.frame = NSRect(x: 14, y: 3, width: w - 28, height: 6)
+        }
         let item = NSMenuItem()
         item.view = v
         return item
@@ -450,11 +471,10 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
     }
 
     // Пояснение в несколько строк — свой вид: обычный пункт меню не переносит
-    // текст.
+    // текст. Высота считается, когда известна ширина меню.
     private func textItem(_ title: String?, detail: String, symbol: String? = nil,
                           tint: NSColor = .secondaryLabelColor) -> NSMenuItem {
         let left: CGFloat = symbol == nil ? 14 : 36
-        let width = Self.width - left - 14
         let text = NSTextField(wrappingLabelWithString: "")
         let body = NSMutableAttributedString()
         if let title {
@@ -465,19 +485,30 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
             .font: NSFont.systemFont(ofSize: 11),
             .foregroundColor: symbol == nil || title != nil ? NSColor.secondaryLabelColor : NSColor.labelColor]))
         text.attributedStringValue = body
-        text.preferredMaxLayoutWidth = width
         text.isSelectable = false
-        let height = ceil(text.sizeThatFits(NSSize(width: width, height: 1000)).height)
-        let v = NSView(frame: NSRect(x: 0, y: 0, width: Self.width, height: height + 8))
-        text.frame = NSRect(x: left, y: 4, width: width, height: height)
+        let v = NSView(frame: NSRect(x: 0, y: 0, width: Self.floorWidth, height: 20))
         v.addSubview(text)
+        var icon: NSImageView?
         if let symbol {
-            let icon = NSImageView(frame: NSRect(x: 14, y: height + 4 - 16, width: 16, height: 16))
-            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-            icon.contentTintColor = tint
-            icon.symbolConfiguration = .init(pointSize: 12, weight: .regular)
-            v.addSubview(icon)
+            let i = NSImageView()
+            i.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            i.contentTintColor = tint
+            i.symbolConfiguration = .init(pointSize: 12, weight: .regular)
+            v.addSubview(i)
+            icon = i
         }
+        let place = { (w: CGFloat) in
+            let textWidth = w - left - 14
+            text.preferredMaxLayoutWidth = textWidth
+            let height = ceil(text.sizeThatFits(NSSize(width: textWidth, height: 1000)).height)
+            v.frame = NSRect(x: 0, y: 0, width: w, height: height + 8)
+            text.frame = NSRect(x: left, y: 4, width: textWidth, height: height)
+            icon?.frame = NSRect(x: 14, y: height + 4 - 16, width: 16, height: 16)
+        }
+        // Узкая раскладка сразу: высота вида не должна раздувать меню, пока
+        // ширина не известна.
+        place(Self.floorWidth)
+        relayouts.append(place)
         let item = NSMenuItem()
         item.view = v
         return item
