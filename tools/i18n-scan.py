@@ -35,7 +35,7 @@ KEY_RE = re.compile(r'(?<![\w.])L\(\s*"((?:[^"\\]|\\.)*)"')
 # подписях действий, ошибках, подсказках редактора и заголовках окон — а
 # найденное печатал, не останавливая сборку. Теперь любой кириллический
 # литерал вне L() — ошибка, кроме того, что человек не видит:
-UI_SKIP_FILES = {"SelfTest.swift", "SelfTestAudit.swift", "MenuProbe.swift"}
+UI_SKIP_FILES = {"SelfTest.swift", "SelfTestAudit.swift", "SelfTestMenu.swift", "MenuProbe.swift"}
 # журнал и печать; сравнение с выводом клиента (он переводит сам);
 # строка, помеченная комментарием «i18n: не интерфейс».
 NOT_UI_LINE = re.compile(r"AppLog\.write|\bprint\(|fatalError\(|i18n: не интерфейс")
@@ -92,7 +92,7 @@ def keys(report_unwrapped: bool = False) -> list[str]:
     unwrapped: list[str] = []
     for root in SOURCES:
         for path in sorted(root.rglob("*.swift")):
-            if path.name in {"SelfTest.swift", "SelfTestAudit.swift"}:
+            if path.name in {"SelfTest.swift", "SelfTestAudit.swift", "SelfTestMenu.swift"}:
                 continue  # самопроверка человеку не показывается; витрина — да: из неё кадры README
             for n, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
                 if line.lstrip().startswith("//"):

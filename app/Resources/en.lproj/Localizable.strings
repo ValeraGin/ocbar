@@ -13,7 +13,6 @@
 "О программе" = "About";
 "Показать в Finder" = "Show in Finder";
 "Скопировать" = "Copy";
-"Скопировать: " = "Copy: ";
 "Скрыть" = "Dismiss";
 
 /* Диагностика */
@@ -46,21 +45,17 @@
 "Приложение" = "App";
 
 /* Меню */
-"Другой профиль…" = "Another profile…";
 "Отключить" = "Disconnect";
 "Приостановить" = "Pause";
 "Возобновить" = "Resume";
 "Отменить" = "Cancel";
-"Войти" = "Sign in";
 "Войти…" = "Sign in…";
 "Войти и запомнить вход…" = "Sign in and learn the form…";
 "Не подключаться" = "Stay disconnected";
 "Подключить и запомнить вход…" = "Connect and learn the form…";
-"Скорость за минуту" = "Speed over the last minute";
 "Настроить ocbar…" = "Set up ocbar…";
 "Настройки…" = "Settings…";
 "Диагностика и журналы…" = "Diagnostics and logs…";
-"Выйти совсем (сброс входа)" = "Sign out completely (reset login)";
 "Выйти из ocbar" = "Quit ocbar";
 "туннель останется" = "the tunnel stays up";
 "Назад" = "Back";
@@ -75,9 +70,6 @@
 "Задержка" = "Latency";
 "Доступ" = "Access";
 "порт не отвечает — супервизор перезапустит прокси" = "the port does not answer — the supervisor will restart the proxy";
-"Системный SOCKS" = "System-wide SOCKS";
-"Как направить программу" = "How to point a program at it";
-"Имена внутренних хостов резолвит ocproxy по DNS шлюза (socks5h), поэтому в системе ничего не меняется. Паузы в этом режиме нет: снимать нечего." = "Internal host names are resolved by ocproxy through the gateway's DNS (socks5h), so nothing in the system changes. There is no pause in this mode: there is nothing to remove.";
 "нет маршрута" = "no route";
 
 /* Состояния */
@@ -190,7 +182,6 @@
 "Позже" = "Later";
 
 /* Трафик */
-"Трафик за минуту" = "Traffic over the last minute";
 
 /* Состояния, плашки, редактор — часть вторая */
 "из исходников (без бандла)" = "from source (no bundle)";
@@ -220,17 +211,9 @@
 "Добавляет в меню «Выйти совсем (сброс входа)»: следующий вход пройдёт с формой." = "Adds “Sign out completely (reset login)” to the menu: the next sign-in goes through the form.";
 "не вышло: " = "did not work: ";
 "%@ строк · %@" = "%@ lines · %@";
-"%@ · сессия %@" = "%@ · session %@";
-"Подключить · %@" = "Connect · %@";
-"Мак просыпался после подключения (%@) — %@" = "The Mac woke after connecting (%@) — %@";
 "супервизор проверит туннель сам." = "the supervisor will check the tunnel itself.";
 "супервизор не работает, проверьте доступ." = "the supervisor is not running, check access yourself.";
-"Системный SOCKS не включён: %@" = "The system-wide SOCKS is not set: %@";
-"Туннель поднят, но проверка доступа не проходит: шлюз может не пускать к этому ресурсу или не хватает сети в профиле." = "The tunnel is up but the access check fails: the gateway may not allow this resource, or a network is missing from the profile.";
-"Супервизор не запущен — автоподключения не будет." = "The supervisor is not running — there will be no auto-connect.";
 "Уведомления выключены" = "Notifications are off";
-"Разрешить" = "Allow";
-"Журнал" = "Log";
 "не применяются" = "not applied";
 "Прокси SOCKS" = "SOCKS proxy";
 "Сети и DNS" = "Networks and DNS";
@@ -238,13 +221,7 @@
 "проверен" = "checked";
 "не отвечает" = "no answer";
 "не проверялся" = "not checked";
-"не включён" = "not set";
-"выключен в профиле" = "off in the profile";
-"включён на %@" = "set on %@";
-"ALL_PROXY=socks5h://%@ команда" = "ALL_PROXY=socks5h://%@ command";
 "идёт мимо туннеля → %@" = "goes outside the tunnel → %@";
-"сеть %@ в туннеле" = "network %@ in the tunnel";
-"зона %@ через %@" = "zone %@ through %@";
 "Скопировать команду" = "Copy command";
 "SOCKS не отвечает" = "SOCKS does not answer";
 "Нет связи · восстанавливаю" = "No connection · reconnecting";
@@ -416,8 +393,6 @@
 "Изнутри сети" = "From inside the network";
 "Парольная группа" = "Password group";
 "пароль + код из SMS" = "password + SMS code";
-"живое состояние" = "live state";
-"живое состояние · подробности" = "live state · details";
 
 /* Строки, которые скан не видел до 0.17.6: подписи действий, ошибки, подсказки редактора. */
 "Настройка ocbar" = "ocbar Settings";
@@ -499,23 +474,19 @@
 "на «USB 10/100/1G/2.5G LAN» уже включён чужой SOCKS 127.0.0.1:10808 — не перезаписываю" = "“USB 10/100/1G/2.5G LAN” already has someone else's SOCKS 127.0.0.1:10808 — not overwriting it";
 "Профиль %@" = "Profile %@";
 "описание профиля номер %@" = "description of profile %@";
-"сеть %@ не включилась" = "network %@ did not turn on";
 
 "UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути" = "UpstreamProxy: use http://host:port or socks5://host:port without credentials or a path";
 "Прокси для подключения" = "Connection proxy";
 "HTTP CONNECT или SOCKS5 без пароля. Вход и VPN идут через этот прокси; DTLS выключается. Для SSO нужна macOS 14 или новее. Пусто — обычное подключение." = "HTTP CONNECT or SOCKS5 without credentials. Login and VPN use this proxy; DTLS is disabled. SSO requires macOS 14 or later. Leave empty for a normal connection.";
-"Подключение VPN" = "VPN connection";
 "Системный SOCKS: не включён" = "System-wide SOCKS: not on";
 "Системный SOCKS: выключен в профиле" = "System-wide SOCKS: off in the profile";
 "Системный SOCKS: включён на %@" = "System-wide SOCKS: on for %@";
-"Выйти из ocbar · туннель останется" = "Quit ocbar · the tunnel stays up";
 "Связываюсь со шлюзом" = "Contacting the gateway";
 "Проверяю устройство" = "Checking the device";
 "Вхожу" = "Signing in";
 "Ждёт вас в окне входа" = "Waiting for you in the sign-in window";
 "Получаю сессию" = "Getting the session";
 "Поднимаю туннель" = "Bringing up the tunnel";
-"Подключение: шаг %@ из %@" = "Connecting: step %@ of %@";
 "Сбросить вход" = "Reset sign-in";
 "Журнал…" = "Log…";
 "Мак просыпался после подключения (%@)" = "The Mac woke after connecting (%@)";
