@@ -265,23 +265,23 @@ struct MenuContent: View {
     // Ошибка с готовым исправлением: нажатие копирует команду; без него —
     // открывает журнал.
     @ViewBuilder private func fixable(_ symbol: String, _ message: String, journal: Bool = false) -> some View {
-        if let fix = MenuView.fix(for: message) {
+        if let fix = MenuText.fix(for: message) {
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(fix.command, forType: .string)
             } label: {
                 Image(systemName: symbol)
-                Text(MenuView.human(message))
+                Text(MenuText.human(message))
                 Text(fix.title + ": " + fix.command)
             }
         } else if journal {
             Button { WindowBridge.open(WindowID.logs) } label: {
                 Image(systemName: symbol)
-                Text(MenuView.human(message))
+                Text(MenuText.human(message))
                 Text(L("Журнал…"))
             }
         } else {
-            banner(symbol, MenuView.human(message), "")
+            banner(symbol, MenuText.human(message), "")
         }
     }
 

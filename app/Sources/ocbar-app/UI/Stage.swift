@@ -150,37 +150,6 @@ enum Fixture {
     }
 }
 
-// Живая витрина: то же меню на настоящем состоянии машины. Нужна для
-// проверки разбора `ocbar status --short` глазами, без открытия меню руками.
-struct LiveStageView: View {
-    @StateObject private var store = StatusStore()
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("живое состояние")).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-                MenuView()
-                    .environmentObject(store)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("живое состояние · подробности")).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-                MenuView(expandDetails: true, expandProfiles: true)
-                    .environmentObject(store)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
-            }
-            Spacer()
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .underPageBackgroundColor))
-    }
-}
-
 // Витрина окон: «о программе» и журналы на живых данных, чтобы их тоже
 // можно было увидеть снимком, а не только открыв руками.
 struct StageWindowsView: View {
@@ -210,80 +179,6 @@ struct StageWindowsView: View {
     }
 }
 
-struct StageView: View {
-    private let cases: [(String, Presentation)] = [
-        ("подключено", .connected), ("связь пропала", .lost), ("пауза", .paused),  // i18n: не интерфейс
-        ("подключается", .starting), ("нужен вход", .needsLogin),  // i18n: не интерфейс
-        ("отключено", .down), ("чужой туннель", .foreign), ("ocbar не найден", .missing),  // i18n: не интерфейс
-    ]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            row(Array(cases[0..<4]))
-            row(Array(cases[4..<8]))
-            HStack(alignment: .top, spacing: 18) {
-                card("подключено · подробности", .connected, expandDetails: true)  // i18n: не интерфейс
-                card("подключено · профили", .connected, expandProfiles: true)  // i18n: не интерфейс
-                card("пауза · подробности", .paused, expandDetails: true)  // i18n: не интерфейс
-                Spacer()
-            }
-            // Высота меню не должна меняться, пока идёт действие: иначе оно
-            // прыгает под курсором ровно в момент нажатия на переключатель.
-            HStack(alignment: .top, spacing: 18) {
-                card("подключено", .connected)  // i18n: не интерфейс
-                card("подключено · идёт действие", .connected, busy: L("Переключаю %@…", "10.0.0.0/8"))  // i18n: не интерфейс
-                card("подключено · не получилось", .connected,  // i18n: не интерфейс
-                     note: "ocbar: " + L("сеть %@ не включилась", "11.0.0.0/8"))
-                card("после сна", Fixture.woke())  // i18n: не интерфейс
-                Spacer()
-            }
-            HStack(alignment: .top, spacing: 18) {
-                card("прокси · подробности", Fixture.proxy(), expandDetails: true)  // i18n: не интерфейс
-                card("прокси · чужой системный SOCKS", Fixture.proxy(refused: true))  // i18n: не интерфейс
-                card("прокси · SOCKS не отвечает", Fixture.proxy(socksUp: false), expandDetails: true)  // i18n: не интерфейс
-                card("девять профилей · смена", Fixture.many(), expandProfiles: true,  // i18n: не интерфейс
-                     switchTo: ProfileEntry(name: "p4", title: L("Профиль %@", 4), auth: "", descr: ""))
-                Spacer()
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .underPageBackgroundColor))
-    }
-
-    private func row(_ items: [(String, Presentation)]) -> some View {
-        HStack(alignment: .top, spacing: 18) {
-            ForEach(items, id: \.0) { name, presentation in card(name, presentation) }
-            Spacer()
-        }
-    }
-
-    private func card(_ name: String, _ presentation: Presentation,
-                      expandDetails: Bool = false, expandProfiles: Bool = false,
-                      busy: String? = nil, note: String? = nil) -> some View {
-        card(name, Fixture.status(presentation), expandDetails: expandDetails,
-             expandProfiles: expandProfiles, busy: busy, note: note,
-             active: presentation == .connected)
-    }
-
-    private func card(_ name: String, _ status: Status,
-                      expandDetails: Bool = false, expandProfiles: Bool = false,
-                      busy: String? = nil, note: String? = nil, active: Bool = true,
-                      switchTo: ProfileEntry? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(name).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
-            MenuView(expandDetails: expandDetails, expandProfiles: expandProfiles, switchTo: switchTo)
-                .environmentObject(StatusStore(
-                    preview: status,
-                    samples: Fixture.samples(active: active),
-                    latency: "41 " + L("мс"), busy: busy, actionNote: note))
-                .fixedSize(horizontal: false, vertical: true)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
-        }
-    }
-}
-
 // Кадр для README: окно настроек в рамке, как в витрине окон.
 struct ScreenshotSettingsView: View {
     var body: some View {
@@ -294,77 +189,6 @@ struct ScreenshotSettingsView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(nsColor: .underPageBackgroundColor))
-    }
-}
-
-// Кадр для README: главный экран меню и второй — «Сети и DNS».
-// С --frame <кадр> — одно меню в одном состоянии: из таких кадров
-// tools/demo-gif.sh собирает анимацию для README и сайта.
-struct ScreenshotMenuView: View {
-    private let frame: String? = {
-        let args = CommandLine.arguments
-        return args.firstIndex(of: "--frame").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
-    }()
-
-    // Без --frame — кадр для README: меню и оно же со сведениями (как с ⌥).
-    var body: some View {
-        HStack(alignment: .top, spacing: 24) {
-            if let frame {
-                single(frame)
-            } else {
-                menu()
-                menu(details: true)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .underPageBackgroundColor))
-    }
-
-    // Сценарий демо (tools/demo-gif.sh): отключено → подключение → подключено →
-    // выключить сеть → пауза. Остальные кадры — состояния для проверки глазами.
-    // Неизвестное имя — подключённое меню.
-    @ViewBuilder private func single(_ name: String) -> some View {
-        switch name {
-        case "down": menu(Fixture.status(.down))
-        case "connecting": menu(Fixture.status(.starting), busy: L("Подключаюсь…"))
-        case "connecting-window": menu(Self.connecting("window"), busy: L("Подключаюсь…"))
-        case "connecting-tunnel": menu(Self.connecting("tunnel"), busy: L("Подключаюсь…"))
-        case "network-busy": menu(busy: L("Переключаю %@…", "172.16.0.0/12"))
-        case "network-off": menu(Self.withoutSecondRoute())
-        case "pausing": menu(Self.withoutSecondRoute(), busy: L("Ставлю на паузу…"))
-        case "paused": menu(Fixture.status(.paused))
-        case "details": menu(details: true)
-        case "lost": menu(Fixture.status(.lost))
-        case "login": menu(Fixture.status(.needsLogin))
-        case "foreign": menu(Fixture.status(.foreign))
-        case "missing": menu(Fixture.status(.missing))
-        case "proxy": menu(Fixture.proxy())
-        case "woke": menu(Fixture.woke())
-        default: menu()
-        }
-    }
-
-    private static func connecting(_ stage: String) -> Status {
-        var s = Fixture.status(.starting)
-        s.connectStage = stage
-        return s
-    }
-
-    private static func withoutSecondRoute() -> Status {
-        var s = Fixture.status(.connected)
-        s.routes = s.routes.map { $0.net == "172.16.0.0/12" ? RouteEntry(net: $0.net, via: nil, enabled: false) : $0 }
-        return s
-    }
-
-    private func menu(_ status: Status = Fixture.status(.connected), details: Bool = false,
-                      busy: String? = nil) -> some View {
-        NativeMenuView(showDetails: details)
-            .environmentObject(StatusStore(preview: status, samples: Fixture.samples(active: true),
-                                           latency: "41 " + L("мс"), busy: busy, actionNote: nil))
-            .fixedSize(horizontal: false, vertical: true)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .windowBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.line))
     }
 }
 
@@ -406,5 +230,75 @@ struct ScreenshotIconsView: View {
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
+// Демо-меню для кадров README и анимации (tools/menu-shots.sh): настоящее
+// меню под своим значком на вымышленных профилях. Кадр задаёт файл
+// $OCBAR_DEMO_STATE: «имя кадра» или «имя:option» (сведения как с ⌥).
+// Меню обновляется на месте, как живое, — кадры снимаются с открытого меню.
+@MainActor
+enum DemoMenu {
+    static let store = StatusStore(preview: Fixture.status(.connected), samples: Fixture.samples(active: true),
+                                   latency: "41 " + L("мс"))
+    private static var last = ""
+    private static var timer: Timer?
+
+    static var stateFile: String {
+        ProcessInfo.processInfo.environment["OCBAR_DEMO_STATE"] ?? NSTemporaryDirectory() + "ocbar-demo-state"
+    }
+
+    static func start() {
+        apply("connected")
+        let t = Timer(timeInterval: 0.2, repeats: true) { _ in
+            Task { @MainActor in poll() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    private static func poll() {
+        let raw = (try? String(contentsOfFile: stateFile, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !raw.isEmpty, raw != last else { return }
+        last = raw
+        apply(raw)
+    }
+
+    static func apply(_ raw: String) {
+        let parts = raw.split(separator: ":").map(String.init)
+        let name = parts.first ?? "connected"
+        store.optionAtOpen = parts.contains("option")
+        var busy: String?
+        let status: Status
+        switch name {
+        case "down": status = Fixture.status(.down)
+        case "connecting": status = connecting("login"); busy = L("Подключаюсь…")
+        case "connecting-window": status = connecting("window"); busy = L("Подключаюсь…")
+        case "network-busy": status = Fixture.status(.connected); busy = L("Переключаю %@…", "172.16.0.0/12")
+        case "network-off": status = withoutSecondRoute()
+        case "pausing": status = withoutSecondRoute(); busy = L("Ставлю на паузу…")
+        case "paused": status = Fixture.status(.paused)
+        case "lost": status = Fixture.status(.lost)
+        case "login": status = Fixture.status(.needsLogin)
+        case "foreign": status = Fixture.status(.foreign)
+        case "missing": status = Fixture.status(.missing)
+        case "proxy": status = Fixture.proxy()
+        case "woke": status = Fixture.woke()
+        default: status = Fixture.status(.connected)
+        }
+        store.applyPreview(status, busy: busy)
+    }
+
+    private static func connecting(_ stage: String) -> Status {
+        var s = Fixture.status(.starting)
+        s.connectStage = stage
+        return s
+    }
+
+    private static func withoutSecondRoute() -> Status {
+        var s = Fixture.status(.connected)
+        s.routes = s.routes.map { $0.net == "172.16.0.0/12" ? RouteEntry(net: $0.net, via: nil, enabled: false) : $0 }
+        return s
     }
 }

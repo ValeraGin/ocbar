@@ -1,45 +1,5 @@
 import SwiftUI
 
-// Строка-действие. В стиле .window у MenuBarExtra системного вида пунктов
-// нет — рисуем сами: подсветка под курсором, тот же отступ, что у остальных
-// строк.
-struct MenuRow<Content: View>: View {
-    var enabled: Bool = true
-    let action: () -> Void
-    @ViewBuilder var content: () -> Content
-    @State private var hover = false
-
-    var body: some View {
-        // Настоящая кнопка, а не HStack с onTapGesture: строку должно быть
-        // видно VoiceOver и можно нажать с клавиатуры (⌃F7 — полный доступ
-        // с клавиатуры). Вид тот же: своя подсветка под курсором и фокусом.
-        Button(action: { if enabled { action() } }) {
-            HStack(spacing: 8) { content() }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(MenuRowStyle(hover: hover && enabled))
-        .disabled(!enabled)
-        .onHover { hover = $0 }
-        .padding(.horizontal, 5)
-    }
-}
-
-/// Подсветка строки меню: под курсором, при нажатии и при фокусе клавиатуры.
-private struct MenuRowStyle: ButtonStyle {
-    let hover: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let lit = hover || configuration.isPressed
-        return configuration.label
-            .background(RoundedRectangle(cornerRadius: 5).fill(lit ? Palette.brand : .clear))
-            .foregroundStyle(lit ? AnyShapeStyle(Palette.onBrand) : AnyShapeStyle(Palette.text))
-            .opacity(configuration.isPressed ? 0.9 : 1)
-    }
-}
-
 // Нативный .link на macOS сохраняет системный синий вопреки tint.
 // Общий стиль для текстовых команд с контрастным акцентом обеих тем.
 struct BrandLinkStyle: ButtonStyle {
@@ -52,30 +12,6 @@ struct BrandLinkStyle: ButtonStyle {
             .opacity(!isEnabled ? 0.45 : configuration.isPressed ? 0.6 : hover ? 0.8 : 1)
             .contentShape(Rectangle())
             .onHover { hover = $0 }
-    }
-}
-
-// Строка «ключ — значение» в подробностях: подпись слева, моноширинное
-// значение справа.
-struct KVRow: View {
-    var mono = true
-    let label: String
-    let value: String
-    var color: Color = Palette.text
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            Spacer(minLength: 8)
-            // Несколько значений (резолверы) — по строке на каждое.
-            Text(value.isEmpty ? "—" : value)
-                .font(mono ? .ocMono : .system(size: 12)).foregroundStyle(color)
-                .multilineTextAlignment(.trailing)
-                .textSelection(.enabled)
-                .lineLimit(value.contains("\n") ? nil : 1).truncationMode(.middle)
-        }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 2)
     }
 }
 
@@ -94,84 +30,6 @@ struct StateDot: View {
                        value: on)
             .onAppear { if pulsing { on = true } }
     }
-}
-
-struct Sep: View {
-    var body: some View {
-        Rectangle().fill(Palette.line).frame(height: 1).padding(.vertical, 5)
-    }
-}
-
-// Заголовок секции: подпись слева, счётчик справа.
-struct SectionHead: View {
-    let title: String
-    var trailing: String = ""
-
-    var body: some View {
-        HStack {
-            Text(title).font(.system(size: 12)).foregroundStyle(Palette.secondary)
-            Spacer()
-            if !trailing.isEmpty {
-                Text(trailing).font(.ocMonoSmall).foregroundStyle(Palette.tertiary)
-            }
-        }
-        .padding(.horizontal, 13)
-        .padding(.top, 2)
-        .padding(.bottom, 1)
-    }
-}
-
-// Список строк: пока строк немного — как есть, много — прокручивается внутри
-// своей группы. Потолок считается по числу строк и их высоте, а не измерением
-// содержимого: измерять высоту внутри прокрутки нельзя — прокрутка растягивает
-// содержимое, и высота выходит то больше, то меньше нужной.
-struct CappedRows<Content: View>: View {
-    let count: Int
-    var rowHeight: CGFloat = 34
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        let limit = MenuView.rowsBeforeScroll
-        if count <= limit {
-            VStack(alignment: .leading, spacing: 0) { content() }
-        } else {
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 0) { content() }
-            }
-            .frame(height: CGFloat(limit) * rowHeight)
-        }
-    }
-}
-
-// Прокрутка с потолком: пока содержимое ниже потолка, занимает ровно
-// столько, сколько ему нужно; выше — прокручивается. Обычный ScrollView в
-// окне меню-бара либо растягивает меню до экрана, либо схлопывается.
-struct BoundedScroll<Content: View>: View {
-    let maxHeight: CGFloat
-    @ViewBuilder var content: () -> Content
-    @State private var contentHeight: CGFloat = 0
-
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            // fixedSize обязателен: без него прокрутка растягивает содержимое
-            // до своей высоты, измеренная высота только росла, и меню,
-            // вернувшись с «Сети и DNS», оставалось прежней высоты — с пустым
-            // местом под значком.
-            content()
-                .fixedSize(horizontal: false, vertical: true)
-                .background(GeometryReader { g in
-                    Color.clear.preference(key: HeightKey.self, value: g.size.height)
-                })
-        }
-        .onPreferenceChange(HeightKey.self) { contentHeight = $0 }
-        .frame(height: min(max(contentHeight, 1), maxHeight))
-    }
-
-}
-
-private struct HeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 // «Скопировать» — маленькая кнопка рядом со значением; после нажатия на
@@ -269,98 +127,6 @@ private struct WideButtonStyle: ButtonStyle {
             .brightness(configuration.isPressed ? -0.1 : (hover && kind == .primary ? 0.08 : 0))
             .animation(.easeOut(duration: 0.1), value: hover)
             .opacity(isEnabled ? 1 : 0.45)
-    }
-}
-
-// Плашка под карточкой состояния: одно предупреждение и его следующий шаг.
-struct Banner: View {
-    let color: Color
-    let symbol: String
-    let text: String
-    var selectable = false
-    var fix: (title: String, command: String)?
-    var link: (String, () -> Void)?
-    var dismiss: (() -> Void)?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(color)
-                .frame(width: 14).padding(.top, 1)
-            VStack(alignment: .leading, spacing: 4) {
-                Group {
-                    if selectable { Text(text).textSelection(.enabled) } else { Text(text) }
-                }
-                .font(.system(size: 11.5)).foregroundStyle(Palette.text)
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(4)
-                HStack(spacing: 12) {
-                    if let fix {
-                        Button(fix.title) {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(fix.command, forType: .string)
-                        }
-                        .help(L("Скопировать: ") + fix.command)
-                    }
-                    if let link { Button(link.0, action: link.1) }
-                }
-                .buttonStyle(BrandLinkStyle()).font(.system(size: 11.5))
-            }
-            Spacer(minLength: 0)
-            if let dismiss {
-                Button(action: dismiss) {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 11))
-                }
-                .buttonStyle(.borderless).foregroundStyle(Palette.tertiary)
-                .accessibilityLabel(L("Скрыть"))
-            }
-        }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .groupBox(tint: color)
-    }
-}
-
-// Значок строки: белый символ в цветном скруглённом квадрате, как в
-// Системных настройках.
-struct IconTile: View {
-    let symbol: String
-    let color: Color
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 26, height: 26)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(color))
-            .accessibilityHidden(true)
-    }
-}
-
-// Значок команды в подвале меню — без подложки, по центру своей колонки.
-struct FooterIcon: View {
-    let symbol: String
-    var body: some View {
-        Image(systemName: symbol).font(.system(size: 13)).frame(width: 20).opacity(0.75)
-            .accessibilityHidden(true)
-    }
-}
-
-// Заголовок группы: подпись слева, счётчик справа.
-struct GroupHead: View {
-    let title: String
-    var trailing = ""
-    var body: some View {
-        HStack {
-            Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.secondary)
-            Spacer()
-            Text(trailing).font(.system(size: 12)).foregroundStyle(Palette.tertiary)
-        }
-        .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 4)
-    }
-}
-
-struct RowDivider: View {
-    var body: some View {
-        Rectangle().fill(Palette.groupLine).frame(height: 1).padding(.leading, 12)
     }
 }
 

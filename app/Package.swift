@@ -9,21 +9,8 @@ let package = Package(
     name: "ocbar-app",
     platforms: [.macOS("14.4")],
     targets: [
-        // Вендорная копия MacControlCenterUI (MIT): см. Sources/MacControlCenterUI/VENDOR.md.
-        .target(
-            name: "MacControlCenterUI",
-            path: "Sources/MacControlCenterUI",
-            exclude: ["LICENSE", "VENDOR.md"]
-        ),
-        // Вендорная копия FluidMenuBarExtra (MIT): см. Sources/FluidMenuBarExtra/VENDOR.md.
-        .target(
-            name: "FluidMenuBarExtra",
-            path: "Sources/FluidMenuBarExtra",
-            exclude: ["LICENSE", "VENDOR.md"]
-        ),
         .executableTarget(
             name: "ocbar-app",
-            dependencies: ["MacControlCenterUI", "FluidMenuBarExtra"],
             path: "Sources/ocbar-app",
             linkerSettings: [
                 .linkedFramework("AppKit"),

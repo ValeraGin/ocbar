@@ -208,17 +208,17 @@ extension SelfTest {
         let none = URL(string: "ocbar://notify?title=t&body=b")!
         // Подсказка к ошибке: команда, которую приложение выполнить не может.
         t.check("ошибка: «нужен root» предлагает sudo ocbar install",
-                MenuView.fix(for: "ocbar: нужен root: sudo ocbar install (посмотреть шаги — ...)")?.command == "sudo ocbar install")
+                MenuText.fix(for: "ocbar: нужен root: sudo ocbar install (посмотреть шаги — ...)")?.command == "sudo ocbar install")
         t.check("ошибка: нет openconnect — предлагает brew install",
-                MenuView.fix(for: "нет openconnect — brew install openconnect")?.command == "brew install openconnect")
-        t.check("ошибка: обычная — без подсказки", MenuView.fix(for: "сеть 10.0.0.0/8 не включилась") == nil)
+                MenuText.fix(for: "нет openconnect — brew install openconnect")?.command == "brew install openconnect")
+        t.check("ошибка: обычная — без подсказки", MenuText.fix(for: "сеть 10.0.0.0/8 не включилась") == nil)
         // Клиент говорит на языке системы: подсказка — по команде в сообщении.
         t.check("ошибка по-английски: полный путь в sudo … install — та же подсказка",
-                MenuView.fix(for: "ocbar: root is required: sudo /opt/homebrew/bin/ocbar install")?.command == "sudo ocbar install")
+                MenuText.fix(for: "ocbar: root is required: sudo /opt/homebrew/bin/ocbar install")?.command == "sudo ocbar install")
         t.check("ошибка по-английски: --trust — своя подсказка",
-                MenuView.fix(for: "the openconnect copy doesn't match: sudo ocbar install --trust")?.command == "sudo ocbar install --trust")
+                MenuText.fix(for: "the openconnect copy doesn't match: sudo ocbar install --trust")?.command == "sudo ocbar install --trust")
         t.check("ошибка по-английски: нет ocproxy — brew install ocproxy",
-                MenuView.fix(for: "proxy mode: no ocproxy — brew install ocproxy")?.command == "brew install ocproxy")
+                MenuText.fix(for: "proxy mode: no ocproxy — brew install ocproxy")?.command == "brew install ocproxy")
         // Доступ: состояние читается из status --short.
         let acc = Status.parse(json: #"{"state":"connected","access":"fail","access_at":1700000000}"#) ?? Status()
         t.check("доступ: состояние и время разобраны", acc.access == "fail" && acc.accessAt != nil)

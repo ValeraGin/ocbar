@@ -1,7 +1,6 @@
 import SwiftUI
 import AppKit
 import Combine
-import FluidMenuBarExtra
 
 // Приложение меню-бара ocbar. Автор: ValeraGin — Ignatkovich Valery, MIT.
 // Заменяет плагин SwiftBar: то же состояние из
@@ -10,9 +9,9 @@ import FluidMenuBarExtra
 @main
 struct OcbarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    // Меню — панель FluidMenuBarExtra (AppDelegate). Пустая скрытая сцена
-    // остаётся, чтобы SwiftUI при запуске не открывал первое окно сам — как
-    // у Maccy.
+    // Меню — NSHostingMenu под своим значком (AppDelegate). Пустая скрытая
+    // сцена остаётся, чтобы SwiftUI при запуске не открывал первое окно сам —
+    // как у Maccy.
     @State private var placeholder = false
 
     var body: some Scene {
@@ -41,33 +40,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var stageWindow: NSWindow?
     private var iconWatch: AnyCancellable?
 
-    /// Меню в строке состояния — не MenuBarExtra(.window): то не сжималось
-    /// под содержимое и не давало ни окна, ни значка (D71, разбор 2026-10-20
-    /// в журнале). По умолчанию — NSMenu из SwiftUI-описания (HostedMenu,
-    /// NSHostingMenu); ключ MenuStyle = panel — панель в стиле Пункта
-    /// управления (FluidMenuBarExtra).
-    static private(set) var menu: FluidMenuBarExtra?
+    /// Меню в строке состояния — NSMenu из SwiftUI-описания (HostedMenu,
+    /// NSHostingMenu): размер, место, клавиатура и закрытие — у системы,
+    /// пункты обновляются на месте. MenuBarExtra(.window) не сжимался под
+    /// содержимое (D71), своя панель и самописное NSMenu давали рывки.
     static private(set) var hosted: HostedMenu?
 
     @MainActor private func installMenu() {
         let store = StatusStore.shared
         WindowBridge.install()
-        if UserDefaults.standard.string(forKey: "MenuStyle") == "panel" {
-            Self.menu = FluidMenuBarExtra(title: "ocbar", image: MenuBarIcon.image(for: store.status)) {
-                NativeMenuView().environmentObject(store)
-            }
-        } else {
-            let hosted = HostedMenu(store: store)
-            hosted.image = MenuBarIcon.image(for: store.status)
-            Self.hosted = hosted
-        }
+        let hosted = HostedMenu(store: store)
+        hosted.image = MenuBarIcon.image(for: store.status)
+        Self.hosted = hosted
         iconWatch = store.$status
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in self?.showIcon(status) }
     }
 
+    /// Демо-меню для кадров README: то же меню на вымышленных профилях.
+    @MainActor private func installDemoMenu() {
+        if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
+        if CommandLine.arguments.contains("--dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }
+        WindowBridge.install()
+        let hosted = HostedMenu(store: DemoMenu.store)
+        Self.hosted = hosted
+        DemoMenu.start()
+        iconWatch = DemoMenu.store.$status
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in self?.showIcon(status) }
+    }
+
     @MainActor private func setIcon(_ image: NSImage) {
-        Self.menu?.image = image
         Self.hosted?.image = image
     }
 
@@ -131,7 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 StatusStore.shared.togglePause()
             }
         }
-        if CommandLine.arguments.contains("--stage") { openStage() }
+        if CommandLine.arguments.contains("--demo-menu") { installDemoMenu() }
+        else if CommandLine.arguments.contains("--stage") { openStage() }
         else {
             installMenu()
             AppLog.write("запуск \(AppInfo.version); ocbar: "
@@ -169,8 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let screenshot = args.firstIndex(of: "--screenshot").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         // Меню снимается с запасом по высоте, пустое поле снизу срезается
         // при съёмке: высота зависит от языка, замер SwiftUI её занижает.
-        let size: NSSize = screenshot == "menu" ? NSSize(width: 780, height: 1400)
-            : screenshot == "settings" ? NSSize(width: 1048, height: 708)
+        let size: NSSize = screenshot == "settings" ? NSSize(width: 1048, height: 708)
             : screenshot == "setup" ? NSSize(width: 800, height: 660)
             : screenshot == "icons" ? NSSize(width: 980, height: 360) : NSSize(width: 1500, height: 2400)
         // Кадр README — в окне без рамки: окно с заголовком система подгоняет
@@ -184,13 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else if CommandLine.arguments.contains("--dark") {
             window.appearance = NSAppearance(named: .darkAqua)
         }
-        if screenshot == "menu" {
-            // Без зажатия окна по «идеальному» размеру SwiftUI: он меньше
-            // того, что меню занимает на деле, и кадр выходил обрезанным.
-            let host = NSHostingView(rootView: ScreenshotMenuView())
-            host.sizingOptions = []
-            window.contentView = host
-        } else if screenshot == "settings" {
+        if screenshot == "settings" {
             let host = NSHostingView(rootView: ScreenshotSettingsView())
             host.sizingOptions = []
             window.contentView = host
@@ -201,12 +198,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 .frame(width: 760, height: 620)
                 .padding(20)
                 .background(Color(nsColor: .underPageBackgroundColor)))
-        } else if CommandLine.arguments.contains("--windows") {
-            window.contentView = NSHostingView(rootView: StageWindowsView())
-        } else if CommandLine.arguments.contains("--live") {
-            window.contentView = NSHostingView(rootView: LiveStageView())
         } else {
-            window.contentView = NSHostingView(rootView: StageView())
+            // Меню в витрине не рисуется: NSMenu снимается только с экрана —
+            // демо-меню (--demo-menu) и tools/menu-shots.sh.
+            window.contentView = NSHostingView(rootView: StageWindowsView())
         }
         window.delegate = self
         if offscreen {

@@ -180,8 +180,12 @@ final class StatusStore: ObservableObject {
 
     // Итог опроса, начатого раньше уже показанного, — устаревший: его не
     // показываем, иначе состояние после действия откатилось бы назад.
-    /// Самопроверка меню: подменить состояние, как будто пришёл новый опрос.
-    func applyForSelfTest(_ s: Status) { status = s }
+    /// Самопроверка и демо-меню: подменить состояние, как будто пришёл
+    /// новый опрос, и текущее действие.
+    func applyPreview(_ s: Status, busy: String? = nil) {
+        if status != s { status = s }
+        if self.busy != busy { self.busy = busy }
+    }
 
     private func apply(_ s: Status, started: Date) {
         guard started >= appliedStart else { return }

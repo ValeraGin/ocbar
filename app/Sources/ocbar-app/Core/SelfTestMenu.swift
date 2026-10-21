@@ -55,7 +55,7 @@ extension SelfTest {
             func netsItem() -> NSMenuItem? { menu.items.first { $0.title.hasPrefix(L0("Сети в туннеле")) } }
             let item0 = netsItem(), sub0 = item0?.submenu, rows0 = sub0?.items ?? []
             s0.since = (s0.since ?? Date()).addingTimeInterval(-600)
-            store.applyForSelfTest(s0)
+            store.applyPreview(s0)
             menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             let item1 = netsItem(), sub1 = item1?.submenu, rows1 = sub1?.items ?? []
             check("меню: при обновлении пункт «Сети в туннеле» тот же", item0 != nil && item0 === item1)
@@ -91,7 +91,7 @@ extension SelfTest {
             changes.removeAll()
             var later = Fixture.status(.connected)
             later.since = (later.since ?? Date()).addingTimeInterval(-600)
-            store.applyForSelfTest(later)
+            store.applyPreview(later)
             menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             let touched = changes.filter { $0.contains(L0("Сети в туннеле")) || $0.contains(L0("DNS-зоны")) || $0.contains(":подменю:") }
             // NSHostingMenu при любом настоящем изменении перебирает все пункты
