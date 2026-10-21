@@ -3,6 +3,24 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.20.0 — 2026-10-21
+
+Needs macOS 14.4 or newer.
+
+- The menu is a native macOS menu (NSMenu built by SwiftUI). Size, placement,
+  keyboard navigation and closing come from the system, items update in place
+  while the menu is open, and an open submenu no longer closes or blinks.
+  "Connect VPN" / "Disconnect VPN" replaces the header switch; networks and DNS
+  zones are checkmark submenus.
+- Connection progress is visible: the menu shows the current step under the
+  profile ("Signing in · 2/4", "Waiting for you in the sign-in window"), and
+  the menu bar icon fills step by step while connecting. `ocbar status`
+  reports the step as `connect_stage`.
+- The download speed moved to the connection details (hold ⌥ while opening
+  the menu); the profile row keeps the state and session time.
+- README screenshots, the animation and the link cards show the new menu,
+  captured from the real menu on demo profiles.
+
 ## 0.19.1 — 2026-10-19
 
 - The menu window is exactly as tall as its content again. Since 0.19.0 it
