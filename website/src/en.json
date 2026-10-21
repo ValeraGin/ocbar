@@ -26,7 +26,7 @@
   "p5_d": "The supervisor brings the connection back after sleep, Wi-Fi changes and dropped links, without opening a sign-in window on its own.",
   "install_title": "Install",
   "install_note": "Homebrew builds ocbar on your Mac. The first command with sudo installs the network helper; then the setup wizard adds your gateway.",
-  "requirements": "macOS 13+ · Command Line Tools · your own AnyConnect-compatible gateway",
+  "requirements": "macOS 14.4+ · Command Line Tools · your own AnyConnect-compatible gateway",
   "copied": "Copied",
   "troubleshooting": "If it does not work",
   "troubleshooting_url": "https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.en.md",

@@ -19,7 +19,7 @@
 
 | Что | Зачем | Проверить |
 |---|---|---|
-| macOS 13 и новее | `WKWebView`, `launchctl bootstrap` | `sw_vers -productVersion` |
+| macOS 14.4 и новее | меню `NSHostingMenu`, `WKWebView`, `launchctl bootstrap` | `sw_vers -productVersion` |
 | Command Line Tools | компилятор Swift; **полный Xcode не нужен** | `swift --version` |
 | Homebrew | `openconnect` | `brew --version` |
 | `openconnect` | сам туннель | `brew install openconnect` |

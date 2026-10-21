@@ -14,7 +14,7 @@ choose which networks go through the tunnel, and pause or resume from a
 native macOS menu. The supervisor reconnects after sleep and network changes.
 
 Free under the MIT license. Install through Homebrew, which builds the app
-on your Mac. Requires macOS 13+ and access to your own compatible VPN gateway;
+on your Mac. Requires macOS 14.4+ and access to your own compatible VPN gateway;
 ocbar does not provide VPN servers.
 
 ![ocbar menu: connect, toggle a network, pause](assets/demo.gif)
@@ -107,7 +107,7 @@ app/.build/ocbar.app/Contents/MacOS/ocbar-app --stage     # the real menu, every
 
 ## Install
 
-Requires macOS 13+ and Command Line Tools (full Xcode is not needed).
+Requires macOS 14.4+ and Command Line Tools (full Xcode is not needed).
 
 ```bash
 brew tap ValeraGin/ocbar
@@ -221,7 +221,7 @@ configures the local SOCKS endpoint exposed to applications after VPN login.
 HTTP CONNECT and SOCKS5 without authentication are supported, with an explicit
 port (1–65535) and DNS hostname or IPv4 address. Credentials, paths and IPv6
 literals are rejected. Native tunnels require helper 0.8.3+ (`sudo ocbar install`).
-Password login works on macOS 13+; SSO and form learning require macOS 14+.
+It applies to password login, SSO and form learning.
 Explicit upstream always disables DTLS: transport uses TCP. Proxy failure does
 not fall back to a direct connection to the external gateway. WebKit/URLSession
 exclude loopback destinations from proxying; this setting is not intended for
@@ -299,7 +299,7 @@ They run in CI on every push.
 | | Status |
 |---|---|
 | macOS 26, Apple Silicon | used daily by the author; CI builds and runs every self-test |
-| macOS 13–25, Apple Silicon | expected to work (deployment target is macOS 13), not verified |
+| macOS 14.4–15, Apple Silicon | expected to work (deployment target is macOS 14.4), not verified |
 | Intel Macs | expected to work; Homebrew prefix is `/usr/local`, which the helper checks for ownership. Not verified |
 
 Tried ocbar with your gateway? [Tell whether it worked](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml) — one short report

@@ -26,7 +26,7 @@
   "p5_d": "Супервизор сам восстанавливает соединение после сна, смены Wi-Fi и обрыва связи и не открывает окно входа без спроса.",
   "install_title": "Установка",
   "install_note": "Homebrew собирает ocbar на твоём Mac. Команда с sudo ставит сетевого помощника, дальше мастер настройки добавит шлюз.",
-  "requirements": "macOS 13+ · Command Line Tools · свой AnyConnect-совместимый шлюз",
+  "requirements": "macOS 14.4+ · Command Line Tools · свой AnyConnect-совместимый шлюз",
   "copied": "Скопировано",
   "troubleshooting": "Если не работает",
   "troubleshooting_url": "https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.md",

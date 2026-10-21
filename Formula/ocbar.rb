@@ -9,7 +9,7 @@ class Ocbar < Formula
   license "MIT"
   head "https://github.com/ValeraGin/ocbar.git", branch: "main"
 
-  depends_on macos: :ventura
+  depends_on macos: :sonoma
   depends_on "openconnect"
 
   def install
