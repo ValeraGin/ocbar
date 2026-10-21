@@ -7,6 +7,75 @@ import SwiftUI
 // обновляет их на месте, в том числе пока меню открыто. Своего сравнения
 // пунктов и пересборки меню нет — от неё мигали подменю и сдвигались пункты.
 // Размер, место, клавиатура, Esc и закрытие — у системы.
+/// То, что видно в меню, одной сравнимой сводкой. NSHostingMenu при каждой
+/// перерисовке трогает пункты (NSMenu.didChangeItem), даже если ничего не
+/// изменилось, — и каждое касание закрывает открытое подменю. Поэтому меню
+/// следит не за всем StatusStore (трафик там меняется каждые 2 с), а за
+/// сводкой, которая публикуется, только когда видимое изменилось.
+struct MenuSnapshot: Equatable {
+    var status = Status()
+    var busy: String?
+    var cancelTitle: String?
+    var helperWarning: String?
+    var actionNote: String?
+    var actionFailed = false
+    var lastError: String?
+    var pendingRoutes: [String: Bool] = [:]
+    var pendingZones: [String: Bool] = [:]
+    var notifyAllowed = true
+    var optionAtOpen = false
+    /// Скорость, трафик, задержка — только в сведениях по ⌥.
+    var details: [String] = []
+}
+
+@MainActor
+final class MenuModel: ObservableObject {
+    @Published private(set) var snap = MenuSnapshot()
+    private let store: StatusStore
+    private var watch: [AnyCancellable] = []
+    private var queued = false
+
+    init(store: StatusStore) {
+        self.store = store
+        snap = Self.snapshot(store)
+        // objectWillChange приходит до смены значения: сводку берём следующим
+        // проходом цикла, когда новое значение уже на месте.
+        watch.append(store.objectWillChange.sink { [weak self] _ in self?.queue() })
+        watch.append(NotifyState.shared.objectWillChange.sink { [weak self] _ in self?.queue() })
+    }
+
+    private func queue() {
+        guard !queued else { return }
+        queued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.queued = false
+            let next = Self.snapshot(self.store)
+            if next != self.snap { self.snap = next }
+        }
+    }
+
+    static func snapshot(_ store: StatusStore) -> MenuSnapshot {
+        var m = MenuSnapshot()
+        m.status = store.status
+        m.busy = store.busy
+        m.cancelTitle = store.cancelTitle
+        m.helperWarning = store.helperWarning
+        m.actionNote = store.actionNote
+        m.actionFailed = store.actionFailed
+        m.lastError = store.lastError
+        m.pendingRoutes = store.pendingRoutes
+        m.pendingZones = store.pendingZones
+        m.notifyAllowed = NotifyState.shared.allowed
+        m.optionAtOpen = store.optionAtOpen
+        if store.optionAtOpen {
+            m.details = [Size.rate(store.currentDown), Size.bytes(store.totalRx), Size.bytes(store.totalTx),
+                         store.latency ?? "—"]
+        }
+        return m
+    }
+}
+
 @MainActor
 final class HostedMenu: NSObject {
     let statusItem: NSStatusItem
@@ -17,7 +86,7 @@ final class HostedMenu: NSObject {
     init(store: StatusStore) {
         self.store = store
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        menu = NSHostingMenu(rootView: MenuContent().environmentObject(store))
+        menu = NSHostingMenu(rootView: MenuContent(store: store, model: MenuModel(store: store)))
         super.init()
         statusItem.menu = menu
         statusItem.button?.setAccessibilityTitle("ocbar")
@@ -55,10 +124,12 @@ final class HostedMenu: NSObject {
 /// не бывает: вместо свитча пункт «Подключить»/«Отключить», ход подключения —
 /// подписью под профилем и на значке.
 struct MenuContent: View {
-    @EnvironmentObject var store: StatusStore
-    @ObservedObject private var notify = NotifyState.shared
+    /// Действия и значения — из хранилища; перерисовка — только по сводке.
+    let store: StatusStore
+    @ObservedObject var model: MenuModel
+    private var notify: NotifyState { NotifyState.shared }
 
-    private var s: Status { store.status }
+    private var s: Status { model.snap.status }
     private var look: StateLook { StateLook.of(s) }
     private var idle: Bool { store.busy == nil }
     private var canConnect: Bool { idle && OcbarClient.shared.binary != nil }
@@ -73,7 +144,7 @@ struct MenuContent: View {
         signInActions
         if look.details, s.isProxySession { proxySection }
         if look.details, !s.isProxySession { networksAndZones }
-        if store.optionAtOpen, look.details { detailsSection }
+        if model.snap.optionAtOpen, look.details { detailsSection }
         Divider()
         commands
     }
@@ -257,7 +328,7 @@ struct MenuContent: View {
                 Text(L("в профиле нет ни одной сети"))
             }
             ForEach(s.routes) { r in
-                let on = store.routeIsOn(r)
+                let on = model.snap.pendingRoutes[r.net] ?? r.enabled
                 Toggle(isOn: Binding(get: { on }, set: { store.toggleRoute(r.net, to: $0) })) {
                     Text(r.net)
                     if let warning = routeWarning(r, on: on) { Text(warning) }
@@ -268,7 +339,7 @@ struct MenuContent: View {
         if !s.zones.isEmpty {
             Menu(sectionTitle(L("DNS-зоны"), "\(s.zones.filter { $0.enabled }.count)/\(s.zones.count)")) {
                 ForEach(s.zones) { z in
-                    let on = store.zoneIsOn(z)
+                    let on = model.snap.pendingZones[z.zone] ?? z.enabled
                     Toggle(isOn: Binding(get: { on }, set: { store.toggleZone(z.zone, to: $0) })) {
                         Text(z.zone)
                         Text(z.dns)
@@ -280,7 +351,7 @@ struct MenuContent: View {
     }
 
     private func routeWarning(_ r: RouteEntry, on: Bool) -> String? {
-        guard store.pendingRoutes[r.net] == nil, on else { return nil }
+        guard model.snap.pendingRoutes[r.net] == nil, on else { return nil }
         if let via = r.via, via != s.tundev { return L("идёт мимо туннеля → %@", via) }
         if r.via == nil, s.state == .connected { return L("нет маршрута") }
         return nil

@@ -13,7 +13,7 @@ extension SelfTest {
         }
         func build(_ status: Status, busy: String? = nil) -> NSMenu {
             let store = StatusStore(preview: status, busy: busy)
-            let menu = NSHostingMenu(rootView: MenuContent().environmentObject(store))
+            let menu = NSHostingMenu(rootView: MenuContent(store: store, model: MenuModel(store: store)))
             menu.update()
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             return menu
@@ -50,7 +50,7 @@ extension SelfTest {
         do {
             var s0 = Fixture.status(.connected)
             let store = StatusStore(preview: s0)
-            let menu = NSHostingMenu(rootView: MenuContent().environmentObject(store))
+            let menu = NSHostingMenu(rootView: MenuContent(store: store, model: MenuModel(store: store)))
             menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             func netsItem() -> NSMenuItem? { menu.items.first { $0.title.hasPrefix(L0("Сети в туннеле")) } }
             let item0 = netsItem(), sub0 = item0?.submenu, rows0 = sub0?.items ?? []
@@ -63,6 +63,42 @@ extension SelfTest {
             check("меню: при обновлении пункты подменю те же",
                   rows0.count == rows1.count && zip(rows0, rows1).allSatisfy { $0 === $1 },
                   "было \(rows0.count), стало \(rows1.count), тех же \(zip(rows0, rows1).filter { $0 === $1 }.count)")
+        }
+
+        // Перерисовка без изменений: сколько раз меню трогает пункты. Каждое
+        // изменение пункта главного меню закрывает открытое подменю.
+        do {
+            let store = StatusStore(preview: Fixture.status(.connected))
+            let menu = NSHostingMenu(rootView: MenuContent(store: store, model: MenuModel(store: store)))
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            var changes: [String] = []
+            let names: [Notification.Name] = [NSMenu.didChangeItemNotification, NSMenu.didAddItemNotification,
+                                              NSMenu.didRemoveItemNotification]
+            let tokens = names.map { name in
+                NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { n in
+                    guard let m = n.object as? NSMenu, m === menu || m.supermenu === menu else { return }
+                    let i = n.userInfo?["NSMenuItemIndex"] as? Int ?? -1
+                    let title = (i >= 0 && i < m.items.count) ? m.items[i].title : "?"
+                    changes.append("\(name.rawValue.replacingOccurrences(of: "NSMenuDid", with: "")):\(m === menu ? "меню" : "подменю"):\(title)")
+                }
+            }
+            store.objectWillChange.send()
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            check("меню: перерисовка без изменений не трогает пункты", changes.isEmpty,
+                  "\(changes.count): " + changes.prefix(8).joined(separator: ", "))
+            // Сменилась только подпись профиля (время) — подменю сетей и зон
+            // не трогаются.
+            changes.removeAll()
+            var later = Fixture.status(.connected)
+            later.since = (later.since ?? Date()).addingTimeInterval(-600)
+            store.applyForSelfTest(later)
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            let touched = changes.filter { $0.contains(L0("Сети в туннеле")) || $0.contains(L0("DNS-зоны")) || $0.contains(":подменю:") }
+            // NSHostingMenu при любом настоящем изменении перебирает все пункты
+            // меню — от SwiftUI это не зависит. Поэтому меню перерисовывается
+            // только по реальным изменениям (MenuSnapshot), а не по каждому опросу.
+            print("  [ -- ] меню: при настоящем изменении NSHostingMenu трогает пунктов \(changes.count), из них подменю \(touched.count)")
+            tokens.forEach { NotificationCenter.default.removeObserver($0) }
         }
 
         let paused = build(Fixture.status(.paused))
