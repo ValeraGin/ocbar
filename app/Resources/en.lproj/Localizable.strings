@@ -527,3 +527,4 @@
 "автоподключения не будет" = "there will be no auto-connect";
 "сети и DNS сняты, сессия жива" = "networks and DNS are off, the session is alive";
 "шлюз не пускает к ресурсу или не хватает сети в профиле" = "the gateway blocks the resource, or the profile lacks a network";
+"Скорость" = "Speed";

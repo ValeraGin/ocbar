@@ -44,6 +44,27 @@ extension SelfTest {
         let step = connecting.items.first { ($0.subtitle ?? "").contains(L0("Ждёт вас в окне входа")) }
         check("меню: шаг подключения второй строкой", step != nil, titles(connecting).prefix(4).joined(separator: " | "))
 
+        // Обновление открытого меню: меняется только подпись профиля (время
+        // подключения). Подменю сетей и его пункты должны остаться теми же
+        // объектами — иначе открытое подменю закрывается под мышью.
+        do {
+            var s0 = Fixture.status(.connected)
+            let store = StatusStore(preview: s0)
+            let menu = NSHostingMenu(rootView: MenuContent().environmentObject(store))
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            func netsItem() -> NSMenuItem? { menu.items.first { $0.title.hasPrefix(L0("Сети в туннеле")) } }
+            let item0 = netsItem(), sub0 = item0?.submenu, rows0 = sub0?.items ?? []
+            s0.since = (s0.since ?? Date()).addingTimeInterval(-600)
+            store.applyForSelfTest(s0)
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            let item1 = netsItem(), sub1 = item1?.submenu, rows1 = sub1?.items ?? []
+            check("меню: при обновлении пункт «Сети в туннеле» тот же", item0 != nil && item0 === item1)
+            check("меню: при обновлении подменю сетей то же", sub0 != nil && sub0 === sub1)
+            check("меню: при обновлении пункты подменю те же",
+                  rows0.count == rows1.count && zip(rows0, rows1).allSatisfy { $0 === $1 },
+                  "было \(rows0.count), стало \(rows1.count), тех же \(zip(rows0, rows1).filter { $0 === $1 }.count)")
+        }
+
         let paused = build(Fixture.status(.paused))
         check("меню: на паузе — «Возобновить»", titles(paused).contains(L0("Возобновить")))
         return failures

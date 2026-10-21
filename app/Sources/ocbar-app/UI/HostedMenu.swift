@@ -139,9 +139,11 @@ struct MenuContent: View {
 
     private var profileSubtitle: String {
         if let step = ConnectStep.of(s) { return "\(step.title) · \(step.index)/\(ConnectStep.total)" }
+        // Скорости здесь нет: она меняется каждые 2 с, строка меняет ширину,
+        // меню перекладывается и закрывает открытое подменю. Скорость — в
+        // сведениях по ⌥; время меняется раз в минуту.
         var parts = [look.subtitle]
         if look.showsTime { parts.append(humanSince(s.since)) }
-        if s.presentation == .connected, !s.isProxySession { parts.append("↓ " + Size.rate(store.currentDown)) }
         return parts.joined(separator: " · ")
     }
 
@@ -295,6 +297,7 @@ struct MenuContent: View {
             if !s.isProxySession { detail("MTU", s.mtu) }
             detail(L("Резолверы"), s.dns.joined(separator: ", "))
             if !s.isProxySession {
+                detail(L("Скорость"), "↓ " + Size.rate(store.currentDown))
                 detail(L("Принято / отдано"), "\(Size.bytes(store.totalRx)) / \(Size.bytes(store.totalTx))")
                 detail(L("Задержка"), store.latency ?? "—")
                 detail(L("Доступ"), s.access == "ok"

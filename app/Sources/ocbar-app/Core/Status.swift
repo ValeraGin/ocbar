@@ -60,7 +60,9 @@ enum Presentation {
     case missing        // самого ocbar на машине нет
 }
 
-struct Status {
+// Сравнимо: опрос раз в 1–2 с чаще всего приносит то же самое, и тогда меню
+// не перерисовывается — открытое подменю под мышью не закрывается.
+struct Status: Equatable {
     var paused = false
     var needsLogin = false
     var state: TunnelState = .down

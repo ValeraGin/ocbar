@@ -180,12 +180,15 @@ final class StatusStore: ObservableObject {
 
     // Итог опроса, начатого раньше уже показанного, — устаревший: его не
     // показываем, иначе состояние после действия откатилось бы назад.
+    /// Самопроверка меню: подменить состояние, как будто пришёл новый опрос.
+    func applyForSelfTest(_ s: Status) { status = s }
+
     private func apply(_ s: Status, started: Date) {
         guard started >= appliedStart else { return }
         appliedStart = started
         let wasDevice = status.tundev
         let wasStarting = status.presentation == .starting
-        status = s
+        if status != s { status = s }
         if wasStarting != (s.presentation == .starting) { retune() }
         // Последний подключённый профиль — к нему ведёт «Подключить» в меню:
         // выбор профиля живёт в настройках, а не в меню.
