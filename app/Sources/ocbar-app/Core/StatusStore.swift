@@ -117,12 +117,18 @@ final class StatusStore: ObservableObject {
         // Пока идёт подключение, шаги сменяются за секунды — и в меню, и на
         // значке в строке меню.
         let period: TimeInterval = status.presentation == .starting ? 1 : (menuOpen ? 2 : 6)
-        statusTimer = Timer.scheduledTimer(withTimeInterval: period, repeats: true) { [weak self] _ in
+        // Режим .common: пока открыто NSMenu, цикл событий в своём режиме, и
+        // таймер обычного режима стоял бы — меню не обновлялось бы на ходу.
+        let status = Timer(timeInterval: period, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
-        trafficTimer = Timer.scheduledTimer(withTimeInterval: sampleInterval, repeats: true) { [weak self] _ in
+        let traffic = Timer(timeInterval: sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleTraffic() }
         }
+        RunLoop.main.add(status, forMode: .common)
+        RunLoop.main.add(traffic, forMode: .common)
+        statusTimer = status
+        trafficTimer = traffic
     }
 
     private func refreshHelperState() {

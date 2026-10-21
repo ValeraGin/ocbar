@@ -97,7 +97,16 @@ enum MenuProbe {
                      : "проверка меню: ИТОГ ПЛОХО — " + bad.joined(separator: "; ") + note)
     }
 
-    private static func run() {
+    @MainActor private static func run() {
+        // Классическое NSMenu: размер, место и закрытие — у системы, мерить
+        // нечего. Проверяем, что меню собирается из живого состояния.
+        if let classic = AppDelegate.classic {
+            classic.build()
+            let n = classic.menu.items.count
+            AppLog.write(n > 3 ? "проверка меню: ИТОГ ОК — классическое меню, пунктов \(n)"
+                               : "проверка меню: ИТОГ ПЛОХО — классическое меню почти пустое (\(n))")
+            return
+        }
         guard let menu else { AppLog.write("проверка меню: панели нет"); return }
         shots = [:]
         resizes = 0

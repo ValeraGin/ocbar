@@ -41,20 +41,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var stageWindow: NSWindow?
     private var iconWatch: AnyCancellable?
 
-    /// Меню в строке состояния. Своё окно, а не MenuBarExtra(.window): то не
-    /// сжималось под содержимое и не давало ни окна, ни значка (D71, разбор
-    /// 2026-10-20 в журнале).
+    /// Меню в строке состояния — не MenuBarExtra(.window): то не сжималось
+    /// под содержимое и не давало ни окна, ни значка (D71, разбор 2026-10-20
+    /// в журнале). По умолчанию — обычное NSMenu (ClassicMenu); ключ
+    /// MenuStyle = panel — панель в стиле Пункта управления (FluidMenuBarExtra).
     static private(set) var menu: FluidMenuBarExtra?
+    static private(set) var classic: ClassicMenu?
 
     @MainActor private func installMenu() {
         let store = StatusStore.shared
-        let menu = FluidMenuBarExtra(title: "ocbar", image: MenuBarIcon.image(for: store.status)) {
-            NativeMenuView().environmentObject(store)
+        WindowBridge.install()
+        if UserDefaults.standard.string(forKey: "MenuStyle") == "panel" {
+            Self.menu = FluidMenuBarExtra(title: "ocbar", image: MenuBarIcon.image(for: store.status)) {
+                NativeMenuView().environmentObject(store)
+            }
+        } else {
+            let classic = ClassicMenu(store: store)
+            classic.image = MenuBarIcon.image(for: store.status)
+            Self.classic = classic
         }
         iconWatch = store.$status
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in self?.showIcon(status) }
-        Self.menu = menu
+    }
+
+    @MainActor private func setIcon(_ image: NSImage) {
+        Self.menu?.image = image
+        Self.classic?.image = image
     }
 
     // Пока идёт подключение, текущая часть значка мигает раз в полсекунды.
@@ -70,14 +83,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 Task { @MainActor in
                     guard let self else { return }
                     self.blinkOn.toggle()
-                    Self.menu?.image = MenuBarIcon.image(for: self.iconStatus, blink: self.blinkOn)
+                    self.setIcon(MenuBarIcon.image(for: self.iconStatus, blink: self.blinkOn))
                 }
             }
             RunLoop.main.add(blinkTimer!, forMode: .common)
         } else if !starting {
             blinkTimer?.invalidate(); blinkTimer = nil; blinkOn = false
         }
-        Self.menu?.image = MenuBarIcon.image(for: status, blink: blinkOn)
+        setIcon(MenuBarIcon.image(for: status, blink: blinkOn))
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
