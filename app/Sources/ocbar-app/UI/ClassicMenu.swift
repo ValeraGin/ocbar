@@ -25,6 +25,10 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
         menu.delegate = self
         menu.autoenablesItems = false
         menu.minimumWidth = Self.width
+        // Колонки галочек в главном меню нет: поднятый профиль отмечен цветом
+        // значка, а не галочкой, и текст встаёт ближе к краю. В подменю сетей
+        // и зон галочки остаются — там это переключатели.
+        menu.showsStateColumn = false
         statusItem.menu = menu
         statusItem.button?.setAccessibilityTitle("ocbar")
         // objectWillChange приходит до смены значения: пересобираем следующим
@@ -157,7 +161,12 @@ final class ClassicMenu: NSObject, NSMenuDelegate {
             guard let self, !current || !self.up, self.canConnect else { return }
             self.store.connect(profile: p.name)
         }
-        item.state = active ? .on : .off
+        // Поднятый профиль — значок цветом акцента, как круг у Wi‑Fi.
+        if active, let symbol = NSImage(systemSymbolName: p.isPassword ? "key.fill" : "lock.fill",
+                                        accessibilityDescription: L("подключён")) {
+            let color: NSColor = [.lost, .paused].contains(s.presentation) ? NSColor(look.color) : .controlAccentColor
+            item.image = symbol.withSymbolConfiguration(.init(paletteColors: [color]))
+        }
         if current {
             let step = ConnectStep.of(s)
             let alarm = [.lost, .paused, .needsLogin].contains(s.presentation) || step?.waitsForHuman == true
