@@ -730,6 +730,11 @@ STUB
         printf '%s\n' "$mig" | "$qa" --qr-png "$tmp/kc/two.png"
         # Картинка без QR — как снимок экрана без права на запись.
         printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==' | base64 -D > "$tmp/kc/blank.png"
+        # CLI отличает отсутствие QR от прочитанного, но неподходящего кода
+        # по статусу выхода, независимо от языка текста ошибки.
+        local blank_qrc=0
+        "$qa" --import-qr "$tmp/kc/blank.png" --print-all > "$tmp/kc/blank.out" 2> "$tmp/kc/blank.err" || blank_qrc=$?
+        is "пустой снимок: ocbar-auth возвращает код отсутствия QR" 3 "$blank_qrc"
         cat > "$tmp/kc/screencapture" <<'STUB'
 #!/bin/bash
 for a; do dst="$a"; done
