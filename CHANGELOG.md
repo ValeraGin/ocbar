@@ -3,6 +3,12 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.21.1 — 2026-10-22
+
+- Failed screen QR imports discard decoder output and use the exit status.
+  System image diagnostics no longer hide the Screen Recording permission
+  hint or get interpreted as OTP data.
+
 ## 0.21.0 — 2026-10-22
 
 - Profiles can embed their CSD wrapper in `CsdScriptBase64`. Import extracts
