@@ -1,6 +1,6 @@
 {
   "guide_link": "Installation & first connection",
-  "install_description": "ocbar builds from source on your Mac through Homebrew. After installation, the setup wizard helps you add your gateway and sign in.",
+  "install_description": "Install ocbar with one command from GitHub. The installer offers missing tools and can import a configured profile.",
   "skip": "Skip to content",
   "language_label": "Language",
   "disclaimer": "Not affiliated with Cisco. AnyConnect describes protocol compatibility.",
@@ -25,10 +25,11 @@
   "p5_t": "Survives sleep and network changes",
   "p5_d": "The supervisor brings the connection back after sleep, Wi-Fi changes and dropped links, without opening a sign-in window on its own.",
   "install_title": "Install",
-  "install_note": "Homebrew builds ocbar on your Mac. The first command with sudo installs the network helper; then the setup wizard adds your gateway.",
-  "requirements": "macOS 14.4+ · Command Line Tools · your own AnyConnect-compatible gateway",
+  "install_note": "This command downloads the installer from GitHub. It offers to install missing Apple tools and Homebrew, installs ocbar and opens the app. The system helper needs your Mac administrator password.",
+  "requirements": "macOS 14.4+ · access to an AnyConnect-compatible gateway",
   "copied": "Copied",
   "troubleshooting": "If it does not work",
   "troubleshooting_url": "https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.en.md",
-  "license": "MIT · no telemetry"
+  "license": "MIT · no telemetry",
+  "profile_link": "I have a configured profile from a teammate"
 }

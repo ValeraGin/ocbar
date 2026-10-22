@@ -35,10 +35,12 @@ Git отдельно ставить не нужно: он входит в Comman
 Если Homebrew уже установлен, но отсутствует в PATH, скрипт найдёт его сам.
 Запускайте команду от обычного пользователя, без `sudo` перед всей строкой.
 
-Готовый профиль со встроенным CSD устанавливается без отдельного скрипта:
+Для коллег достаточно одного файла `team.ocbar` со встроенным CSD и
+[ссылки на сайт](https://valeragin.github.io/ocbar/ru/guide/#profile).
+Коллега сохранит профиль в Загрузки и выполнит команду с сайта:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)" -- --profile ~/Downloads/office.ocbar --language ru
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)" -- --profile "$HOME/Downloads/team.ocbar" --language ru
 ```
 
 Встроить CSD в профиль можно кнопкой **Встроить CSD-скрипт…** в дополнительных

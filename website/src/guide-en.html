@@ -1,23 +1,19 @@
 <h1>Install ocbar.<br>Make your first connection.</h1>
-<p>ocbar is an AnyConnect-compatible client for a VPN gateway you already have access to. It does not include a VPN subscription or servers. Ask your VPN administrator for the gateway address, group, networks and DNS settings.</p>
-<p class="notice"><strong>Compatibility:</strong> minimum macOS 13. The author’s verified setup is macOS 26 on Apple Silicon with an AnyConnect gateway and Keycloak SSO. Older supported macOS versions and Intel Macs have not yet been verified. Your gateway’s sign-in and device policies may differ.</p>
-<h2>1. Prepare your Mac</h2>
-<p>You need <a href="https://brew.sh/">Homebrew</a> and Apple Command Line Tools. A full Xcode installation is not required. To request Command Line Tools, run:</p>
-<pre><code>xcode-select --install</code></pre>
-<p>Finish the Apple installation dialog before continuing. If the tools are already installed, macOS will tell you. Use an administrator account for the system-helper installation.</p>
-<h2>2. Install with Homebrew</h2>
-<p>The application and its Homebrew tap are public. You do not need a GitHub account, an SSH key or <code>gh auth</code>. Review the <a href="https://github.com/ValeraGin/homebrew-ocbar">tap</a> before trusting it.</p>
-<pre><code>brew tap ValeraGin/ocbar
-brew trust ValeraGin/ocbar
-brew install ocbar</code></pre>
-<p>Homebrew builds the application on your Mac. This is a source build, not a signed and notarized installer; build time depends on your machine and installed dependencies.</p>
-<h2>3. Set up the helper and open the app</h2>
-<pre><code>sudo ocbar install
-ocbar app start</code></pre>
-<p>The first command asks for your Mac administrator password in Terminal. Tunnel mode installs a root-owned helper and copy of OpenConnect, a reconnect LaunchAgent, and <code>/etc/sudoers.d/ocbar</code>. The rule lets members of the <code>admin</code> group run the helper without a password on subsequent connections. It does not grant passwordless access to every command. The menu bar app runs as your normal user. Read the <a href="https://github.com/ValeraGin/ocbar/blob/main/SECURITY.md">security model and its limitations</a>.</p>
-<p>To inspect the planned installation steps without applying them, run <code>ocbar install --dry-run</code> as your normal user.</p>
-<h2>4. Add a profile and sign in</h2>
-<ol><li>Find ocbar in the Mac menu bar and use the setup wizard to add a profile.</li><li>Enter the gateway and authentication group supplied by your administrator.</li><li>Add the networks and DNS zones you need through the VPN. They are your explicit selection; do not guess them from an example.</li><li>Connect and complete your organization’s sign-in. Saving a password or configuring TOTP is optional.</li><li>Check a work resource and an ordinary public website. You can change selected networks or pause the connection from the menu.</li></ol>
+<p>ocbar connects your Mac to your organization’s AnyConnect-compatible VPN gateway. You need macOS 14.4 or newer and access to that gateway.</p>
+<p>Have a file from a teammate? Go to <a href="#profile">installation with a configured profile</a>. It already contains the gateway, networks and DNS settings.</p>
+<h2 id="install">Install with one command</h2>
+<p>Open Terminal and paste this line:</p>
+<div class="install-command"><pre id="install-command"><code>$install_command</code></pre><button type="button" data-copy="install-command" data-done="$copied">$copy</button></div>
+<p>The command downloads the <a href="https://github.com/ValeraGin/ocbar/blob/main/install.sh">installer from GitHub</a>. It checks Git and Swift, offers missing Apple tools and Homebrew, builds ocbar, sets up its system helper and launch at login, then opens the app.</p>
+<p>If the Apple tools installation window appears, finish installing there: the script waits for it. The system helper needs your Mac administrator password. Run the line as your regular user. Building may take a few minutes.</p>
+<h2 id="profile">Install with a configured profile</h2>
+<ol><li>Save the file from your teammate in Downloads as <code>team.ocbar</code>.</li><li>Open Terminal and run one command:</li></ol>
+<div class="install-command"><pre id="profile-command"><code>$profile_command</code></pre><button type="button" data-copy="profile-command" data-done="$copied">$copy</button></div>
+<p>This command installs the app and imports the profile before setting up the system helper. An embedded CSD script is extracted and prepared automatically. If your file has a different name or location, change its path in the command.</p>
+<h2>First connection</h2>
+<ol><li>Click ocbar in the Mac menu bar.</li><li>With a configured profile, open Settings → Profiles, select it and enter your own work username. Otherwise, the wizard helps you add the gateway, networks and DNS supplied by your administrator.</li><li>Choose Connect VPN and complete your organization’s sign-in with your password and second factor.</li><li>To remember sign-in, choose Connect and learn the form…. You can also enter the password and code manually.</li><li>Check a work resource and an ordinary public website. You can change networks or pause the connection from the menu.</li></ol>
+<p>Choose English, Russian or System default in Settings → General → Interface language.</p>
+<p class="notice">The author has verified macOS 26 on Apple Silicon. A clean installation and first sign-in on another Mac have not yet been verified. Sign-in and device checks depend on your organization.</p>
 <h2>If the connection fails</h2>
 <pre><code>ocbar doctor
 ocbar status</code></pre>
@@ -32,9 +28,8 @@ ocbar doctor</code></pre>
 <p>One .ocbar file brings together the gateway, networks, DNS zones and SSO form rules. New teammates can start with settings you have already checked.</p>
 <pre><code>ocbar export main team.ocbar</code></pre>
 <p>Here, main is the name of your configured profile. Before sharing, open the file: replace your personal User value, review KeePassXC and CSD wrapper paths, and check any custom commands. Export does not retrieve passwords or TOTP secrets from your credential store; you must review the contents of your own commands and rules. Share work settings within your team.</p>
-<p>Your teammate installs ocbar, imports the file and configures their own account and credential sources:</p>
-<pre><code>ocbar import team.ocbar</code></pre>
-<p>They then sign in as themselves. A CSD script referenced by the profile must be shared and set up separately: export includes its path, not the script file.</p>
+<p>If CSD is required, open the profile editor’s advanced settings and choose Embed CSD script… before exporting. Export preserves the script inside the file.</p>
+<p>Send your teammate <code>team.ocbar</code> and the <a href="#profile">link to installation with a configured profile</a>. One command installs the app; they then enter their own username and sign in as themselves.</p>
 
 <h2 id="remove">Remove the app and system helper</h2>
 <p><strong>Keep this order:</strong> ocbar must still be installed to remove its system components.</p>

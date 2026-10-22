@@ -2,10 +2,10 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Установка и первое подключение — ocbar</title><meta name="description" content="Homebrew собирает ocbar из исходников на вашем Mac. После установки мастер поможет добавить шлюз и выполнить первый вход.">
+<title>Установка и первое подключение — ocbar</title><meta name="description" content="Установка ocbar одной командой с GitHub. Установщик предложит недостающие инструменты и импортирует готовый профиль.">
 <meta property="og:title" content="Установка и первое подключение — ocbar"><meta property="og:type" content="website">
 <meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card.jpg"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="../../assets/mark.svg"><link rel="stylesheet" href="../../style.css">
+<link rel="icon" href="../../assets/mark.svg"><link rel="stylesheet" href="../../style.css?v=20261022">
 <script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
@@ -23,25 +23,21 @@ if(w==="ru")location.replace("../../ru/guide/"+location.hash)})()</script>
 <a class="skip" href="#main">Перейти к содержимому</a>
 <header class="header wrap"><a class="brand" href="../"><img src="../../assets/mark.svg" width="34" height="34" alt="">ocbar<span class="brand-descriptor">/ macOS</span></a><div class="languages" aria-label="Язык"><a href="../../guide/" lang="en" >EN</a><span>/</span><a href="../../ru/guide/" lang="ru" aria-current="page">RU</a></div></header>
 <main id="main" class="guide wrap"><h1>Установите ocbar.<br>Подключитесь к рабочей сети.</h1>
-<p>ocbar — клиент для совместимого с AnyConnect шлюза, к которому у вас уже есть доступ. Подписка на VPN и серверы в него не входят. Адрес шлюза, группу, сети и настройки DNS уточните у администратора VPN.</p>
-<p class="notice"><strong>Совместимость:</strong> минимум macOS 13. Автор проверил macOS 26 на Apple Silicon со шлюзом AnyConnect и Keycloak SSO. Более ранние поддерживаемые версии macOS и Intel пока не проверены. Политики входа и проверки устройства на вашем шлюзе могут отличаться.</p>
-<h2>1. Подготовьте Mac</h2>
-<p>Понадобятся <a href="https://brew.sh/">Homebrew</a> и Apple Command Line Tools. Полный Xcode не нужен. Чтобы запросить установку инструментов, выполните:</p>
-<pre><code>xcode-select --install</code></pre>
-<p>Завершите установку в окне Apple, прежде чем продолжать. Если инструменты уже установлены, macOS сообщит об этом. Для установки системного помощника нужна учётная запись администратора.</p>
-<h2>2. Установите через Homebrew</h2>
-<p>Репозиторий приложения и Homebrew tap публичные. Аккаунт GitHub, SSH-ключ и <code>gh auth</code> не нужны. Перед подтверждением доверия ознакомьтесь с <a href="https://github.com/ValeraGin/homebrew-ocbar">исходниками tap</a>.</p>
-<pre><code>brew tap ValeraGin/ocbar
-brew trust ValeraGin/ocbar
-brew install ocbar</code></pre>
-<p>Homebrew соберёт приложение на вашем Mac. Это сборка из исходников, а не подписанный и нотарифицированный установщик. Время зависит от компьютера и уже установленных зависимостей.</p>
-<h2>3. Установите помощник и откройте приложение</h2>
-<pre><code>sudo ocbar install
-ocbar app start</code></pre>
-<p>Первая команда попросит пароль администратора Mac в Терминале. Для туннеля устанавливаются помощник и копия OpenConnect с владельцем root, LaunchAgent переподключения и <code>/etc/sudoers.d/ocbar</code>. Правило позволяет участникам группы <code>admin</code> запускать помощник без пароля при следующих подключениях. Оно не разрешает беспарольный запуск любых команд. Само приложение работает от вашего пользователя. Подробнее — в <a href="https://github.com/ValeraGin/ocbar/blob/main/SECURITY.md">модели безопасности и её ограничениях</a>.</p>
-<p>Чтобы посмотреть шаги установки без их выполнения, запустите <code>ocbar install --dry-run</code> от обычного пользователя.</p>
-<h2>4. Добавьте профиль и войдите</h2>
-<ol><li>Найдите ocbar в строке меню Mac и добавьте профиль через мастер настройки.</li><li>Укажите адрес шлюза и группу, полученные от администратора.</li><li>Добавьте нужные сети и зоны DNS. Это ваш явный выбор: не копируйте примерные адреса вместо рабочих настроек.</li><li>Подключитесь и пройдите вход вашей организации. Сохранять пароль и настраивать TOTP необязательно.</li><li>Проверьте рабочий ресурс и обычный публичный сайт. Выбор сетей и пауза доступны в меню.</li></ol>
+<p>ocbar подключает Mac к AnyConnect-совместимому VPN-шлюзу вашей организации. Для работы нужны macOS 14.4 или новее и доступ к этому шлюзу.</p>
+<p>Есть файл от коллеги? Перейдите к <a href="#profile">установке с готовым профилем</a>. Адрес шлюза, сети и DNS уже будут в нём.</p>
+<h2 id="install">Установка одной командой</h2>
+<p>Откройте Терминал и вставьте строку:</p>
+<div class="install-command"><pre id="install-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot;</code></pre><button type="button" data-copy="install-command" data-done="Скопировано">Копировать</button></div>
+<p>Команда загружает <a href="https://github.com/ValeraGin/ocbar/blob/main/install.sh">установщик с GitHub</a>. Он проверит Git и Swift, предложит недостающие инструменты Apple и Homebrew, соберёт ocbar, настроит системный помощник и автозапуск, затем откроет приложение.</p>
+<p>Если появилось окно установки инструментов Apple, завершите установку в нём: скрипт дождётся продолжения. Для системного помощника понадобится пароль администратора Mac. Запускайте строку от обычного пользователя. Сборка может занять несколько минут.</p>
+<h2 id="profile">Установка с готовым профилем</h2>
+<ol><li>Сохраните полученный от коллеги файл в Загрузки с именем <code>team.ocbar</code>.</li><li>Откройте Терминал и выполните одну команду:</li></ol>
+<div class="install-command"><pre id="profile-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot; -- --profile &quot;$HOME/Downloads/team.ocbar&quot; --language ru</code></pre><button type="button" data-copy="profile-command" data-done="Скопировано">Копировать</button></div>
+<p>Эта команда установит приложение и импортирует профиль до настройки системного помощника. Встроенный CSD-скрипт будет извлечён и подготовлен автоматически. Если файл называется иначе или лежит в другой папке, замените путь к нему в команде.</p>
+<h2>Первое подключение</h2>
+<ol><li>Нажмите значок ocbar в строке меню Mac.</li><li>С готовым профилем откройте Настройки → Профили, выберите его и укажите свой корпоративный логин. Если профиля нет, мастер поможет добавить шлюз, сети и DNS по данным администратора.</li><li>Выберите «Подключить» и пройдите обычный вход вашей организации с паролем и вторым фактором.</li><li>Для запоминания входа выберите «Подключить и запомнить вход…». При необходимости пароль и код можно вводить вручную.</li><li>Проверьте рабочий ресурс и обычный публичный сайт. Выбор сетей и пауза доступны в меню.</li></ol>
+<p>Язык интерфейса: Настройки → Общие → Язык интерфейса. Доступны русский, English и язык системы.</p>
+<p class="notice">Автор проверил macOS 26 на Apple Silicon. Чистая установка и первый вход на другом Mac пока не проверены. Требования входа и проверки устройства зависят от вашей организации.</p>
 <h2>Если подключиться не удалось</h2>
 <pre><code>ocbar doctor
 ocbar status</code></pre>
@@ -56,9 +52,8 @@ ocbar doctor</code></pre>
 <p>Один файл .ocbar объединяет шлюз, сети, зоны DNS и правила заполнения формы SSO. Это помогает новым коллегам начать с уже проверенных настроек.</p>
 <pre><code>ocbar export main team.ocbar</code></pre>
 <p>Здесь main — имя вашего настроенного профиля. Перед отправкой откройте файл: замените личный User, проверьте пути к KeePassXC и CSD wrapper, а также пользовательские команды. Пароли и секреты TOTP из хранилища экспорт не извлекает; содержимое ваших команд и правил нужно проверить самостоятельно. Передавайте рабочие настройки внутри своей команды.</p>
-<p>Коллега установит ocbar, импортирует файл и укажет свою учётную запись и источники секретов:</p>
-<pre><code>ocbar import team.ocbar</code></pre>
-<p>После этого он выполняет вход от своего имени. Скрипт CSD, если он указан в профиле, передаётся и настраивается отдельно: экспорт содержит путь к нему, а не сам файл.</p>
+<p>Если нужен CSD, перед экспортом в редакторе профиля откройте дополнительные настройки и нажмите «Встроить CSD-скрипт…». Экспорт сохранит скрипт внутри файла.</p>
+<p>Отправьте коллеге <code>team.ocbar</code> и <a href="#profile">ссылку на установку с готовым профилем</a>. Он установит приложение одной командой, затем укажет свой логин и войдёт от своего имени.</p>
 
 <h2 id="remove">Удаление приложения и помощника</h2>
 <p><strong>Соблюдайте порядок:</strong> ocbar должен оставаться установленным, пока удаляются его системные компоненты.</p>
@@ -67,4 +62,5 @@ brew uninstall ocbar</code></pre>
 <p>Первая команда отключает ocbar, снимает его маршруты и DNS, останавливает агенты, удаляет помощник и правило sudoers. Вторая удаляет пакет Homebrew.</p>
 <p>Профили, локальные журналы и состояние, данные входа WebKit и записи Связки ключей сохраняются. Это не полное удаление личных данных. Перед очисткой остатков прочитайте <a href="https://github.com/ValeraGin/ocbar/blob/main/INSTALL.md#8-удаление">полную инструкцию удаления</a>. Записи KeePassXC управляются отдельно.</p>
 </main>
+<script src="../../copy.js"></script>
 </body></html>

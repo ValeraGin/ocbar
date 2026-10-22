@@ -49,12 +49,16 @@ for lang in ('en', 'ru'):
     content = json.loads((ROOT / f'src/{lang}.json').read_text())
     content = {k: html.escape(v, quote=True).replace('&lt;br&gt;', '<br>').replace('&lt;span&gt;', '<span>').replace('&lt;/span&gt;', '</span>') for k, v in content.items()}
     prefix = '' if lang == 'en' else 'ru/'
+    install_command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)"'
+    commands = dict(install_command=html.escape(install_command),
+                    profile_command=html.escape(install_command + ' -- --profile "$HOME/Downloads/team.ocbar" --language ' + lang))
     for guide in (False, True):
         suffix = prefix + ('guide/' if guide else '')
         base = ('../' if lang == 'en' else '../../') if guide else ('' if lang == 'en' else '../')
         template = Template((ROOT / ('src/guide.html' if guide else 'src/page.html')).read_text())
         page = template.substitute(content, lang=lang, base=base, home='./',
-            body=(ROOT / f'src/guide-{lang}.html').read_text() if guide else '',
+            body=Template((ROOT / f'src/guide-{lang}.html').read_text()).substitute(**commands, **content) if guide else '',
+            **commands,
             en_current='aria-current="page"' if lang == 'en' else '',
             ru_current='aria-current="page"' if lang == 'ru' else '')
         variants = [('en', 'guide/'), ('ru', 'ru/guide/'), ('x-default', 'guide/')] if guide else [('en', ''), ('ru', 'ru/'), ('x-default', '')]

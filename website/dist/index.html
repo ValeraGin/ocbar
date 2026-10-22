@@ -8,7 +8,7 @@
 <meta property="og:type" content="website"><meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card-en.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
-<link rel="stylesheet" href="landing.css?v=20261017">
+<link rel="stylesheet" href="landing.css?v=20261022">
 <script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
@@ -47,13 +47,10 @@ if(w==="ru")location.replace("ru/"+location.hash)})()</script>
   </section>
   <section class="install" id="install">
     <h2>Install</h2>
-    <div class="code"><pre id="commands">brew tap ValeraGin/ocbar
-brew trust ValeraGin/ocbar
-brew install ocbar
-sudo ocbar install
-ocbar app start</pre><button type="button" id="copy" data-done="Copied">Copy</button></div>
-    <p>Homebrew builds ocbar on your Mac. The first command with sudo installs the network helper; then the setup wizard adds your gateway.</p>
-    <p class="muted">macOS 14.4+ · Command Line Tools · your own AnyConnect-compatible gateway</p>
+    <div class="code"><pre id="commands">/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot;</pre><button type="button" data-copy="commands" data-done="Copied">Copy</button></div>
+    <p>This command downloads the installer from GitHub. It offers to install missing Apple tools and Homebrew, installs ocbar and opens the app. The system helper needs your Mac administrator password.</p>
+    <p class="muted">macOS 14.4+ · access to an AnyConnect-compatible gateway</p>
+    <p><a class="link" href="guide/#profile">I have a configured profile from a teammate →</a></p>
     <p><a class="link" href="guide/">Installation &amp; first connection →</a></p>
   </section>
 </main>
@@ -63,13 +60,6 @@ ocbar app start</pre><button type="button" id="copy" data-done="Copied">Copy</bu
   <span>MIT · no telemetry</span>
   <span>Not affiliated with Cisco. AnyConnect describes protocol compatibility.</span>
 </footer>
-<script>
-document.getElementById("copy").addEventListener("click", function () {
-  var button = this, text = document.getElementById("commands").textContent;
-  var done = function () { var label = button.textContent; button.textContent = button.dataset.done; setTimeout(function () { button.textContent = label; }, 1600); };
-  var select = function () { var range = document.createRange(); range.selectNodeContents(document.getElementById("commands")); var selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); };
-  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, select); else select();
-});
-</script>
+<script src="copy.js"></script>
 </body>
 </html>

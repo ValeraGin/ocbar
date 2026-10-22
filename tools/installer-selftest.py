@@ -19,7 +19,7 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocbar=''):
+def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocbar='', command_string=False):
     tmp = tempfile.TemporaryDirectory(prefix='ocbar installer test ')
     base = Path(tmp.name)
     fake = base / 'bin'
@@ -57,7 +57,14 @@ esac
     executable(base / 'brew-template', brew_body)
     if brew:
         shutil.copy(base / 'brew-template', fake / 'brew')
-    executable(fake / 'curl', '''echo download-homebrew >> "$TEST_LOG"
+    executable(fake / 'curl', '''for arg; do
+    if [ "$arg" = https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh ]; then
+        echo download-ocbar >> "$TEST_LOG"
+        cat "$TEST_BASE/install.sh"
+        exit 0
+    fi
+done
+echo download-homebrew >> "$TEST_LOG"
 while [ "$1" != -o ]; do shift; done
 cat > "$2" <<'EOF'
 cp "$TEST_BASE/brew-template" "$TEST_BASE/bin/brew"
@@ -80,7 +87,12 @@ esac
     def run(options):
         pid, fd = pty.fork()
         if pid == 0:
-            os.execve('/bin/bash', ['bash', str(base / 'install.sh'), *options], env)
+            if command_string:
+                command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)" -- "$@"'
+                argv = ['bash', '-c', command, '--', *options]
+            else:
+                argv = ['bash', str(base / 'install.sh'), *options]
+            os.execve('/bin/bash', argv, env)
         output = b''
         deadline = time.monotonic() + 25
         while time.monotonic() < deadline:
@@ -188,6 +200,18 @@ def main():
         extracted = list((base / 'home/.config/ocbar/csd').glob('inline-*.sh'))
         assert len(extracted) == 1 and extracted[0].read_bytes() == b'#!/bin/bash\nexit 0\n'
     print('OK: one-file profile installation needs no --csd argument')
+
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', '--language', 'ru',
+                                        embedded=True, brew=False, tools=False, command_string=True)
+    with tmp:
+        assert code == 0, output
+        calls = (base / 'calls').read_text()
+        assert 'download-ocbar' in calls and 'download-homebrew' in calls and 'apple-tools' in calls
+        assert 'defaults write ru.ocbar.app InterfaceLanguage -string ru' in calls
+        assert (base / 'home/.config/ocbar/profiles/office.ocbar').exists()
+        assert len(list((base / 'home/.config/ocbar/csd').glob('inline-*.sh'))) == 1
+        assert calls.index('ocbar import') < calls.index('sudo ')
+    print('OK: GitHub-style one-line command forwards the profile path with spaces and prepares embedded CSD')
 
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', '--csd', 'CSD', embedded=True)
     with tmp:

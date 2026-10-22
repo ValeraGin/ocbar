@@ -8,7 +8,7 @@
 <meta property="og:type" content="website"><meta property="og:image" content="${base}assets/social-card-${lang}.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="${base}assets/icon.svg">
-<link rel="stylesheet" href="${base}landing.css?v=20261017">
+<link rel="stylesheet" href="${base}landing.css?v=20261022">
 </head>
 <body>
 <a class="skip" href="#content">$skip</a>
@@ -34,13 +34,10 @@
   </section>
   <section class="install" id="install">
     <h2>$install_title</h2>
-    <div class="code"><pre id="commands">brew tap ValeraGin/ocbar
-brew trust ValeraGin/ocbar
-brew install ocbar
-sudo ocbar install
-ocbar app start</pre><button type="button" id="copy" data-done="$copied">$copy</button></div>
+    <div class="code"><pre id="commands">$install_command</pre><button type="button" data-copy="commands" data-done="$copied">$copy</button></div>
     <p>$install_note</p>
     <p class="muted">$requirements</p>
+    <p><a class="link" href="guide/#profile">$profile_link →</a></p>
     <p><a class="link" href="guide/">$guide_link →</a></p>
   </section>
 </main>
@@ -50,13 +47,6 @@ ocbar app start</pre><button type="button" id="copy" data-done="$copied">$copy</
   <span>$license</span>
   <span>$disclaimer</span>
 </footer>
-<script>
-document.getElementById("copy").addEventListener("click", function () {
-  var button = this, text = document.getElementById("commands").textContent;
-  var done = function () { var label = button.textContent; button.textContent = button.dataset.done; setTimeout(function () { button.textContent = label; }, 1600); };
-  var select = function () { var range = document.createRange(); range.selectNodeContents(document.getElementById("commands")); var selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); };
-  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, select); else select();
-});
-</script>
+<script src="${base}copy.js"></script>
 </body>
 </html>
