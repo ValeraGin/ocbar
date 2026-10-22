@@ -8,6 +8,8 @@ release to its tag and commit.
 - Failed screen QR imports discard decoder output and use the exit status.
   System image diagnostics no longer hide the Screen Recording permission
   hint or get interpreted as OTP data.
+- The demo menu compiles on Swift versions where a local timer named `open`
+  shadows the menu-opening method.
 
 ## 0.21.0 — 2026-10-22
 

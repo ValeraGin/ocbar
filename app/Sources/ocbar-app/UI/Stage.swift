@@ -268,7 +268,7 @@ enum DemoMenu {
         // съёмке не нужен ни Accessibility, ни щелчок по экрану.
         if ProcessInfo.processInfo.environment["OCBAR_DEMO_OPEN"] == "1" {
             let open = Timer(timeInterval: 1.0, repeats: false) { _ in
-                MainActor.assumeIsolated { open() }
+                MainActor.assumeIsolated { DemoMenu.open() }
             }
             RunLoop.main.add(open, forMode: .common)
         }
