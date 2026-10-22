@@ -8,7 +8,7 @@
 <meta property="og:type" content="website"><meta property="og:image" content="${base}assets/social-card-${lang}.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="${base}assets/icon.svg">
-<link rel="stylesheet" href="${base}landing.css?v=20261022-2">
+<link rel="stylesheet" href="${base}landing.css?v=20261022-3">
 </head>
 <body>
 <a class="skip" href="#content">$skip</a>
@@ -31,6 +31,14 @@
     <div><h2>$p3_t</h2><p>$p3_d</p></div>
     <div><h2>$p4_t</h2><p>$p4_d</p></div>
     <div><h2>$p5_t</h2><p>$p5_d</p></div>
+  </section>
+  <section class="compatibility" aria-labelledby="compatibility-title">
+    <h2 id="compatibility-title">$compat_title</h2>
+    <p>$compat_live</p>
+    <p>$compat_ci</p>
+    <p class="muted">$compat_limits</p>
+    <p><a class="link" href="https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml">$feedback_link →</a></p>
+    <p class="muted">$feedback_note</p>
   </section>
   <section class="install" id="install">
     <h2>$install_title</h2>

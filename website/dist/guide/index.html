@@ -38,6 +38,9 @@ if(w==="ru")location.replace("../ru/guide/"+location.hash)})()</script>
 <ol><li>Click ocbar in the Mac menu bar.</li><li>With a configured profile, open Settings → Profiles, select it and enter your own work username. Otherwise, the wizard helps you add the gateway, networks and DNS supplied by your administrator.</li><li>Choose Connect VPN and complete your organization’s sign-in with your password and second factor.</li><li>To remember sign-in, choose Connect and learn the form…. You can also enter the password and code manually.</li><li>Check a work resource and an ordinary public website. You can change networks or pause the connection from the menu.</li></ol>
 <p>Choose English, Russian or System default in Settings → General → Interface language.</p>
 <p class="notice">The author has verified macOS 26 on Apple Silicon. A clean installation and first sign-in on another Mac have not yet been verified. Sign-in and device checks depend on your organization.</p>
+<p>When importing in the app, the wizard offers a teammate’s file first. If an XML file contains several servers, choose the profile you need. You can change the username while keeping the configured networks and DNS.</p>
+<p>After importing or editing CSD, the app checks its system copy before sign-in. If setup is needed, it shows <code>sudo ocbar install</code> and a readiness check button. Once connected, the wizard can check a work resource: a connection to the gateway alone does not confirm access to services.</p>
+<p><a href="https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml">Tell us how your gateway worked</a>: gateway type, sign-in method and result are enough. Do not include corporate addresses or sign-in details.</p>
 <h2>If the connection fails</h2>
 <pre><code>ocbar doctor
 ocbar status</code></pre>

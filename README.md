@@ -330,15 +330,17 @@ They run in CI on every push.
 | | Status |
 |---|---|
 | macOS 26, Apple Silicon | used daily by the author; CI builds and runs every self-test |
-| macOS 14.4–15, Apple Silicon | expected to work (deployment target is macOS 14.4), not verified |
+| macOS 15, Apple Silicon | weekly CI build and self-tests; no real-device VPN verification |
+| macOS 14.4, Apple Silicon | deployment target; no real-device verification |
 | Intel Macs | expected to work; Homebrew prefix is `/usr/local`, which the helper checks for ownership. Not verified |
 
 Tried ocbar with your gateway? [Tell whether it worked](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml) — one short report
 per gateway and sign-in method fills the compatibility table.
 
-No telemetry: ocbar never sends anything anywhere. It talks to your gateway
-and identity provider, writes logs under `~/Library/Logs/ocbar`, and that is
-all. There is no update check, no crash reporting, no analytics.
+No telemetry, crash reporting or analytics. ocbar talks to your gateway and
+identity provider; configured resource checks contact the resource you choose.
+Logs stay under `~/Library/Logs/ocbar`. Installing and updating downloads code
+from GitHub and Homebrew; the app has no automatic update check.
 
 ## Limitations
 
@@ -357,3 +359,17 @@ all. There is no update check, no crash reporting, no analytics.
 
 MIT — see [LICENSE](LICENSE). Author: Valery Ignatkovich
 ([@ValeraGin](https://github.com/ValeraGin)).
+
+### Profile workflow API
+
+`ocbar import --json <file> [name]` returns `{"profiles":["actual-id",…]}` on stdout;
+import notices go to stderr. Cisco XML may create several profiles. Applications
+must use these IDs rather than the input filename.
+
+`ocbar csd-status [profile]` returns `required`, `ready` and the system script
+`name` as JSON without installing or executing CSD. Missing or changed system
+copies block connection before sign-in. Run `sudo ocbar install` and check again.
+External wrappers use content-based names; an older basename is accepted only
+when its contents match. `ocbar check-access [profile] [URL]` checks a work resource
+once and returns `{"reachable":true|false|null}` without changing the connection
+or the supervisor’s state. An optional URL is used only for that check.

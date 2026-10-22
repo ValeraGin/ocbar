@@ -32,3 +32,7 @@ figcaption{font-size:13px;color:var(--muted);margin-top:10px}
 footer{display:flex;flex-wrap:wrap;gap:8px 22px;padding-top:24px;padding-bottom:40px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
 footer a{text-decoration:none}footer a:hover{color:var(--text)}
 @media (max-width:720px){.hero{grid-template-columns:1fr;gap:36px;padding:28px 0 44px}figure img{width:min(300px,100%);margin:0 auto}.lead{font-size:17px}.wrap{padding:0 16px}.top nav{gap:14px}}
+
+.compatibility{padding:36px 0;border-top:1px solid var(--line)}
+.compatibility h2{font-size:26px;line-height:1.3;margin:0 0 18px;font-weight:650}
+.compatibility p{font-size:15px;margin:12px 0 0;max-width:70ch}

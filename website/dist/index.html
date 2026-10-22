@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#eef0ea">
-<title>ocbar — same AnyConnect VPN, your rules</title><meta name="description" content="Open-source client for AnyConnect-compatible VPN gateways on macOS: password and TOTP filled in for you, your own networks and DNS, a native menu instead of a terminal.">
-<meta property="og:title" content="ocbar — same AnyConnect VPN, your rules"><meta property="og:description" content="Open-source client for AnyConnect-compatible VPN gateways on macOS: password and TOTP filled in for you, your own networks and DNS, a native menu instead of a terminal.">
+<title>ocbar — work VPN on your Mac</title><meta name="description" content="Work VPN on your Mac: SSO sign-in, selected networks and corporate DNS, and recovery after sleep. An open-source client built on OpenConnect.">
+<meta property="og:title" content="ocbar — work VPN on your Mac"><meta property="og:description" content="Work VPN on your Mac: SSO sign-in, selected networks and corporate DNS, and recovery after sleep. An open-source client built on OpenConnect.">
 <meta property="og:type" content="website"><meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card-en.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
-<link rel="stylesheet" href="landing.css?v=20261022-2">
+<link rel="stylesheet" href="landing.css?v=20261022-3">
 <script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
@@ -32,18 +32,26 @@ if(w==="ru")location.replace("ru/"+location.hash)})()</script>
 <main id="content" class="wrap">
   <section class="hero">
     <div>
-      <h1>Same AnyConnect VPN. Your rules.</h1>
-      <p class="lead">Your networks, your DNS, your Mac menu bar. Open source, built on OpenConnect.</p>
+      <h1>Work VPN on your Mac</h1>
+      <p class="lead">SSO, the networks you need, and recovery after sleep. A native macOS menu, open source, built on OpenConnect.</p>
       <p class="actions"><a class="button" href="#install">Install</a><a class="link" href="https://github.com/ValeraGin/ocbar">Source on GitHub ↗</a></p>
     </div>
     <figure><img src="assets/demo-en.gif" width="373" height="595" alt="ocbar menu: connect, switch off a network, pause"><figcaption>The real menu on a demo profile.</figcaption></figure>
   </section>
   <section class="pros" aria-label="Why ocbar">
     <div><h2>Password and code filled in for you</h2><p>Password and one-time code come from Keychain, KeePassXC or your own command. The sign-in window shows up only when a person is needed.</p></div>
-    <div><h2>You choose the networks, not the admin</h2><p>Only the networks in your profile go through the tunnel; everything else, home network included, goes the usual way. Switch them from the menu without reconnecting.</p></div>
+    <div><h2>Work networks through VPN; everything else uses your usual connection</h2><p>Only the networks in your profile go through the tunnel; everything else, home network included, goes the usual way. Switch them from the menu without reconnecting.</p></div>
     <div><h2>Smart DNS: yours and the company’s at once</h2><p>Company domains resolve through the company DNS, everything else through yours. System DNS stays untouched.</p></div>
     <div><h2>An app, not a terminal</h2><p>A native macOS menu: connect, pause, switch networks, read logs. A setup wizard and a profile editor; the CLI is there for automation.</p></div>
     <div><h2>Survives sleep and network changes</h2><p>The supervisor brings the connection back after sleep, Wi-Fi changes and dropped links, without opening a sign-in window on its own.</p></div>
+  </section>
+  <section class="compatibility" aria-labelledby="compatibility-title">
+    <h2 id="compatibility-title">Where it has been tested</h2>
+    <p>Real connection: an AnyConnect-compatible gateway with Keycloak, macOS 26 on Apple Silicon. Used daily by the author.</p>
+    <p>Automated checks: ocserv and test SSO gateways. These do not confirm compatibility with real Okta or Microsoft Entra ID deployments.</p>
+    <p class="muted">Requires macOS 14.4+. Intel and macOS 14.4–15 have no real-device verification. A clean installation and first sign-in on another Mac have not been tested yet.</p>
+    <p><a class="link" href="https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml">Tried your gateway? Tell us how it went →</a></p>
+    <p class="muted">A short report helps clarify compatibility. No company name, gateway address or sign-in details needed.</p>
   </section>
   <section class="install" id="install">
     <h2>Install</h2>

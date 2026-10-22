@@ -6,8 +6,8 @@ let args = CommandLine.arguments
 guard args.count == 4 else { print("usage: make-social-card.swift <en|ru> <menu.png> <out>"); exit(2) }
 let (lang, menuPath, out) = (args[1], args[2], args[3])
 let text: [String: (String, String, String)] = [
-    "en": ("Same AnyConnect VPN.", "Your rules.", "Open-source client for macOS · built on OpenConnect"),
-    "ru": ("Тот же AnyConnect.", "Твои правила.", "Открытый клиент для macOS · на основе OpenConnect"),
+    "en": ("Work VPN", "on your Mac", "SSO · selected networks · recovery after sleep"),
+    "ru": ("Рабочий VPN", "на Mac", "SSO · нужные сети · восстановление после сна"),
 ]
 guard let (first, second, footer) = text[lang], let menu = NSImage(contentsOfFile: menuPath) else { exit(2) }
 let size = NSSize(width: 1200, height: 630)

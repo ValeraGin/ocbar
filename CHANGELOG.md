@@ -3,6 +3,24 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.22.0 — 2026-10-22
+
+- Check the installed CSD copy before sign-in. Imported or edited scripts show
+  setup instructions and a readiness check in the wizard and editor.
+- Store external CSD wrappers under content-based names so equal filenames in
+  different profiles cannot overwrite each other. Matching legacy copies remain usable.
+- Import Cisco XML using actual profile IDs; offer a choice when it contains
+  several servers. The wizard puts file import first and lets teammates change
+  their username without losing configured routes, DNS or embedded CSD.
+- Validate and save profiles off the UI thread, with progress and protection
+  against edits made on disk while validation is running.
+- Collapse the profile list for a single profile and show unsaved credentials
+  as an option to enter them when connecting. The first-run wizard distinguishes
+  a VPN connection from a responding work resource and links to diagnostics.
+- Update English and Russian site copy, share cards and setup instructions.
+  Clarify verified compatibility, add gateway feedback and keep install commands
+  on one line, including when copied on a phone.
+
 ## 0.21.1 — 2026-10-22
 
 - Failed screen QR imports discard decoder output and use the exit status.
