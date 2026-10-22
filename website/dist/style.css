@@ -1296,6 +1296,7 @@ html[lang=ru] .mono {
 .guide-page .brand{display:flex;align-items:center;gap:10px}
 .guide-page .guide pre,.guide-page .guide .notice{background:#edf1e5}
 .guide-page .header{border-bottom:1px solid var(--line)}
-.guide .install-command{position:relative}
-.guide .install-command pre{padding-top:52px;white-space:pre-wrap;overflow-wrap:anywhere}
-.guide .install-command button{position:absolute;top:10px;right:12px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font-size:13px}
+.guide .install-command{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#edf1e5;border-radius:8px}
+.guide .install-command pre{flex:1;min-width:0;padding:4px 0;white-space:pre;overflow-wrap:normal;overflow-x:auto;background:none}
+.guide .install-command code{white-space:pre;overflow-wrap:normal}
+.guide .install-command button{flex-shrink:0;white-space:nowrap;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font-size:13px}

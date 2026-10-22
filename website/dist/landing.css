@@ -22,13 +22,13 @@ figcaption{font-size:13px;color:var(--muted);margin-top:10px}
 .pros{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:32px 40px;padding:48px 0;border-top:1px solid var(--line)}
 .pros h2{font-size:18px;line-height:1.35;margin:0 0 6px;font-weight:600}
 .pros p{margin:0;color:var(--muted);font-size:15px}
-.install{padding:48px 0 56px;border-top:1px solid var(--line);max-width:640px}
+.install{padding:48px 0 56px;border-top:1px solid var(--line)}
 .install h2{font-size:26px;margin:0 0 18px;font-weight:650}
 .install p{margin:14px 0 0;font-size:15px}
 .muted{color:var(--muted)}
-.code{position:relative;background:var(--code);border-radius:12px}
-.code pre{margin:0;padding:52px 20px 18px;font:14px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-.code button{position:absolute;top:12px;right:12px;font:inherit;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:4px 10px;cursor:pointer}
+.code{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--code);border-radius:12px}
+.code pre{flex:1;min-width:0;margin:0;padding:4px 0;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+.code button{flex-shrink:0;white-space:nowrap;font:inherit;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
 footer{display:flex;flex-wrap:wrap;gap:8px 22px;padding-top:24px;padding-bottom:40px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
 footer a{text-decoration:none}footer a:hover{color:var(--text)}
-@media (max-width:720px){.hero{grid-template-columns:1fr;gap:36px;padding:28px 0 44px}figure img{width:min(300px,100%);margin:0 auto}.lead{font-size:17px}.wrap{padding:0 16px}.top nav{gap:14px}.code pre{padding-top:52px}}
+@media (max-width:720px){.hero{grid-template-columns:1fr;gap:36px;padding:28px 0 44px}figure img{width:min(300px,100%);margin:0 auto}.lead{font-size:17px}.wrap{padding:0 16px}.top nav{gap:14px}}
