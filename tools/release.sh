@@ -3,6 +3,8 @@
 # VERSION в bin/ocbar → коммит и тег → revision в формуле → push ocbar →
 # формула в tap → push tap → brew upgrade, brew test, перезапуск приложения.
 # Тег уже есть, а push не прошёл — доделать: tools/release.sh --publish 0.4.1
+# OCBAR_RELEASE_LOCAL_UPDATE=0 — опубликовать без обновления и перезапуска
+# установленной копии, например пока её отдельно диагностируют.
 set -euo pipefail
 publish_only=
 if [ "${1:-}" = --publish ]; then
@@ -36,6 +38,11 @@ publish() {
         printf '%s\n' "$notes" | gh release create "v$ver" --title "ocbar $ver" --notes-file - >/dev/null \
             && echo "release: GitHub Release v$ver создан" \
             || echo "release: GitHub Release не создан (проверьте gh auth)" >&2
+    fi
+
+    if [ "${OCBAR_RELEASE_LOCAL_UPDATE:-1}" = 0 ]; then
+        echo "release: ocbar $ver опубликован; локальное обновление и проверка меню отложены"
+        return 0
     fi
 
     brew update >/dev/null
