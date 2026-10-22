@@ -55,7 +55,7 @@ struct SetupView: View {
             footer
         }
         .frame(minWidth: 680, minHeight: 520)
-        .onAppear { checkHelper(); checkSystem() }
+        .onAppear { useExistingProfiles(); checkHelper(); checkSystem() }
         .onChange(of: resource) { _ in accessChecked = false; accessResult = nil }
         .onChange(of: saved) { _ in checkSystem() }
         .onChange(of: store.status.state) { _ in if connectedHere { checkAccess() } }
@@ -183,7 +183,7 @@ struct SetupView: View {
                 } header: { Text(L("Есть профиль от коллеги?")) } footer: {
                     Footnote(L("Профиль ocbar (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)."))
                 }
-                if saved != nil {
+                if saved != nil && (checkingSystem || systemState?.ready == false) {
                     Section {
                         if checkingSystem { ProgressView(L("Проверяю готовность…")) }
                         ProfileSetupNotice(state: systemState, checking: checkingSystem, check: checkSystem)
@@ -342,6 +342,14 @@ struct SetupView: View {
             case .failed(let why): note = L("профиль не сохранился: ") + why
             }
         }
+    }
+
+    private func useExistingProfiles() {
+        guard saved == nil, !formFilled else { return }
+        let ids = ProfileStore.list()
+        guard let id = ids.contains(selectedProfile) ? selectedProfile : ids.first else { return }
+        importedIDs = ids
+        selectImported(id)
     }
 
     private func selectImported(_ id: String) {

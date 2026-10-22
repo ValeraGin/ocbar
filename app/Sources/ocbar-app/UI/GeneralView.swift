@@ -25,6 +25,9 @@ struct GeneralView: View {
                 footnote(L("Язык меняется сразу, в том числе в новых окнах входа."))
             }
             Section {
+                Button(L("Мастер настройки и проверка доступа…")) { WindowBridge.open(WindowID.setup) }
+            }
+            Section {
                 Toggle(L("Запускать при входе в систему"), isOn: Binding(get: { autostart }, set: { set($0) }))
                     .disabled(busy)
             } footer: {

@@ -533,3 +533,5 @@
 "Проверить доступ" = "Check access";
 "Профиль изменился на диске. Импортируйте его заново или откройте редактор." = "The profile changed on disk. Import it again or open the editor.";
 "Профиль с таким именем уже есть. Выберите другое название." = "A profile with this name already exists. Choose another name.";
+
+"Мастер настройки и проверка доступа…" = "Setup wizard and access check…";

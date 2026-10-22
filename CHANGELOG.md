@@ -17,6 +17,7 @@ release to its tag and commit.
 - Collapse the profile list for a single profile and show unsaved credentials
   as an option to enter them when connecting. The first-run wizard distinguishes
   a VPN connection from a responding work resource and links to diagnostics.
+  It stays accessible from General settings after importing a configured profile.
 - Update English and Russian site copy, share cards and setup instructions.
   Clarify verified compatibility, add gateway feedback and keep install commands
   on one line, including when copied on a phone.
