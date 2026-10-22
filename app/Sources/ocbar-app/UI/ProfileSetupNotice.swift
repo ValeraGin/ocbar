@@ -1,0 +1,27 @@
+import SwiftUI
+
+struct ProfileSetupNotice: View {
+    let state: ProfileSystemState?
+    let checking: Bool
+    let check: () -> Void
+
+    var body: some View {
+        if let state, !state.ready {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(state.error ?? L("CSD изменён: обновите системную часть перед подключением"),
+                      systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 12)).foregroundStyle(Palette.warn)
+                if state.needsSetup {
+                    Text(L("Выполните команду в Терминале. Для установки скрипта понадобится пароль администратора Mac."))
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    HStack {
+                        Text("sudo ocbar install").font(.ocMono).textSelection(.enabled)
+                        CopyButton(text: "sudo ocbar install")
+                    }
+                }
+                Button(checking ? L("Проверяю…") : L("Проверить готовность"), action: check)
+                    .disabled(checking)
+            }
+        }
+    }
+}

@@ -11,6 +11,11 @@ import SwiftUI
 // только что записала разметка, хуже, чем спросить.
 struct ProfileEditorView: View {
     @ObservedObject private var store = StatusStore.shared
+    @State private var saving = false
+    @State private var systemState: ProfileSystemState?
+    @State private var checkingSystem = false
+    @State private var showProfileList: Bool?
+    private var profileListVisible: Bool { showProfileList ?? (files.count + legacy.count > 1) }
     @State private var files: [String] = []
     @State private var legacy: [ProfileEntry] = []
     @State private var selected: String?
@@ -90,11 +95,14 @@ struct ProfileEditorView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: 230)
-            Divider()
+            if profileListVisible {
+                sidebar.frame(width: 230)
+                Divider()
+            }
             editor.frame(minWidth: 520, maxWidth: .infinity)
         }
-        .frame(minWidth: 760, minHeight: 540)
+        .frame(minWidth: profileListVisible ? 760 : 520, minHeight: 540)
+        .disabled(saving)
         .onAppear { reloadList(); loadVersions() }
         // Файл могли записать снаружи: ocbar rules из терминала, разметка,
         // запоминание входа. Время изменения дёшево — смотрим раз в две
@@ -108,7 +116,8 @@ struct ProfileEditorView: View {
             }
         }
         .onChange(of: store.finishedActions) { _ in checkDisk() }
-        .onChange(of: loadedName) { _ in secrets = [:]; refreshSecrets() }
+        .onChange(of: loadedName) { _ in secrets = [:]; refreshSecrets(); checkSystem() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in checkSystem() }
         .onChange(of: savedText) { _ in refreshSecrets() }
         .onChange(of: doc.name) { name in
             guard loadedName == nil, doc.fileName.isEmpty || doc.fileName == autoFileName else { return }
@@ -248,6 +257,12 @@ struct ProfileEditorView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center, spacing: 12) {
+                    Button { showProfileList = !profileListVisible } label: { Image(systemName: "sidebar.left") }
+                        .help(L("Показать или скрыть список профилей"))
+                    Button {
+                        if dirty { alert = .unsaved(.new) } else { newDoc() }
+                    } label: { Image(systemName: "plus") }
+                        .help(L("Новый профиль"))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(doc.name.trimmed.isEmpty ? (loadedName == nil ? L("Новый профиль") : doc.fileName) : doc.name)
                             .font(.system(size: 20, weight: .semibold)).lineLimit(1)
@@ -310,7 +325,7 @@ struct ProfileEditorView: View {
                     if otherActive != nil { switchAsk = true } else { connectThis() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(loadedName == nil || dirty || store.busy != nil || OcbarClient.shared.binary == nil)
+                .disabled(loadedName == nil || dirty || saving || checkingSystem || systemState?.ready != true || store.busy != nil || OcbarClient.shared.binary == nil)
                 .help(loadedName == nil || dirty ? L("Сначала сохраните профиль") : L("Подключиться этим профилем"))
             }
         }
@@ -512,8 +527,8 @@ struct ProfileEditorView: View {
     }
 
     private func secretState(_ saved: Bool) -> some View {
-        Label(saved ? L("сохранён") : L("не сохранён"), systemImage: saved ? "checkmark.circle.fill" : "circle.dashed")
-            .foregroundStyle(saved ? Palette.ok : Palette.warn)
+        Label(saved ? L("сохранён") : L("Вводить при подключении"), systemImage: saved ? "checkmark.circle.fill" : "keyboard")
+            .foregroundStyle(saved ? Palette.ok : Palette.secondary)
             .labelStyle(TightLabel())
     }
 
@@ -979,8 +994,12 @@ struct ProfileEditorView: View {
             if let message {
                 Text(message).font(.system(size: 11)).foregroundStyle(Palette.ok)
             }
+            ProfileSetupNotice(state: systemState, checking: checkingSystem, check: checkSystem)
             HStack(spacing: 10) {
-                if issues.isEmpty {
+                if saving || checkingSystem {
+                    ProgressView().controlSize(.small)
+                    Text(saving ? L("Проверяю и сохраняю…") : L("Проверяю готовность…")).font(.system(size: 12)).foregroundStyle(.secondary)
+                } else if issues.isEmpty && systemState?.ready != false {
                     Label(L("Профиль без ошибок"), systemImage: "checkmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Palette.ok)
                 }
@@ -1142,9 +1161,13 @@ struct ProfileEditorView: View {
         message = nil
         learnResult = nil
         selected = name
+        systemState = nil
+        checkSystem()
     }
 
     private func newDoc() {
+        systemState = nil
+        checkingSystem = false
         doc = ProfileDoc(fileName: "", userAgent: ProfileDoc.defaultUserAgent)
         loadedName = nil
         disk = nil
@@ -1167,6 +1190,7 @@ struct ProfileEditorView: View {
     // Файл открытого профиля поменялся снаружи? Без правок здесь — просто
     // перечитать; с правками — предупредить, сохранение спросит.
     private func checkDisk() {
+        guard !saving else { return }
         Self.probeDiskChecks += 1
         guard let name = loadedName, let known = disk else { Self.probeDiskNote = "нет открытого файла"; return }  // i18n: не интерфейс
         let m = ProfileStore.mtime(name)  // i18n: не интерфейс
@@ -1237,37 +1261,48 @@ struct ProfileEditorView: View {
                 return
             }
         }
-        // Последнее слово — за клиентом: он читает профиль при подключении,
-        // и его отказ здесь дешевле, чем «не подключается» потом.
-        if let why = OcbarClient.shared.profileRejection(doc.render(), name: name) {
-            issues.append(Issue(level: .error, text: L("клиент не принимает профиль: ") + why))
-            return
-        }
-        if let error = ProfileStore.save(doc) {
-            issues.append(Issue(level: .error, text: L("не удалось записать: %@", error)))
-            return
-        }
-        loadedName = name
-        disk = ProfileStore.stamp(name)
-        savedText = Self.snapshot(doc)
-        diskChanged = false
-        files = ProfileStore.list()
-        reloadHeads()
-        selected = name
-        reloadLegacy()
-        // Проверяем не своими глазами, а клиентом: профиль должен появиться
-        // в его списке — значит файл разобран. В фоне: это вызов ocbar.
-        message = L("сохранено")
-        DispatchQueue.global(qos: .userInitiated).async {
-            let seen = OcbarClient.shared.status().profiles.contains { $0.name == name }
-            DispatchQueue.main.async {
-                guard loadedName == name else { return }
-                message = seen
-                    ? L("сохранено, ocbar видит профиль «%@»", name)
-                    : L("файл записан, но ocbar профиль не показывает — проверьте ocbar profiles")
+        guard !saving else { return }
+        saving = true
+        message = nil
+        let draft = doc
+        ProfileSaveService.save(draft, expected: ProfileStore.stamp(name)) { outcome in
+            saving = false
+            switch outcome {
+            case .rejected(let why):
+                issues.append(Issue(level: .error, text: L("клиент не принимает профиль: ") + why))
+            case .failed(let why):
+                issues.append(Issue(level: .error, text: L("не удалось записать: %@", why)))
+            case .changed:
+                afterSave = next
+                alert = .changedOnDisk
+            case .saved:
+                loadedName = name
+                disk = ProfileStore.stamp(name)
+                savedText = Self.snapshot(draft)
+                diskChanged = false
+                files = ProfileStore.list()
+                reloadHeads()
+                selected = name
+                reloadLegacy()
+                message = L("сохранено")
+                checkSystem()
+                store.refresh()
+                next?()
             }
         }
-        next?()
+    }
+
+    private func checkSystem() {
+        guard let name = loadedName, !checkingSystem else { return }
+        checkingSystem = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = OcbarClient.shared.profileSystemState(name)
+            DispatchQueue.main.async {
+                checkingSystem = false
+                guard loadedName == name else { checkSystem(); return }
+                systemState = result
+            }
+        }
     }
 
     // Перевод старого профиля в файл — командой самого клиента, чтобы формат

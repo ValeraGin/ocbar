@@ -21,6 +21,7 @@ extension SelfTest {
         print("ocbar-app selftest: профиль, проверки, состояние, уведомления, опрос")
         auditProfileParsing(t)
         auditProfileChecks(t)
+        auditProfileWorkflow(t)
         auditStatus(t)
         auditLocalization(t)
         auditProfileVerdicts(t)
@@ -29,6 +30,53 @@ extension SelfTest {
         auditCliParity(t)
         auditStore(t)
         return t.failures
+    }
+
+    @MainActor
+    static func auditProfileWorkflow(_ t: Tally) {
+        t.check("импорт: несколько фактических имён", ImportedProfiles.parse(#"{"profiles":["office-vpn","backup"]}"#)?.profiles == ["office-vpn", "backup"])
+        t.check("импорт: пустой список отвергается", ImportedProfiles.parse(#"{"profiles":[]}"#) == nil)
+        t.check("импорт: путь вместо имени отвергается", ImportedProfiles.parse(#"{"profiles":["../other"]}"#) == nil)
+        t.check("CSD: отсутствующая копия требует установки", ProfileSystemState.parse(#"{"required":true,"ready":false,"name":"inline-test.sh"}"#)?.needsSetup == true)
+        t.check("CSD: готовая копия разрешает подключение", ProfileSystemState.parse(#"{"required":true,"ready":true,"name":"inline-test.sh"}"#)?.ready == true)
+        var completed = false
+        var heartbeat = false
+        var background = false
+        var onMain = false
+        let doc = ProfileDoc(fileName: "async-validation-probe")
+        ProfileSaveService.save(doc, expected: ProfileStore.stamp(doc.fileName), validate: { _ in
+            background = !Thread.isMainThread
+            Thread.sleep(forTimeInterval: 0.2)
+            return "synthetic rejection"
+        }) { result in
+            onMain = Thread.isMainThread
+            if case .rejected = result { completed = true }
+        }
+        DispatchQueue.main.async { heartbeat = true }
+        let deadline = Date().addingTimeInterval(3)
+        while !completed && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+        t.check("сохранение: проверка в фоне, UI отвечает, результат на главном потоке", completed && heartbeat && background && onMain)
+        let temp = NSTemporaryDirectory() + "ocbar-save-race-\(getpid())"
+        let previous = ProcessInfo.processInfo.environment["OCBAR_CONFIG_DIR"]
+        try? FileManager.default.createDirectory(atPath: temp + "/profiles", withIntermediateDirectories: true)
+        setenv("OCBAR_CONFIG_DIR", temp, 1)
+        defer {
+            if let previous { setenv("OCBAR_CONFIG_DIR", previous, 1) } else { unsetenv("OCBAR_CONFIG_DIR") }
+            try? FileManager.default.removeItem(atPath: temp)
+        }
+        var changed = false
+        completed = false
+        let path = ProfileStore.path(doc.fileName)
+        ProfileSaveService.save(doc, expected: ProfileStore.stamp(doc.fileName), validate: { _ in
+            try? "external edit".write(toFile: path, atomically: true, encoding: .utf8)
+            return nil
+        }) { result in
+            if case .changed = result { changed = true }
+            completed = true
+        }
+        let raceDeadline = Date().addingTimeInterval(3)
+        while !completed && Date() < raceDeadline { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+        t.check("сохранение: чужая правка во время проверки не затёрта", completed && changed && ProfileStore.read(doc.fileName) == "external edit")
     }
 
     // --- разбор и запись профиля -----------------------------------------

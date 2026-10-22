@@ -17,6 +17,17 @@ struct SetupView: View {
     @State private var saved: String?
     @State private var note: String?
     @State private var busy = false
+    @State private var importedIDs: [String] = []
+    @State private var importedDoc: ProfileDoc?
+    @State private var systemState: ProfileSystemState?
+    @State private var checkingSystem = false
+    @State private var resource = ""
+    @State private var accessResult: Bool?
+    @State private var accessChecked = false
+    @State private var checkingAccess = false
+    private var selectedProfile: String { saved ?? store.status.defaultProfile }
+    private var connectedHere: Bool { store.status.state == .connected && store.status.profile == selectedProfile }
+
     // Шаг мастера; витрина (--step N) открывает нужный для снимка.
     @State private var step: Int = {
         let a = CommandLine.arguments
@@ -27,7 +38,7 @@ struct SetupView: View {
     private var helperReady: Bool { store.helperWarning == nil && !doctorText.contains("не установлен") && !doctorText.contains("not installed") && !doctorText.isEmpty }
     private var hasProfile: Bool { saved != nil || !store.status.profiles.isEmpty }
     private var formFilled: Bool { !name.trimmed.isEmpty && !url.trimmed.isEmpty }
-    private static let titles = [L("Системная часть"), L("Профиль"), L("Первый вход")]
+    private static var titles = [L("Системная часть"), L("Профиль"), L("Первый вход")]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,7 +55,11 @@ struct SetupView: View {
             footer
         }
         .frame(minWidth: 680, minHeight: 520)
-        .onAppear { checkHelper() }
+        .onAppear { checkHelper(); checkSystem() }
+        .onChange(of: resource) { _ in accessChecked = false; accessResult = nil }
+        .onChange(of: saved) { _ in checkSystem() }
+        .onChange(of: store.status.state) { _ in if connectedHere { checkAccess() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in checkSystem() }
     }
 
     // --- шапка: знак и шаги ------------------------------------------------
@@ -158,13 +173,28 @@ struct SetupView: View {
                       saved == nil ? L("Адрес — как в штатном клиенте: хост и группа. Сети и DNS можно добавить позже.")
                                    : L("Файл %@.ocbar. Изменить его можно в «Настройках → Профили».", saved!))
             Form {
+                Section {
+                    Button(L("Импортировать файл…")) { importProfile() }.disabled(busy)
+                    if importedIDs.count > 1 {
+                        Picker(L("Выберите профиль"), selection: Binding(get: { saved ?? importedIDs[0] }, set: { selectImported($0) })) {
+                            ForEach(importedIDs, id: \.self) { Text(ProfileStore.load($0)?.name ?? $0).tag($0) }
+                        }
+                    }
+                } header: { Text(L("Есть профиль от коллеги?")) } footer: {
+                    Footnote(L("Профиль ocbar (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)."))
+                }
+                if saved != nil {
+                    Section {
+                        if checkingSystem { ProgressView(L("Проверяю готовность…")) }
+                        ProfileSetupNotice(state: systemState, checking: checkingSystem, check: checkSystem)
+                    }
+                }
                 Section(L("Подключение")) {
-                    TextField(L("Название"), text: $name, prompt: Text(L("Рабочий")))
-                    TextField(L("Описание"), text: $descr, prompt: Text(L("необязательно")))
-                    TextField(L("Адрес"), text: $url, prompt: Text("vpn.example.com/employees"))
+                    TextField(L("Название"), text: $name, prompt: Text(L("Рабочий"))).disabled(saved != nil)
+                    TextField(L("Описание"), text: $descr, prompt: Text(L("необязательно"))).disabled(saved != nil)
+                    TextField(L("Адрес"), text: $url, prompt: Text("vpn.example.com/employees")).disabled(saved != nil)
                     TextField(L("Пользователь"), text: $user, prompt: Text("alice"))
                 }
-                .disabled(saved != nil)
                 Section {
                     Picker(L("Как входить"), selection: $auth) {
                         Text(L("SSO в окне браузера")).tag("")
@@ -178,17 +208,11 @@ struct SetupView: View {
                              ? L("Пароль ocbar подставит из связки ключей, код из SMS спросит окном.")
                              : L("Пароль и источник кода ocbar предложит сохранить после первого входа."))
                 }
-                Section {
-                    HStack {
-                        Button(L("Импортировать файл…")) { importProfile() }.disabled(busy)
-                        Spacer()
-                    }
-                } footer: {
-                    Footnote(L("Профиль ocbar (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)."))
-                }
+
             }
             .formStyle(.grouped)
             .frame(maxWidth: 560)
+            .disabled(busy)
         }
     }
 
@@ -196,22 +220,40 @@ struct SetupView: View {
 
     private var loginStep: some View {
         VStack(spacing: 18) {
-            pageTitle(store.status.state == .connected ? L("Готово — подключено") : L("Первый вход"),
-                      store.status.state == .connected
+            pageTitle(connectedHere ? L("VPN подключён") : L("Первый вход"),
+                      connectedHere
                       ? L("Дальше ocbar подключается автоматически; если понадобится вход, он скажет в меню.")
                       : L("Войдите как обычно, руками. ocbar запомнит форму входа и предложит сохранить пароль и источник кода."))
-            if store.status.state == .connected {
-                Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(Palette.ok)
+            if connectedHere {
+                Label(L("Соединение со шлюзом установлено"), systemImage: "checkmark.circle.fill").foregroundStyle(Palette.ok)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(L("Проверка рабочего ресурса")).font(.headline)
+                    TextField(L("Адрес ресурса"), text: $resource, prompt: Text("https://intranet.example.com"))
+                        .textFieldStyle(.roundedBorder).disabled(checkingAccess)
+                    if checkingAccess { ProgressView(L("Проверяю доступ…")) }
+                    else if accessChecked {
+                        Label(accessResult == true ? L("Рабочий ресурс отвечает") : L("Ресурс не отвечает. Откройте диагностику, чтобы проверить сети и DNS."),
+                              systemImage: accessResult == true ? "checkmark.circle.fill" : "exclamationmark.triangle")
+                            .foregroundStyle(accessResult == true ? Palette.ok : Palette.warn)
+                        if accessResult == false { Button(L("Открыть диагностику")) { WindowBridge.open(WindowID.diagnostics) } }
+                    } else {
+                        Text(L("Соединение со шлюзом ещё не подтверждает доступ к рабочим сервисам. Укажите адрес одного из них."))
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
+                    Button(L("Проверить доступ")) { checkAccess() }.disabled(checkingAccess || resource.trimmed.isEmpty)
+                }.frame(maxWidth: 460)
             } else {
+                ProfileSetupNotice(state: systemState, checking: checkingSystem, check: checkSystem)
                 WideButton(title: store.busy ?? L("Подключить и запомнить вход…"), systemImage: "person.badge.key",
-                           kind: .primary, enabled: !busy && hasProfile && store.busy == nil) {
-                    store.connect(profile: saved ?? store.status.defaultProfile, teach: true)
+                           kind: .primary, enabled: !busy && hasProfile && store.busy == nil && systemState?.ready == true && !checkingSystem) {
+                    store.connect(profile: selectedProfile, teach: true)
                 }
                 .frame(width: 320)
                 if store.busy != nil {
                     Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(BrandLinkStyle())
                 }
             }
+            if let actionNote = store.actionNote { Text(actionNote).font(.system(size: 12)).foregroundStyle(Palette.warn).textSelection(.enabled) }
             Spacer()
         }
     }
@@ -253,7 +295,9 @@ struct SetupView: View {
         case 0: withAnimation { step = 1 }
         case 1:
             if saved == nil && formFilled { createProfile { withAnimation { step = 2 } } }
-            else { withAnimation { step = 2 } }
+            else if let original = importedDoc, user.trimmed != original.user {
+                createProfile { withAnimation { step = 2 } }
+            } else { checkSystem(); withAnimation { step = 2 }; if connectedHere { checkAccess() } }
         default: dismiss()
         }
     }
@@ -267,26 +311,73 @@ struct SetupView: View {
     }
 
     private func createProfile(then: @escaping () -> Void = {}) {
-        var doc = ProfileDoc()
-        doc.name = name.trimmed
-        doc.descr = descr.trimmed
-        doc.url = url.trimmed
+        var doc = importedDoc ?? ProfileDoc()
+        if importedDoc == nil {
+            doc.name = name.trimmed
+            doc.descr = descr.trimmed
+            doc.url = url.trimmed
+            doc.auth = auth
+            doc.fileName = ProfileEditorView.slug(name.trimmed)
+        }
         doc.user = user.trimmed
-        doc.auth = auth
-        doc.fileName = ProfileEditorView.slug(name.trimmed)
         let issues = ProfileCheck.check(doc).filter { $0.level == .error }
         guard issues.isEmpty else { note = issues.map(\.text).joined(separator: "; "); return }
-        if let why = OcbarClient.shared.profileRejection(doc.render(), name: doc.fileName) {
-            note = L("клиент не принимает профиль: ") + why
-            return
+        let expected = ProfileStore.stamp(doc.fileName)
+        if let original = importedDoc {
+            guard expected.text == ProfileStore.read(original.fileName),
+                  expected.text.map({ ProfileDoc.parse($0, fileName: original.fileName).render(dated: Date(timeIntervalSince1970: 0)) }) == original.render(dated: Date(timeIntervalSince1970: 0)) else {
+                note = L("Профиль изменился на диске. Импортируйте его заново или откройте редактор."); return
+            }
+        } else if expected.text != nil {
+            note = L("Профиль с таким именем уже есть. Выберите другое название."); return
         }
         busy = true; note = nil
-        let file = doc.fileName
+        ProfileSaveService.save(doc, expected: expected) { result in
+            busy = false
+            switch result {
+            case .saved:
+                saved = doc.fileName; importedDoc = doc; store.refresh(); checkSystem(); then()
+            case .changed: note = L("Профиль изменился на диске. Импортируйте его заново или откройте редактор.")
+            case .rejected(let why): note = L("клиент не принимает профиль: ") + why
+            case .failed(let why): note = L("профиль не сохранился: ") + why
+            }
+        }
+    }
+
+    private func selectImported(_ id: String) {
+        guard let doc = ProfileStore.load(id) else { return }
+        importedDoc = doc; saved = id
+        name = doc.name; descr = doc.descr; url = doc.url; user = doc.user; auth = doc.auth
+        resource = doc.health; systemState = nil; checkSystem()
+    }
+
+    private func checkSystem() {
+        let id = selectedProfile
+        guard !id.isEmpty, !checkingSystem else { return }
+        checkingSystem = true
         DispatchQueue.global(qos: .userInitiated).async {
-            let err = ProfileStore.save(doc)
+            let result = OcbarClient.shared.profileSystemState(id)
+            let health = ProfileStore.load(id)?.health ?? ""
             DispatchQueue.main.async {
-                busy = false
-                if let err { note = L("профиль не сохранился: ") + err } else { saved = file; store.refresh(); then() }
+                checkingSystem = false
+                guard selectedProfile == id else { checkSystem(); return }
+                systemState = result
+                if resource.isEmpty { resource = health }
+            }
+        }
+    }
+
+    private func checkAccess() {
+        guard connectedHere, !checkingAccess, !resource.trimmed.isEmpty else { return }
+        checkingAccess = true; accessChecked = false
+        let target = resource.trimmed
+        let id = selectedProfile
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = OcbarClient.shared.checkResource(target, profile: id)
+            DispatchQueue.main.async {
+                checkingAccess = false
+                guard connectedHere, selectedProfile == id, resource.trimmed == target else { return }
+                accessChecked = true; accessResult = result
             }
         }
     }
@@ -299,11 +390,11 @@ struct SetupView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         busy = true; note = nil
         DispatchQueue.global(qos: .userInitiated).async {
-            let r = OcbarClient.shared.action(["import", url.path], timeout: 30)
+            let r = OcbarClient.shared.importProfiles(url.path)
             DispatchQueue.main.async {
                 busy = false
-                if case .failed(_, let why) = r { note = L("не вышло: ") + why }
-                else { saved = url.deletingPathExtension().lastPathComponent; store.refresh() }
+                if let why = r.error { note = L("не вышло: ") + why }
+                else { importedIDs = r.ids; selectImported(r.ids[0]); store.refresh() }
             }
         }
     }

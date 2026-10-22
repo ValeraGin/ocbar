@@ -48,7 +48,7 @@ enum Fixture {
         let fm = FileManager.default
         do {
             try fm.createDirectory(atPath: dir + "/profiles", withIntermediateDirectories: true)
-            for (name, body) in demoProfiles {
+            for (name, body) in (CommandLine.arguments.contains("--single-profile") ? Array(demoProfiles.prefix(1)) : demoProfiles) {
                 try (body + "\n").write(toFile: dir + "/profiles/\(name).ocbar", atomically: true, encoding: .utf8)
             }
         } catch { return nil }

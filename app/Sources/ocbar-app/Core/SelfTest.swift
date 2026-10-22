@@ -282,11 +282,14 @@ enum SelfTest {
             try? FileManager.default.createDirectory(atPath: profiles, withIntermediateDirectories: true)
             let path = profiles + "/sample.ocbar"
             try? doc.render().write(toFile: path, atomically: true, encoding: .utf8)
-            let r = Shell.run(binary, ["profiles"], env: ["OCBAR_CONFIG_DIR": tmp], timeout: 20)
+            // A profile parsing test must not inherit the user's live tunnel.
+            let testEnv = ["OCBAR_CONFIG_DIR": tmp, "OCBAR_STATE_DIR": tmp + "/state",
+                           "OCBAR_USER_STATE": tmp + "/user-state", "OCBAR_LOG_DIR": tmp + "/logs"]
+            let r = Shell.run(binary, ["profiles"], env: testEnv, timeout: 20)
             check("ocbar видит записанный профиль", r.out.contains("sample"), r.out.trimmed + r.err.trimmed)
-            let s = Shell.run(binary, ["status", "--json"], env: ["OCBAR_CONFIG_DIR": tmp], timeout: 20)
+            let s = Shell.run(binary, ["status", "--json"], env: testEnv, timeout: 20)
             let parsed = Status.parse(json: s.out) ?? Status()
-            check("живой ocbar отдаёт разбираемый JSON", Status.parse(json: s.out) != nil, s.out.trimmed.prefix(120).description)
+            check("живой ocbar отдаёт разбираемый JSON", Status.parse(json: s.out) != nil, "exit=\(s.code): " + s.err.trimmed + s.out.trimmed.prefix(120).description)
             check("сети профиля попали в status",
                   parsed.routes.map(\.net) == doc.routes, parsed.routes.map(\.net).joined(separator: " "))
             check("зоны профиля попали в status",

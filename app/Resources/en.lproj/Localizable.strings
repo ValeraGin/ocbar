@@ -308,8 +308,6 @@
 "клиент не принимает профиль: " = "the client does not accept this profile: ";
 "не удалось записать: %@" = "could not write: %@";
 "сохранено" = "saved";
-"сохранено, ocbar видит профиль «%@»" = "saved, ocbar sees the profile “%@”";
-"файл записан, но ocbar профиль не показывает — проверьте ocbar profiles" = "the file was written but ocbar does not list the profile — check ocbar profiles";
 "профиль %@ переведён в файл — теперь ocbar читает его оттуда" = "profile %@ converted to a file — ocbar now reads it from there";
 "перевод не удался: %@" = "converting failed: %@";
 "Системная часть" = "System component";
@@ -334,7 +332,6 @@
 "Файл %@.ocbar. Изменить его можно в «Настройках → Профили»." = "File %@.ocbar. You can change it in Settings → Profiles.";
 "Пароль ocbar подставит из связки ключей, код из SMS спросит окном." = "ocbar fills in the password from the keychain and asks for the SMS code in a window.";
 "Пароль и источник кода ocbar предложит сохранить после первого входа." = "ocbar will offer to save the password and the source of the code after the first sign-in.";
-"Готово — подключено" = "Done — connected";
 "Дальше ocbar подключается автоматически; если понадобится вход, он скажет в меню." = "From now on ocbar connects by itself; if a sign-in is needed it says so in the menu.";
 "Войдите как обычно, руками. ocbar запомнит форму входа и предложит сохранить пароль и источник кода." = "Sign in as usual, by hand. ocbar learns the form and offers to save the password and the source of the code.";
 "Продолжить" = "Continue";
@@ -368,7 +365,6 @@
 "Вставить ссылку или секрет…" = "Paste a link or a secret…";
 "Код ляжет в связку ключей macOS" = "The code goes to the macOS keychain";
 "сохранён" = "saved";
-"не сохранён" = "not saved";
 "из KeePassXC" = "from KeePassXC";
 "своей командой" = "from your command";
 "вводите при входе" = "you type it at sign-in";
@@ -512,3 +508,28 @@
 "Заменить…" = "Replace…";
 "Не удалось прочитать CSD-скрипт: %@" = "Could not read the CSD script: %@";
 "Удалить" = "Remove";
+
+// Profile setup and first connection
+"Не удалось получить список импортированных профилей" = "Could not read the list of imported profiles";
+"Не удалось проверить системную часть профиля" = "Could not check the profile’s system components";
+"Показать или скрыть список профилей" = "Show or hide the profile list";
+"Вводить при подключении" = "Enter when connecting";
+"Проверяю и сохраняю…" = "Checking and saving…";
+"Проверяю готовность…" = "Checking readiness…";
+"CSD изменён: обновите системную часть перед подключением" = "CSD setup needed: update system components before connecting";
+"Выполните команду в Терминале. Для установки скрипта понадобится пароль администратора Mac." = "Run this command in Terminal. Installing the script requires your Mac administrator password.";
+"Проверить готовность" = "Check readiness";
+"Выберите профиль" = "Choose a profile";
+"Есть профиль от коллеги?" = "Have a profile from a teammate?";
+"VPN подключён" = "VPN connected";
+"Соединение со шлюзом установлено" = "Connected to the gateway";
+"Проверка рабочего ресурса" = "Check a work resource";
+"Адрес ресурса" = "Resource address";
+"Проверяю доступ…" = "Checking access…";
+"Рабочий ресурс отвечает" = "The work resource responds";
+"Ресурс не отвечает. Откройте диагностику, чтобы проверить сети и DNS." = "The resource does not respond. Open diagnostics to check networks and DNS.";
+"Открыть диагностику" = "Open diagnostics";
+"Соединение со шлюзом ещё не подтверждает доступ к рабочим сервисам. Укажите адрес одного из них." = "Connecting to the gateway does not confirm access to work services. Enter the address of one of them.";
+"Проверить доступ" = "Check access";
+"Профиль изменился на диске. Импортируйте его заново или откройте редактор." = "The profile changed on disk. Import it again or open the editor.";
+"Профиль с таким именем уже есть. Выберите другое название." = "A profile with this name already exists. Choose another name.";
