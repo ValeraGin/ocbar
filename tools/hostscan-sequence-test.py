@@ -147,17 +147,20 @@ printf 'endpoint.os.version="fixture";\\n' | curl -fksS --pinnedpubkey "sha256//
             wrapper.unlink()
         env = dict(os.environ)
         try:
-            result = subprocess.run([str(CLIENT), '--url', f'https://localhost:{server.server_port}/group',
-                                     '--csd-wrapper', str(wrapper), '--insecure', '--no-window',
-                                     '--timeout', '15', '--show-after', '30'],
-                                    env=env, capture_output=True, text=True, timeout=35)
+            command = [str(CLIENT), '--url', f'https://localhost:{server.server_port}/group',
+                       '--insecure', '--no-window', '--timeout', '15', '--show-after', '30']
+            if mode != 'not-configured':
+                command += ['--csd-wrapper', str(wrapper)]
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=35)
         finally:
             server.shutdown()
             thread.join(timeout=2)
-        if mode in ('failure', 'not-executable', 'missing'):
+        if mode in ('failure', 'not-executable', 'missing', 'not-configured'):
             assert events == ['resolve', 'init'], f'{mode}: {events}; {result.stderr}'
             assert result.returncode == 1, result.stderr
             reason = 'код 23' if mode == 'failure' else 'нет исполняемого скрипта CSD'
+            if mode == 'not-configured':
+                reason = 'HostScan'
             assert reason in result.stderr, result.stderr
             assert 'session_token' not in result.stdout, result.stdout
         else:
@@ -174,5 +177,5 @@ printf 'endpoint.os.version="fixture";\\n' | curl -fksS --pinnedpubkey "sha256//
 
 
 if __name__ == '__main__':
-    for scenario in ('success', 'failure', 'not-executable', 'missing', 'no-hostscan'):
+    for scenario in ('success', 'failure', 'not-executable', 'missing', 'not-configured', 'no-hostscan'):
         check(scenario)

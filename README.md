@@ -217,15 +217,18 @@ For gateways that request a device report, set your script in the profile:
 CsdWrapper = ~/vpn/csd-post.sh
 ```
 
-A starting point (comments in Russian) is installed with ocbar:
-`cp "$(brew --prefix ocbar)"/share/ocbar/examples/csd-wrapper.sh ~/vpn/csd-post.sh`.
-Make the file executable with `chmod u+x "$HOME/vpn/csd-post.sh"`. Paths
-with spaces work; do not put quotes around the value in the profile.
+Use a wrapper approved for your organization's device policy. The bundled
+`examples/csd-wrapper.sh` contains placeholder device report values; it is a
+protocol example, not a compliance checker or a ready corporate configuration.
+Do not deploy its default report as a device assessment. Make your approved
+script executable with `chmod u+x "$HOME/vpn/csd-post.sh"`. Paths with spaces
+work; do not put quotes around the value in the profile.
 The script runs as your user before SSO, using OpenConnect's wrapper
 arguments and `CSD_HOSTNAME`, `CSD_TOKEN`, `CSD_SHA256` environment variables.
 It submits the prepared report itself; stdout is diagnostic output, not a
 report for ocbar to submit. ocbar waits for the gateway, then resumes SSO.
-Missing files, execution errors and non-zero exit codes stop sign-in.
+A required HostScan check without a configured wrapper stops before SSO.
+Missing files, execution errors and non-zero exit codes also stop sign-in.
 Whether the report satisfies the device policy is decided by the gateway.
 
 ### Embed CSD in a portable profile

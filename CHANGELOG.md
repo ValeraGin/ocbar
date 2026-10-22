@@ -5,6 +5,9 @@ release to its tag and commit.
 
 ## 0.22.0 — 2026-10-22
 
+- Stop before SSO when a gateway requires HostScan but no wrapper is configured.
+  Clarify that the bundled report template contains placeholders and is not a
+  ready device compliance check.
 - Check the installed CSD copy before sign-in. Imported or edited scripts show
   setup instructions and a readiness check in the wizard and editor.
 - Store external CSD wrappers under content-based names so equal filenames in

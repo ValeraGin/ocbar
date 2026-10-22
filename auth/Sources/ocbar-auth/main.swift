@@ -819,7 +819,7 @@ DispatchQueue.global().async {
                 try http.waitForHostScan(r.postURL, uri: hs.waitURI, token: hs.token)
                 r = try runInit(args, http: http)
             } else {
-                Log.info("шлюз требует проверку устройства (HostScan), а CsdWrapper в профиле не задан — вход не пройдёт")
+                throw CSD.Failure(description: L("CSD: шлюз требует проверку устройства HostScan. Добавьте в профиль утверждённый CsdWrapper или CsdScriptBase64 перед входом."))
             }
         }
         var opts = WebAuth.Options()

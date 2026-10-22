@@ -4,6 +4,7 @@
 
 enum Translations {
     static let en: [String: String] = [
+        "CSD: шлюз требует проверку устройства HostScan. Добавьте в профиль утверждённый CsdWrapper или CsdScriptBase64 перед входом.": "CSD: this gateway requires a HostScan device check. Configure an approved CsdWrapper or CsdScriptBase64 in the profile before signing in.",
         "UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути": "UpstreamProxy: use http://host:port or socks5://host:port without credentials or a path",
         "SSO через UpstreamProxy требует macOS 14 или новее": "SSO through UpstreamProxy requires macOS 14 or later",
         "не удалось прочитать изображение: %@": "could not read the image: %@",
