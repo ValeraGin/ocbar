@@ -760,6 +760,20 @@ STUB
         is "экран: выбрана нужная запись" "JBSWY3DPEHPK3PXP" "$(cat "$tmp/kc/value" 2>/dev/null)"
         has "экран: без права на запись — сказано про право" "Запись экрана" \
             "$(OCBAR_SELFTEST_SCREEN_ACCESS=denied shot_add "$tmp/kc/blank.png")"
+        # Системный декодер может добавить в stdout служебную строку даже
+        # при отказе. Статус 3 всё равно означает отсутствие QR.
+        cat > "$tmp/kc/noisy-auth" <<'STUB'
+#!/bin/bash
+[ "${1:-}" != --import-qr ] || printf 'image decoder diagnostic\n'
+exec "$OCBAR_SELFTEST_REAL_AUTH" "$@"
+STUB
+        chmod +x "$tmp/kc/noisy-auth"
+        local real_qa="$qa"
+        qa="$tmp/kc/noisy-auth"
+        chk=$(OCBAR_SELFTEST_REAL_AUTH="$real_qa" OCBAR_SELFTEST_SCREEN_ACCESS=denied shot_add "$tmp/kc/blank.png")
+        qa="$real_qa"
+        has "экран: диагностика декодера не скрывает подсказку о праве" "Запись экрана" "$chk"
+        hasnt "экран: диагностика декодера не становится кодом" "код сохранён" "$chk"
         # Право не дано, но QR прочитан — дело не в праве: называем записи.
         chk=$(OCBAR_SELFTEST_SCREEN_ACCESS=denied shot_add "$tmp/kc/two.png")
         has "экран: без права, но QR прочитан — причина про записи" "Mail/someone, VPN/tester" "$chk"
