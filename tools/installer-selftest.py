@@ -140,7 +140,7 @@ def check_csd_plan():
         assert len(commands) == 2, result.stdout
         args = [shlex.split(command) for command in commands]
         assert {row[-2] for row in args} == {str(script), str(legacy)}, args
-        assert {row[-1] for row in args} == {'/usr/local/libexec/ocbar/csd/csd.sh', '/usr/local/libexec/ocbar/csd/legacy.sh'}
+        assert all(row[-1].startswith('/usr/local/libexec/ocbar/csd/external-') for row in args)
         fake = base / 'fake'
         fake.mkdir()
         executable(fake / 'install', "printf '%s\\n' \"$@\" >> \"$TEST_ARGS\"\n")

@@ -3,7 +3,9 @@
 import base64
 import binascii
 import hashlib
+import json
 import os
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -52,6 +54,21 @@ def script_name(data):
     return 'inline-' + digest + '.sh'
 
 
+def external_name(data):
+    return script_name(data).replace('inline-', 'external-', 1)
+
+
+def installed_status(data, name, directory, legacy=None):
+    # A legacy basename is safe only when its contents still match this profile.
+    if legacy and not re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', legacy):
+        legacy = None
+    for candidate in dict.fromkeys([name] + ([legacy] if legacy else [])):
+        target = Path(directory) / candidate
+        if target.is_file() and not target.is_symlink() and target.read_bytes() == data and os.access(target, os.X_OK):
+            return {'required': True, 'ready': True, 'name': candidate}
+    return {'required': True, 'ready': False, 'name': name}
+
+
 def materialize(path, directory, mode=0o700):
     data = decode(path)
     directory = Path(directory)
@@ -76,6 +93,14 @@ def main():
         command, path = sys.argv[1:3]
         if command == 'name' and len(sys.argv) == 3:
             print(script_name(decode(path)))
+        elif command == 'file-name' and len(sys.argv) == 3:
+            print(external_name(Path(path).read_bytes()))
+        elif command == 'status' and len(sys.argv) == 4:
+            data = decode(path)
+            print(json.dumps(installed_status(data, script_name(data), sys.argv[3])))
+        elif command == 'file-status' and len(sys.argv) == 4:
+            data = Path(path).read_bytes()
+            print(json.dumps(installed_status(data, external_name(data), sys.argv[3], Path(path).name)))
         elif command == 'materialize' and len(sys.argv) in (4, 5):
             mode = sys.argv[4] if len(sys.argv) == 5 else '700'
             if mode not in ('700', '755'):

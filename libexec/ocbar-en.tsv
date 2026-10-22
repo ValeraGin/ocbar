@@ -403,3 +403,5 @@ CsdWrapper: нет исполняемого файла: {} (проверьте �
 
 UpstreamProxy: нужен http://host:port или socks5://host:port без логина, пароля и пути	UpstreamProxy: use http://host:port or socks5://host:port without credentials or a path
 UpstreamProxy: нужен ocbar-helper 0.8.3 или новее — sudo ocbar install	UpstreamProxy: ocbar-helper 0.8.3 or later required — sudo ocbar install
+CSD: обновите системную часть: sudo ocbar install	CSD: update the system components: sudo ocbar install
+Укажите URL рабочего ресурса с http:// или https://	Enter the work resource URL starting with http:// or https://

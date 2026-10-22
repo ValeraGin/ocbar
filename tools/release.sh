@@ -88,6 +88,7 @@ python3 tools/i18n-scan.py --check >/dev/null || { python3 tools/i18n-scan.py --
 echo "release: installer and embedded CSD checks"
 python3 tools/installer-selftest.py
 python3 tools/embedded-csd-selftest.py
+python3 tools/profile-workflow-selftest.py
 echo "release: build auth"
 swift build -c release --package-path auth >/dev/null
 echo "release: auth self-test"

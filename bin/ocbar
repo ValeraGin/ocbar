@@ -1533,6 +1533,19 @@ prepare_csd() {
     P_CSD=$(/usr/bin/python3 "$tool" materialize "$P_FILE" "$CONFIG_DIR/csd") \
         || die "CsdScriptBase64: could not extract embedded script"
 }
+csd_system_status() { # read-only; optional directory for isolated self-tests
+    local directory="${1:-$LIBDIR/csd}" tool
+    if [ -z "${P_CSD:-}" ] || [ "${P_KIND:-tunnel}" = proxy ]; then
+        printf '{"required":false,"ready":true,"name":""}\n'; return 0
+    fi
+    tool=$(libexec_file ocbar-csd.py) || die "CsdScriptBase64: missing ocbar-csd.py"
+    if [ "${P_CSD_INLINE:-0}" = 1 ]; then
+        /usr/bin/python3 "$tool" status "$P_FILE" "$directory"
+    else
+        /usr/bin/python3 "$tool" file-status "$P_CSD" "$directory"
+    fi
+}
+cmd_csd_status() { load_profile "${1:-}"; csd_system_status; }
 # Аутентификация → JSON от ocbar-auth. Секреты — только через окружение.
 authenticate() { # печатает "token hash post_url"
     prepare_csd
@@ -1860,6 +1873,11 @@ do_connect() { # профиль уже загружен
         build_spec "COOKIE" | priv tunnel-start "$P_URL" "0000000000000000000000000000000000000000" "$P_MODE" "$P_USER" "$P_UA" "${P_CSD:+$(basename "$P_CSD")}"
         return 0
     fi
+    local system_csd=""
+    if [ "${P_KIND:-tunnel}" != proxy ] && [ -n "${P_CSD:-}" ]; then
+        system_csd=$(csd_system_status | /usr/bin/python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(1) if not s["ready"] else print(s["name"])') \
+            || die "CSD: обновите системную часть: sudo ocbar install"
+    fi
     if [ "$P_AUTH" = password ]; then info "Вход в парольную группу: $P_TITLE ($P_URL) — код из SMS спросит окно…"
     else info "Вход через SSO: $P_TITLE ($P_URL)…"; fi
     # Номер этой (под)оболочки, а не $$: супервизор подключает в подоболочке,
@@ -1912,7 +1930,7 @@ do_connect() { # профиль уже загружен
         return 0
     fi
     info "сессия получена, поднимаю туннель ($P_MODE)…"
-    build_spec "$token" | priv tunnel-start "$connect_url" "$hash" "$P_MODE" "$P_USER" "$P_UA" "${P_CSD:+$(basename "$P_CSD")}"
+    build_spec "$token" | priv tunnel-start "$connect_url" "$hash" "$P_MODE" "$P_USER" "$P_UA" "$system_csd"
     local i=0
     while [ $i -lt 40 ]; do
         [ "$(tun_state)" = connected ] && break
@@ -2296,6 +2314,22 @@ healthcheck() {
         *:[0-9]*)           nc -z -w 5 "${P_HEALTH%:*}" "${P_HEALTH##*:}" >/dev/null 2>&1 ;;
         *)                  [ -n "$(dscacheutil -q host -a name "$P_HEALTH" 2>/dev/null | awk '/^ip_address/{print $2; exit}')" ] ;;
     esac
+}
+
+# Read-only, one-shot resource check for the first-run wizard. Does not replace
+# the supervisor's access state or change the selected profile.
+cmd_check_access() {
+    load_profile "${1:-}"
+    if [ -n "${2:-}" ] && [ "$2" != "${P_HEALTH:-}" ]; then
+        case "$2" in http://*|https://*) P_HEALTH="$2" ;; *) die "Укажите URL рабочего ресурса с http:// или https://" ;; esac
+    fi
+    case "${P_HEALTH:-}" in
+        ''|http://*|https://*|*:[0-9]*) ;;
+        *) P_HEALTH="$P_HEALTH:443" ;; # A resource check must reach a service, not just resolve DNS.
+    esac
+    if [ -z "${P_HEALTH:-}" ]; then printf '{"reachable":null}\n'
+    elif healthcheck; then printf '{"reachable":true}\n'
+    else printf '{"reachable":false}\n'; fi
 }
 
 # Доступ проверяется не только сразу после подключения: туннель живёт часами,
@@ -2743,6 +2777,7 @@ cmd_import_cisco() { # файл.xml
         if [ -f "$dst" ]; then warn "профиль [$slug] уже есть — пропускаю"; continue; fi
         printf '[Connection]\nName        = %s\nUrl         = %s\nUser        = %s\n' "$name" "$addr" "$(id -un)" > "$dst"
         chmod 600 "$dst"
+        imported_profiles+=("$slug")
         n=$((n+1))
         ok "профиль [$slug]" "$name → $addr"
     done <<< "$servers"
@@ -2755,7 +2790,7 @@ cmd_import_cisco() { # файл.xml
     return 0
 }
 
-cmd_import() {
+cmd_import_data() {
     local src="${1:-}" name="${2:-}"
     [ -n "$src" ] || die "использование: ocbar import <файл.ocbar|профиль Cisco .xml> [имя]"
     [ -f "$src" ] || die "нет файла $src"
@@ -2776,6 +2811,7 @@ cmd_import() {
             || die "CsdScriptBase64: could not extract embedded script"
     fi
     cp "$src" "$dst"; chmod 600 "$dst"
+    imported_profiles+=("$name")
     ok "профиль [$name] импортирован" "$dst"
     info ""
     if try_load_profile "$name"; then
@@ -2784,6 +2820,20 @@ cmd_import() {
         info "  код второго фактора: $P_TOTP"
     else
         warn "профиль импортирован, но прочитать его целиком не удалось"
+    fi
+}
+
+cmd_import() {
+    local -a imported_profiles=()
+    if [ "${1:-}" = --json ]; then
+        shift
+        cmd_import_data "$@" >&2
+        /usr/bin/python3 - "${imported_profiles[@]}" <<'PY'
+import json, sys
+print(json.dumps({'profiles': sys.argv[1:]}))
+PY
+    else
+        cmd_import_data "$@"
     fi
 }
 
@@ -3437,7 +3487,10 @@ install_csd_steps() { # домашний каталог пользователя
         else csd=$(profile_get "$p" csd_wrapper); fi
         csd="${csd/#\~/$user_home}"
         [ -n "$csd" ] && [ -f "$csd" ] || continue
-        printf 'install -o root -g wheel -m 755 %q %q\n' "$csd" "$LIBDIR/csd/$(basename "$csd")"
+        local tool name
+        tool=$(libexec_file ocbar-csd.py) || return 1
+        name=$(/usr/bin/python3 "$tool" file-name "$csd") || return 1
+        printf 'install -o root -g wheel -m 755 %q %q\n' "$csd" "$LIBDIR/csd/$name"
     done <<< "$(profile_list)"
 }
 
@@ -3940,9 +3993,11 @@ ocbar — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
                                       журналы одной лентой по времени (supervisor,
                                       openconnect, proxy, auth, app)
   ocbar profile-check <файл>          примет ли клиент профиль (редактор спрашивает перед записью)
+  ocbar check-access [профиль] [URL] проверка рабочего ресурса, JSON
+  ocbar csd-status [профиль]          готовность системной копии CSD, JSON
   ocbar profiles                      список профилей
   ocbar profiles order [имя…]         порядок профилей в меню; без имён — текущий
-  ocbar import <файл> [имя]           добавить профиль: .ocbar или профиль Cisco (.xml —
+  ocbar import [--json] <файл> [имя]           добавить профиль: .ocbar или профиль Cisco (.xml —
                                       переносятся только адреса серверов)
   ocbar export <профиль> [файл]       выгрузить профиль (и перевести в новый формат)
   ocbar routes [status]               состояние (то же, что ocbar status)
@@ -4024,9 +4079,11 @@ ocbar — OpenConnect for macOS: SSO, split DNS, split tunneling, a supervisor.
                                       all logs merged by time (supervisor, openconnect,
                                       proxy, auth, app)
   ocbar profile-check <file>          will the client accept a profile (the editor asks before saving)
+  ocbar check-access [profile] [URL] check a work resource, JSON
+  ocbar csd-status [profile]         system CSD readiness, JSON
   ocbar profiles                      list profiles
   ocbar profiles order [name…]        profile order in the menu; without names — current
-  ocbar import <file> [name]          add a profile: .ocbar or a Cisco profile (.xml —
+  ocbar import [--json] <file> [name]          add a profile: .ocbar or a Cisco profile (.xml —
                                       only server addresses are carried over)
   ocbar export <profile> [file]       export a profile (and convert it to the new format)
   ocbar routes [status]               state (same as ocbar status)
@@ -4111,6 +4168,8 @@ case "${1:-}" in
                 # shellcheck source=/dev/null
                 . "$st"; cmd_selftest ;;
     import)     shift; cmd_import "$@" ;;
+    check-access) shift; cmd_check_access "$@" ;;
+    csd-status) shift; cmd_csd_status "$@" ;;
     export)     shift; cmd_export "$@" ;;
     supervisor) shift; cmd_supervisor "$@" ;;
     doctor)     cmd_doctor ;;
@@ -4131,6 +4190,7 @@ case "${1:-}" in
         shift; [ -n "${OCBAR_SELFTEST_HELPER:-}" ] || die "_selftest-fn — только для selftest (нет OCBAR_SELFTEST_HELPER)"
         case "${1:-}" in
             install_csd_steps) install_csd_steps "${2:-}" ;;
+            csd_system_status) load_profile "${2:-}"; csd_system_status "${3:-}" ;;
             cli_language) cli_lang_select "${2:-}" "${3:-}" ;;
             helper_supports_upstream) helper_supports_upstream ;;
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
