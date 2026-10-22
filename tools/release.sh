@@ -39,10 +39,8 @@ publish() {
     fi
 
     brew update >/dev/null
-    # Исходники brew тянет git'ом внутри своей песочницы, а там помощнику учётки
-    # (gh, связка ключей) хода нет: репозиторий приватный, и fetch падает с
-    # «could not read Username» (2026-09-21, 0.17.1). Кеш подтягиваем снаружи —
-    # тогда brew нужный тег уже находит у себя.
+    # Обновляем кеш исходников до сборки в песочнице Homebrew, чтобы нужный
+    # тег уже был локально и сборка не зависела от помощников учётной записи.
     cache="$(brew --cache)/ocbar--git"
     [ -d "$cache" ] && git -C "$cache" fetch -q origin --tags '+refs/heads/*:refs/remotes/origin/*'
     brew upgrade ocbar
@@ -87,15 +85,25 @@ echo "release: проверки перед выпуском"
 prev=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
 [ -z "$prev" ] || tools/helper-version-check.sh "$prev" || { echo "release: хелпер изменился, а его версия нет" >&2; exit 1; }
 python3 tools/i18n-scan.py --check >/dev/null || { python3 tools/i18n-scan.py --check; echo "release: интерфейс переведён не весь" >&2; exit 1; }
+echo "release: installer and embedded CSD checks"
+python3 tools/installer-selftest.py
+python3 tools/embedded-csd-selftest.py
+echo "release: build auth"
 swift build -c release --package-path auth >/dev/null
+echo "release: auth self-test"
 auth/.build/release/ocbar-auth --selftest >/dev/null
+echo "release: HostScan gateway sequence"
 python3 tools/hostscan-sequence-test.py >/dev/null
+echo "release: WebKit learn self-test"
 auth/.build/release/ocbar-auth --learn-selftest >/dev/null
+echo "release: helper self-test"
 tools/helper-selftest.sh >/dev/null
+echo "release: CLI self-test"
 OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" bin/ocbar selftest >/dev/null
 # И в песочнице brew test (tools/brew-sandbox.sb): там нет прав машины —
 # записи экрана, камеры, служб системы. Проверка, которая на них молча
 # опирается, падает здесь, до push, а не в brew test после выпуска (0.15.2).
+echo "release: Homebrew sandbox self-tests"
 sbtmp=$(mktemp -d /private/tmp/ocbar-brewsb.XXXXXX)
 TMPDIR="$sbtmp" OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" \
     sandbox-exec -f tools/brew-sandbox.sb bin/ocbar selftest > "$sbtmp.log" 2>&1 \
@@ -103,14 +111,17 @@ TMPDIR="$sbtmp" OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" \
 TMPDIR="$sbtmp" sandbox-exec -f tools/brew-sandbox.sb auth/.build/release/ocbar-auth --selftest > "$sbtmp.log" 2>&1 \
     || { grep -E 'FAIL|selftest:' "$sbtmp.log" >&2; echo "release: ocbar-auth --selftest не проходит в песочнице brew — $sbtmp.log" >&2; exit 1; }
 rm -rf "$sbtmp" "$sbtmp.log"
+echo "release: build app"
 app/make-app.sh >/dev/null
+echo "release: app self-test"
 app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest >/dev/null
 grep -q "^## $ver " CHANGELOG.md || { echo "release: в CHANGELOG.md нет раздела $ver" >&2; exit 1; }
 
 sed -i '' -E "s/^VERSION=\"[^\"]*\"/VERSION=\"$ver\"/" bin/ocbar
 bin/ocbar version | grep -qx "ocbar $ver"
 git add bin/ocbar && git commit -q -m "release: $ver"
-git tag -a "v$ver" -m "ocbar $ver: $note"
+# Согласуем дату тега с выпускным коммитом, включая нормализацию локальными хуками.
+GIT_COMMITTER_DATE="$(git log -1 --format=%cI)" git tag -a "v$ver" -m "ocbar $ver: $note"
 sha=$(git rev-parse "v$ver^{commit}")
 
 /usr/bin/python3 - "$ver" "$sha" Formula/ocbar.rb <<'PY'
