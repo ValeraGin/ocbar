@@ -38,17 +38,19 @@ STUB
             OCBAR_SELFTEST_HELPER="$tmp/helper" OCBAR_OPENCONNECT="${OCBAR_OPENCONNECT:-/usr/bin/true}" OCBAR_NOTIFY=0 "$SELF" "$@" 2>&1; }
     has()  { # имя, что искать, где
         total=$((total+1))
-        if printf '%s' "$3" | grep -Fq -- "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «${2}»"; fi
+        # Consume the whole stream: grep -q can close the pipe early and make
+        # printf fail with SIGPIPE under pipefail, even when the text matched.
+        if printf '%s' "$3" | grep -F -- "$2" >/dev/null; then ok "$1"; else fails=$((fails+1)); bad "$1" "нет «${2}»"; fi
     }
     hasnt() {
         total=$((total+1))
-        if printf '%s' "$3" | grep -Fq -- "$2"; then fails=$((fails+1)); bad "$1" "нашлось «${2}», а не должно"; else ok "$1"; fi
+        if printf '%s' "$3" | grep -F -- "$2" >/dev/null; then fails=$((fails+1)); bad "$1" "нашлось «${2}», а не должно"; else ok "$1"; fi
     }
     # Через регулярное выражение: интерфейс в строке маршрута зависит от
     # таблицы маршрутизации машины, и сравнивать её целиком нельзя.
     matches() {
         total=$((total+1))
-        if printf '%s' "$3" | grep -Eq -- "$2"; then ok "$1"; else fails=$((fails+1)); bad "$1" "не подошло /${2}/"; fi
+        if printf '%s' "$3" | grep -E -- "$2" >/dev/null; then ok "$1"; else fails=$((fails+1)); bad "$1" "не подошло /${2}/"; fi
     }
     is() { # имя, ожидаемое, фактическое — точно
         total=$((total+1))
@@ -116,6 +118,11 @@ Check = wiki.example.test:443
 PROFILE
 
     info "ocbar selftest ($VERSION)"
+    local stream_probe
+    stream_probe=$(printf 'selftest-stream-match\n'; /usr/bin/awk 'BEGIN { for (i=0; i<2048; i++) print "long command output" }')
+    has "самопроверка: совпадение в начале длинного вывода" "selftest-stream-match" "$stream_probe"
+    matches "самопроверка: regex в начале длинного вывода" '^selftest-stream-match' "$stream_probe"
+    hasnt "самопроверка: отсутствующая строка в длинном выводе" "selftest-stream-absent" "$stream_probe"
     out=$(run status --short || true)
     has "состояние без туннеля" "state=down" "$out"
     has "профиль в списке" "profile_list=t|Проба||" "$out"

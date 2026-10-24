@@ -3,6 +3,13 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.23.1 — 2026-10-25
+
+- Fix false CLI self-test failures in the installed Homebrew package: matching
+  helpers now read the entire command output instead of closing the pipe after
+  an early match. Under pipefail, the old helpers could report a successful match
+  as a failure because the writer received SIGPIPE. Add long-output checks.
+
 ## 0.23.0 — 2026-10-25
 
 - Open .ocbar files directly from Finder or the visible Open profile button in
