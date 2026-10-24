@@ -3,6 +3,24 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.23.0 — 2026-10-25
+
+- Open .ocbar files directly from Finder or the visible Open profile button in
+  Profiles. A short window asks for the user's own login and connects, preserving
+  the supplied routes, DNS, scripts and advanced settings. Fresh imports never
+  prefill the sender's username or overwrite an existing profile.
+- When system preparation is needed, open the installation command in Terminal,
+  wait for its successful completion and recheck readiness before sign-in.
+  Cancellation and failures leave connection stopped. Profile opening itself
+  never runs scripts or credential commands.
+- Open the short login window after installing a profile without a username.
+  Keep manual configuration in All settings and distinguish Save profile from
+  saving a password. Describe missing CSD as initial setup rather than a change.
+- Put the teammate profile link on the first screen of the site. English and
+  Russian instructions now use open file → username → connect without requiring
+  a particular filename or Downloads path. Rerunning the installer upgrades an
+  older app so it can open profiles.
+
 ## 0.22.0 — 2026-10-22
 
 - Stop before SSO when a gateway requires HostScan but no wrapper is configured.

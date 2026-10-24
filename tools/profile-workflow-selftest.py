@@ -74,6 +74,7 @@ def main():
             return json.loads(cli('_selftest-fn', 'csd_system_status', name, system))
 
         assert not status('team')['ready'] and not system.exists(), 'readiness check must be read-only'
+        assert status('team')['reason'] == 'missing', 'first setup must not be described as an edit'
         plan = cli('_selftest-fn', 'install_csd_steps', home)
         # Run only the embedded materialization command against a temporary system directory.
         command = next(line for line in plan.splitlines() if ' materialize ' in line)
@@ -85,6 +86,10 @@ def main():
         assert not status('team')['ready'], 'editing embedded data must invalidate the system copy'
         csd.materialize(config / 'profiles/team.ocbar', system, 0o755)
         assert status('team')['ready']
+        installed = system / status('team')['name']
+        installed.write_bytes(b'#!/bin/bash\n# replaced on disk\n')
+        assert status('team')['reason'] == 'changed'
+        csd.materialize(config / 'profiles/team.ocbar', system, 0o755)
         print('OK: import/edit needs setup; installing the exact new CSD enables connection')
 
         wrappers = []

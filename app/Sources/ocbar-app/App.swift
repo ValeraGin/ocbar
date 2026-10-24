@@ -22,6 +22,9 @@ struct OcbarApp: App {
         // ссылку открывал бы окно настроек.
         Window(L("Настройка ocbar"), id: WindowID.settings) { SettingsWindow() }
             .handlesExternalEvents(matching: [])
+        Window(L("Открыть профиль ocbar"), id: WindowID.quickProfile) { QuickProfileView() }
+            .windowResizability(.contentSize)
+            .handlesExternalEvents(matching: [])
         Window(L("Первый запуск ocbar"), id: WindowID.setup) { SetupView().tint(Palette.control).accentColor(Palette.control) }
             .defaultSize(width: 740, height: 560)
             .handlesExternalEvents(matching: [])
@@ -56,6 +59,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         iconWatch = store.$status
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in self?.showIcon(status) }
+        // A profile imported by install.sh should lead straight to the username,
+        // while an established setup keeps its quiet menu-bar launch.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            guard !QuickProfileFlow.shared.presented else { return }
+            let files = ProfileStore.list()
+            if let id = files.first(where: { ProfileStore.load($0)?.user.trimmed.isEmpty == true }) {
+                QuickProfileFlow.shared.openExisting(id)
+            } else if files.isEmpty && !FileManager.default.fileExists(atPath: OcbarClient.shared.configDir + "/profiles.conf") {
+                QuickProfileFlow.shared.show()
+            }
+        }
     }
 
     /// Демо-меню для кадров README: то же меню на вымышленных профилях.
@@ -182,7 +196,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // ocbar://notify?title=…&body=…&token=… — уведомление от клиента (см.
     // Notifier). Без своего токена не показывается — Notifier пишет в журнал.
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where !Notifier.handle(url) {
+        let profiles = urls.filter(\.isFileURL)
+        if !profiles.isEmpty { QuickProfileFlow.shared.open(profiles) }
+        for url in urls where !url.isFileURL && !Notifier.handle(url) {
             if MenuProbe.handle(url) { continue }
             if AccessProbe.handle(url) { continue }
             AppLog.write("неизвестный URL: \(url.absoluteString)")
@@ -191,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // Витрина состояний для разработки: то же меню на подставленных данных,
     // все состояния сразу. Обычному запуску не мешает.
-    private func openStage() {
+    @MainActor private func openStage() {
         // Снимок (--shot) — вне экрана и без активации: окно не должно
         // вспыхивать поверх чужой работы, значок в Dock не нужен.
         let offscreen = CommandLine.arguments.contains("--shot")
@@ -201,7 +217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let screenshot = args.firstIndex(of: "--screenshot").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         // Меню снимается с запасом по высоте, пустое поле снизу срезается
         // при съёмке: высота зависит от языка, замер SwiftUI её занижает.
-        let size: NSSize = screenshot == "settings" ? NSSize(width: 1048, height: 708)
+        let size: NSSize = screenshot == "quick-profile" ? NSSize(width: 668, height: 620)
+            : screenshot == "settings" ? NSSize(width: 1048, height: 708)
             : screenshot == "setup" ? NSSize(width: 800, height: 660)
             : screenshot == "icons" ? NSSize(width: 980, height: 360) : NSSize(width: 1500, height: 2400)
         // Кадр README — в окне без рамки: окно с заголовком система подгоняет
@@ -215,7 +232,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else if CommandLine.arguments.contains("--dark") {
             window.appearance = NSAppearance(named: .darkAqua)
         }
-        if screenshot == "settings" {
+        if screenshot == "quick-profile" {
+            if let id = ProfileStore.list().first { QuickProfileFlow.shared.openExisting(id) }
+            window.contentView = NSHostingView(rootView: QuickProfileView().padding(24))
+        } else if screenshot == "settings" {
             let host = NSHostingView(rootView: ScreenshotSettingsView())
             host.sizingOptions = []
             window.contentView = host
@@ -271,7 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return out
     }
 
-    private func shoot(to path: String) {
+    @MainActor private func shoot(to path: String) {
         if stageWindow == nil { openStage() }
         guard let view = stageWindow?.contentView else { exit(1) }
         // Дать SwiftUI разложить содержимое: снимок сразу после показа

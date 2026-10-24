@@ -263,6 +263,7 @@ struct ProfileEditorView: View {
                         if dirty { alert = .unsaved(.new) } else { newDoc() }
                     } label: { Image(systemName: "plus") }
                         .help(L("Новый профиль"))
+                    Button(L("Открыть профиль…")) { QuickProfileFlow.shared.chooseFile() }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(doc.name.trimmed.isEmpty ? (loadedName == nil ? L("Новый профиль") : doc.fileName) : doc.name)
                             .font(.system(size: 20, weight: .semibold)).lineLimit(1)
@@ -1007,7 +1008,7 @@ struct ProfileEditorView: View {
                 // «Отменить» возвращает то, что лежит в файле.
                 Button(L("Отменить")) { if let name = loadedName { open(name) } else { newDoc() } }
                     .disabled(!dirty)
-                Button(L("Сохранить")) { save() }
+                Button(L("Сохранить профиль")) { save() }
                     .keyboardShortcut("s")
                     .buttonStyle(.borderedProminent)
                     .disabled(!errors.isEmpty || doc.fileName.trimmed.isEmpty)

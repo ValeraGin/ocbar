@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Installation &amp; first connection — ocbar</title><meta name="description" content="Install ocbar with one command from GitHub. The installer offers missing tools and can import a configured profile.">
+<title>Installation &amp; first connection — ocbar</title><meta name="description" content="Install ocbar with one command. Open a teammate’s profile, enter your username and connect.">
 <meta property="og:title" content="Installation &amp; first connection — ocbar"><meta property="og:type" content="website">
 <meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card.jpg"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="../assets/mark.svg"><link rel="stylesheet" href="../style.css?v=20261022-2">
@@ -30,16 +30,18 @@ if(w==="ru")location.replace("../ru/guide/"+location.hash)})()</script>
 <div class="install-command"><pre id="install-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot;</code></pre><button type="button" data-copy="install-command" data-done="Copied">Copy</button></div>
 <p>The command downloads the <a href="https://github.com/ValeraGin/ocbar/blob/main/install.sh">installer from GitHub</a>. It checks Git and Swift, offers missing Apple tools and Homebrew, builds ocbar, sets up its system helper and launch at login, then opens the app.</p>
 <p>If the Apple tools installation window appears, finish installing there: the script waits for it. The system helper needs your Mac administrator password. Run the line as your regular user. Building may take a few minutes.</p>
-<h2 id="profile">Install with a configured profile</h2>
-<ol><li>Save the file from your teammate in Downloads as <code>team.ocbar</code>.</li><li>Open Terminal and run one command:</li></ol>
-<div class="install-command"><pre id="profile-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot; -- --profile &quot;$HOME/Downloads/team.ocbar&quot; --language en</code></pre><button type="button" data-copy="profile-command" data-done="Copied">Copy</button></div>
-<p>This command installs the app and imports the profile before setting up the system helper. An embedded CSD script is extracted and prepared automatically. If your file has a different name or location, change its path in the command.</p>
+<h2 id="profile">Have a profile from a teammate?</h2>
+<p>After installation, just open the file, enter your username and connect. You do not need to rename the file or edit a path in a command.</p>
+<p>If ocbar is not installed yet, open Terminal and run one command:</p>
+<div class="install-command"><pre id="profile-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot; -- --language en</code></pre><button type="button" data-copy="profile-command" data-done="Copied">Copy</button></div>
+<ol><li><strong>Double-click the .ocbar file you received.</strong> Save it in any convenient folder. You can also choose Open profile… in the app or in Profiles settings.</li><li><strong>Enter your own work username.</strong> The short window already shows your VPN name and address. Networks, DNS and embedded CSD come from the file.</li><li><strong>Choose Connect.</strong> Your username is saved automatically. If system setup is needed, the app opens Terminal: enter your Mac administrator password and wait for setup to finish. Connection then continues.</li></ol>
+<p>Opening a profile does not run its scripts or connect the VPN. If it contains CSD or custom commands, connect only if you trust the sender.</p>
 <h2>First connection</h2>
-<ol><li>Click ocbar in the Mac menu bar.</li><li>With a configured profile, open Settings → Profiles, select it and enter your own work username. Otherwise, the wizard helps you add the gateway, networks and DNS supplied by your administrator.</li><li>Choose Connect VPN and complete your organization’s sign-in with your password and second factor.</li><li>To remember sign-in, choose Connect and learn the form…. You can also enter the password and code manually.</li><li>Check a work resource and an ordinary public website. You can change networks or pause the connection from the menu.</li></ol>
+<p>Complete your organization’s sign-in with your password and second factor. Once connected, check a work resource and an ordinary public website. Networks and pause are available from the ocbar menu bar icon.</p>
+<p>If the installer has already imported a profile without a username, the username window opens automatically. Choose All settings… to change other options. In the editor, Save profile saves the configuration; the button next to the password saves only the password.</p>
+<p>For Cisco XML with several servers, choose the profile you need in the new window. Manual configuration and work resource checks remain available in Settings → General → Setup wizard and access check….</p>
 <p>Choose English, Russian or System default in Settings → General → Interface language.</p>
 <p class="notice">The author has verified macOS 26 on Apple Silicon. A clean installation and first sign-in on another Mac have not yet been verified. Sign-in and device checks depend on your organization.</p>
-<p>When importing in the app, the wizard offers a teammate’s file first. If an XML file contains several servers, choose the profile you need. You can change the username while keeping the configured networks and DNS.</p>
-<p>After importing or editing CSD, the app checks its system copy before sign-in. If setup is needed, it shows <code>sudo ocbar install</code> and a readiness check button. Open Settings → General → Setup wizard and access check…. The wizard offers your installed profiles. Once connected, it can check a work resource: a connection to the gateway alone does not confirm access to services.</p>
 <p><a href="https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml">Tell us how your gateway worked</a>: gateway type, sign-in method and result are enough. Do not include corporate addresses or sign-in details.</p>
 <h2>If the connection fails</h2>
 <pre><code>ocbar doctor
@@ -56,7 +58,7 @@ ocbar doctor</code></pre>
 <pre><code>ocbar export main team.ocbar</code></pre>
 <p>Here, main is the name of your configured profile. Before sharing, open the file: replace your personal User value, review KeePassXC and CSD wrapper paths, and check any custom commands. Export does not retrieve passwords or TOTP secrets from your credential store; you must review the contents of your own commands and rules. Share work settings within your team.</p>
 <p>If CSD is required, open the profile editor’s advanced settings and choose Embed CSD script… before exporting. Export preserves the script inside the file.</p>
-<p>Send your teammate <code>team.ocbar</code> and the <a href="#profile">link to installation with a configured profile</a>. One command installs the app; they then enter their own username and sign in as themselves.</p>
+<p>Send your teammate <code>team.ocbar</code> and the <a href="#profile">link to installation with a configured profile</a>. After installation, they double-click the file, enter their own username and choose Connect.</p>
 
 <h2 id="remove">Remove the app and system helper</h2>
 <p><strong>Keep this order:</strong> ocbar must still be installed to remove its system components.</p>

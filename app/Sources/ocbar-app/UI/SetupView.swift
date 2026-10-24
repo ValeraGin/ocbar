@@ -36,6 +36,7 @@ struct SetupView: View {
     }()
 
     private var helperReady: Bool { store.helperWarning == nil && !doctorText.contains("не установлен") && !doctorText.contains("not installed") && !doctorText.isEmpty }
+    private var systemReady: Bool { helperReady && systemState?.ready != false }
     private var hasProfile: Bool { saved != nil || !store.status.profiles.isEmpty }
     private var formFilled: Bool { !name.trimmed.isEmpty && !url.trimmed.isEmpty }
     private static var titles = [L("Системная часть"), L("Профиль"), L("Первый вход")]
@@ -78,7 +79,7 @@ struct SetupView: View {
 
     private func done(_ i: Int) -> Bool {
         switch i {
-        case 0: return helperReady
+        case 0: return systemReady
         case 1: return hasProfile && step > 1
         default: return store.status.state == .connected && step == 2
         }
@@ -129,8 +130,8 @@ struct SetupView: View {
 
     private var systemStep: some View {
         VStack(spacing: 0) {
-            pageTitle(helperReady ? L("Системная часть установлена") : L("Установите системную часть"),
-                      helperReady ? L("Можно переходить к профилю.")
+            pageTitle(systemReady ? L("Системная часть установлена") : L("Подготовьте системную часть для этого профиля"),
+                      systemReady ? L("Можно переходить к профилю.")
                                   : L("Туннель поднимает помощник с правами администратора. Его ставит одна команда с паролем — один раз."))
             Form {
                 Section {
@@ -138,9 +139,9 @@ struct SetupView: View {
                         if checking {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label(helperReady ? L("установлена") : L("не установлена"),
-                                  systemImage: helperReady ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(helperReady ? Palette.ok : Palette.warn)
+                            Label(systemReady ? L("установлена") : L("не установлена"),
+                                  systemImage: systemReady ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundStyle(systemReady ? Palette.ok : Palette.warn)
                         }
                     }
                     LabeledContent(L("Команда")) {

@@ -51,7 +51,7 @@ for lang in ('en', 'ru'):
     prefix = '' if lang == 'en' else 'ru/'
     install_command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)"'
     commands = dict(install_command=html.escape(install_command),
-                    profile_command=html.escape(install_command + ' -- --profile "$HOME/Downloads/team.ocbar" --language ' + lang))
+                    profile_command=html.escape(install_command + ' -- --language ' + lang))
     for guide in (False, True):
         suffix = prefix + ('guide/' if guide else '')
         base = ('../' if lang == 'en' else '../../') if guide else ('' if lang == 'en' else '../')

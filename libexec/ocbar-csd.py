@@ -66,7 +66,9 @@ def installed_status(data, name, directory, legacy=None):
         target = Path(directory) / candidate
         if target.is_file() and not target.is_symlink() and target.read_bytes() == data and os.access(target, os.X_OK):
             return {'required': True, 'ready': True, 'name': candidate}
-    return {'required': True, 'ready': False, 'name': name}
+    exists = any((Path(directory) / candidate).exists() or (Path(directory) / candidate).is_symlink()
+                 for candidate in [name] + ([legacy] if legacy else []))
+    return {'required': True, 'ready': False, 'name': name, 'reason': 'changed' if exists else 'missing'}
 
 
 def materialize(path, directory, mode=0o700):

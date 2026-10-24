@@ -95,6 +95,22 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
+    <key>CFBundleDocumentTypes</key>
+    <array><dict>
+        <key>CFBundleTypeName</key><string>ocbar VPN profile</string>
+        <key>CFBundleTypeRole</key><string>Viewer</string>
+        <key>LSHandlerRank</key><string>Owner</string>
+        <key>LSItemContentTypes</key><array><string>ru.ocbar.profile</string></array>
+    </dict></array>
+    <key>UTExportedTypeDeclarations</key>
+    <array><dict>
+        <key>UTTypeIdentifier</key><string>ru.ocbar.profile</string>
+        <key>UTTypeDescription</key><string>ocbar VPN profile</string>
+        <key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
+        <key>UTTypeTagSpecification</key><dict>
+            <key>public.filename-extension</key><array><string>ocbar</string></array>
+        </dict>
+    </dict></array>
     <key>LSMinimumSystemVersion</key><string>14.4</string>
     <key>LSUIElement</key><true/>
     <key>NSCameraUsageDescription</key><string>ocbar читает QR второго фактора с экрана телефона, чтобы сохранить секрет одноразового кода. Кадры никуда не сохраняются.</string>

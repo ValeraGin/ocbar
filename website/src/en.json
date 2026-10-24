@@ -1,6 +1,6 @@
 {
   "guide_link": "Installation & first connection",
-  "install_description": "Install ocbar with one command from GitHub. The installer offers missing tools and can import a configured profile.",
+  "install_description": "Install ocbar with one command. Open a teammate’s profile, enter your username and connect.",
   "skip": "Skip to content",
   "language_label": "Language",
   "disclaimer": "Not affiliated with Cisco. AnyConnect describes protocol compatibility.",

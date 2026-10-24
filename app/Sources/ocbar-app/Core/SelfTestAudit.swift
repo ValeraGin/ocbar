@@ -22,6 +22,7 @@ extension SelfTest {
         auditProfileParsing(t)
         auditProfileChecks(t)
         auditProfileWorkflow(t)
+        auditQuickProfile(t)
         auditStatus(t)
         auditLocalization(t)
         auditProfileVerdicts(t)
@@ -30,6 +31,104 @@ extension SelfTest {
         auditCliParity(t)
         auditStore(t)
         return t.failures
+    }
+
+    @MainActor
+    static func auditQuickProfile(_ t: Tally) {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("ocbar-quick-\(UUID().uuidString)")
+        let config = base.appendingPathComponent("config")
+        try? fm.createDirectory(at: config.appendingPathComponent("profiles"), withIntermediateDirectories: true)
+        let vars = ["OCBAR_CONFIG_DIR": config.path, "OCBAR_USER_STATE": base.appendingPathComponent("user-state").path,
+                    "OCBAR_STATE_DIR": base.appendingPathComponent("root-state").path,
+                    "OCBAR_LOG_DIR": base.appendingPathComponent("logs").path,
+                    "OCBAR_SELFTEST_HELPER": "/dev/null"]
+        var saved: [String: String] = [:]
+        for (key, value) in vars {
+            saved[key] = ProcessInfo.processInfo.environment[key]
+            setenv(key, value, 1)
+        }
+        defer {
+            for key in vars.keys {
+                if let value = saved[key] { setenv(key, value, 1) } else { unsetenv(key) }
+            }
+            try? fm.removeItem(at: base)
+        }
+        func wait(_ done: () -> Bool) {
+            let limit = Date().addingTimeInterval(20)
+            while !done() && Date() < limit { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+        }
+        let marker = base.appendingPathComponent("executed")
+        let script = "#!/bin/bash\ntouch '\(marker.path)'\n"
+        let encoded = Data(script.utf8).base64EncodedString()
+        let file = base.appendingPathComponent("Профиль друга.ocbar")
+        let contents = "[Connection]\nName = Team\nUrl = vpn.example.test/group\nUser = sender\nCsdScriptBase64 = \(encoded)\n[Routes]\n10.0.0.0/8\n[DNS]\nexample.test = vpn\n[Auth]\nPassword = command\nPasswordCommand = touch '\(marker.path)'\n[Custom]\nKeep = value\n"
+        try? contents.write(to: file, atomically: true, encoding: .utf8)
+        var connections: [String] = []
+        let flow = QuickProfileFlow(connect: { connections.append($0) }, readiness: { _ in
+            (ProfileSystemState(required: false, ready: true), true)
+        })
+        flow.open([file]); wait { !flow.busy && !flow.checking }
+        t.check("quick open: unicode filename imports and asks for own login", flow.doc != nil && flow.user.isEmpty)
+        t.check("quick open: scripts and commands never run on opening", !fm.fileExists(atPath: marker.path) && connections.isEmpty)
+        guard let id = flow.doc?.fileName else { return }
+        flow.user = "own.login"; flow.connect(); wait { !flow.busy && !flow.checking }
+        let updated = ProfileStore.load(id)
+        t.check("quick connect: saves own login then connects once", updated?.user == "own.login" && connections == [id])
+        t.check("quick connect: keeps routes, DNS and embedded CSD", updated?.routes.contains("10.0.0.0/8") == true
+                && updated?.zones.first?.zone == "example.test" && updated?.csdScriptBase64 == encoded)
+        t.check("quick connect: keeps unknown configuration", updated?.extras.contains { $0.section == "Custom" && $0.key == "Keep" && $0.value == "value" } == true)
+        t.check("quick connect: input file unchanged", (try? String(contentsOf: file)) == contents)
+        let localBefore = ProfileStore.read(id)
+        flow.open([file]); wait { !flow.busy && !flow.checking }
+        t.check("quick open: reopening source reuses personalized profile without changing login on disk", flow.doc?.fileName == id
+                && flow.user.isEmpty && ProfileStore.read(id) == localBefore && ProfileStore.list().count == 1)
+        try? contents.replacingOccurrences(of: "Name = Team", with: "Name = Different team")
+            .write(to: file, atomically: true, encoding: .utf8)
+        flow.open([file]); wait { !flow.busy && !flow.checking }
+        t.check("quick open: name collision preserves existing personalized profile", flow.doc?.fileName != id && ProfileStore.read(id) == localBefore)
+        let reused = flow.doc?.fileName
+        let count = ProfileStore.list().count
+        flow.open([file]); wait { !flow.busy && !flow.checking }
+        t.check("quick open: identical file reuses imported profile", ProfileStore.list().count == count && flow.doc?.fileName == reused)
+        if let name = flow.doc?.fileName {
+            try? ((ProfileStore.read(name) ?? "") + "\n# external change\n").write(toFile: ProfileStore.path(name), atomically: true, encoding: .utf8)
+            flow.user = "another.login"; flow.connect(); wait { !flow.busy && !flow.checking }
+            t.check("quick connect: stale form cannot overwrite external change or connect", connections.count == 1 && flow.note != nil
+                    && ProfileStore.read(name)?.contains("# external change") == true)
+        }
+        let invalid = base.appendingPathComponent("invalid.ocbar")
+        try? "not a profile".write(to: invalid, atomically: true, encoding: .utf8)
+        flow.open([invalid]); wait { !flow.busy }
+        t.check("quick open: invalid file is rejected without connection", flow.doc == nil && flow.note != nil && connections.count == 1)
+        let blocked = QuickProfileFlow(connect: { connections.append($0) }, readiness: { _ in
+            (ProfileSystemState(required: true, ready: false, reason: "missing"), false)
+        })
+        blocked.openExisting(id); wait { !blocked.checking }
+        blocked.user = "own.login"; blocked.connect(); wait { !blocked.busy && !blocked.checking }
+        t.check("quick connect: unprepared system never connects or installs in test environment", connections.count == 1 && !blocked.waitingForSetup && blocked.note != nil)
+        let oversized = base.appendingPathComponent("large.ocbar")
+        try? Data(repeating: 65, count: ProfileOpening.maximumBytes + 1).write(to: oversized)
+        t.check("quick open: bounded read rejects oversized file", (try? ProfileOpening.read(oversized)) == nil)
+        let command = ProfileOpening.setupScript(binary: "/tmp/it' s/$(touch bad)/ocbar", resultPath: "/tmp/status' file")
+        let commandFile = base.appendingPathComponent("setup.command")
+        try? command.write(to: commandFile, atomically: true, encoding: .utf8)
+        t.check("quick setup: shell syntax handles quotes and substitutions as data", Shell.run("/bin/bash", ["-n", commandFile.path]).ok)
+        let tool = base.appendingPathComponent("tool' $(touch injected)")
+        let argsFile = base.appendingPathComponent("args")
+        try? "#!/bin/bash\nprintf '%s\\n' \"$@\" > \"$TEST_ARGS\"\nexit \"${TEST_EXIT:-0}\"\n".write(to: tool, atomically: true, encoding: .utf8)
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tool.path)
+        let resultFile = base.appendingPathComponent("result' file")
+        // Replace sudo only in the synthetic test; production always uses /usr/bin/sudo.
+        let safeCommand = ProfileOpening.setupScript(binary: tool.path, resultPath: resultFile.path)
+            .replacingOccurrences(of: "/usr/bin/sudo --", with: "/usr/bin/env --")
+        try? safeCommand.write(to: commandFile, atomically: true, encoding: .utf8)
+        let setup = Shell.run("/bin/bash", [commandFile.path], env: ["TEST_ARGS": argsFile.path])
+        t.check("quick setup: exact install argument and successful completion marker", setup.ok
+                && (try? String(contentsOf: argsFile)) == "install\n" && (try? String(contentsOf: resultFile)) == "0\n")
+        let failedSetup = Shell.run("/bin/bash", [commandFile.path], env: ["TEST_ARGS": argsFile.path, "TEST_EXIT": "7"])
+        t.check("quick setup: failure exit code survives and cannot look successful", failedSetup.code == 7
+                && (try? String(contentsOf: resultFile)) == "7\n")
     }
 
     @MainActor

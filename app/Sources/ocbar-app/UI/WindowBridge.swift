@@ -7,6 +7,7 @@ import SwiftUI
 enum WindowBridge {
     private static var openWindow: OpenWindowAction?
     private static var holder: NSWindow?
+    private static var pending: [String] = []
 
     static func install() {
         guard holder == nil else { return }
@@ -21,7 +22,10 @@ enum WindowBridge {
     }
 
     static func open(_ id: String) {
-        guard let openWindow else { AppLog.write("окно \(id): openWindow не получен"); return }
+        guard let openWindow else {
+            if !pending.contains(id) { pending.append(id) }
+            return
+        }
         openWindow(id: id)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -32,6 +36,9 @@ enum WindowBridge {
             Color.clear.frame(width: 1, height: 1)
                 .onAppear {
                     WindowBridge.openWindow = openWindow
+                    let queued = WindowBridge.pending
+                    WindowBridge.pending.removeAll()
+                    for id in queued { WindowBridge.open(id) }
                     // Окно-носитель больше не нужно на экране.
                     DispatchQueue.main.async { WindowBridge.holder?.orderOut(nil) }
                 }

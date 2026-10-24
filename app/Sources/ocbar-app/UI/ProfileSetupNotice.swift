@@ -8,7 +8,7 @@ struct ProfileSetupNotice: View {
     var body: some View {
         if let state, !state.ready {
             VStack(alignment: .leading, spacing: 8) {
-                Label(state.error ?? L("CSD изменён: обновите системную часть перед подключением"),
+                Label(state.error ?? state.setupMessage,
                       systemImage: "exclamationmark.triangle")
                     .font(.system(size: 12)).foregroundStyle(Palette.warn)
                 if state.needsSetup {

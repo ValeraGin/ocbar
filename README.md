@@ -43,7 +43,8 @@ The [installer](install.sh) offers to install missing Apple Command Line Tools
 and Homebrew, installs ocbar and its helper, and opens the menu app. It asks for
 administrator access when needed. Share one `.ocbar` file and the
 [profile installation guide](https://valeragin.github.io/ocbar/guide/#profile)
-with a teammate; its command installs the app and imports their profile, including embedded CSD.
+with a teammate. After installation, double-click their `.ocbar` file, enter their
+own username and choose **Connect**. Networks and DNS come from the profile.
 Choose English, Russian or System default in Settings → General → Interface language.
 
 

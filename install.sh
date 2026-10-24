@@ -109,7 +109,7 @@ if ! "$brew_bin" list --versions "$formula" >/dev/null 2>&1; then
 elif [ "$head" = 1 ]; then
     "$brew_bin" reinstall --HEAD "$formula"
 else
-    printf 'ocbar is already installed; keeping the current version.\n'
+    "$brew_bin" upgrade "$formula"
 fi
 ocbar="$("$brew_bin" --prefix ocbar)/bin/ocbar"
 [ -x "$ocbar" ] || fail 'Homebrew did not provide the ocbar executable'
@@ -156,5 +156,5 @@ if [ -n "$language" ]; then defaults write ru.ocbar.app InterfaceLanguage -strin
 sudo -- "$ocbar" install < /dev/tty
 if [ "$autostart" = 1 ]; then "$ocbar" app autostart on; fi
 if [ "$start" = 1 ]; then "$ocbar" app stop; "$ocbar" app start; fi
-printf '\nInstalled. Open ocbar in the menu bar to configure or connect your VPN.\n'
-printf 'Готово. Откройте ocbar в строке меню и выберите профиль.\n'
+printf '\nInstalled. Open your .ocbar profile, enter your username and connect.\n'
+printf 'Готово. Откройте файл .ocbar, введите свой логин и подключитесь.\n'

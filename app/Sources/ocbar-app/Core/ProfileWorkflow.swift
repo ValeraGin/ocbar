@@ -15,6 +15,11 @@ struct ProfileSystemState: Decodable {
     var ready: Bool
     var name: String = ""
     var error: String?
+    var reason: String?
+    var setupMessage: String {
+        reason == "changed" ? L("CSD изменён: обновите системную часть перед подключением")
+            : L("Подготовьте системную часть для этого профиля")
+    }
     var needsSetup: Bool { required && !ready && error == nil }
     static func parse(_ text: String) -> Self? {
         text.data(using: .utf8).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
@@ -22,9 +27,9 @@ struct ProfileSystemState: Decodable {
 }
 
 extension OcbarClient {
-    func importProfiles(_ path: String) -> (ids: [String], error: String?) {
+    func importProfiles(_ path: String, name: String? = nil) -> (ids: [String], error: String?) {
         guard let binary else { return ([], L("ocbar не найден")) }
-        let result = Shell.run(binary, ["import", "--json", path], timeout: 30)
+        let result = Shell.run(binary, ["import", "--json", path] + (name.map { [$0] } ?? []), timeout: 30)
         guard result.ok, let imported = ImportedProfiles.parse(result.out) else {
             return ([], result.err.trimmed.isEmpty ? L("Не удалось получить список импортированных профилей") : result.err.trimmed)
         }
