@@ -58,6 +58,20 @@ publish() {
     menu_check
 }
 
+# Keep failed check output in the release log instead of silently stopping.
+run_checked() {
+    local output status
+    output=$(mktemp "${TMPDIR:-/tmp}/ocbar-release-check.XXXXXX")
+    if "$@" >"$output" 2>&1; then
+        rm -f "$output"
+    else
+        status=$?
+        cat "$output" >&2
+        rm -f "$output"
+        return "$status"
+    fi
+}
+
 # Живое меню после выпуска: приложение само открывает меню, меняет его высоту
 # и пишет итог в app.log (MenuProbe). В 0.19.0 окно перестало сжиматься, а
 # вердикт «ИТОГ ПЛОХО» лежал в журнале, и его никто не видел.
@@ -99,15 +113,15 @@ python3 tools/profile-workflow-selftest.py
 echo "release: build auth"
 swift build -c release --package-path auth >/dev/null
 echo "release: auth self-test"
-auth/.build/release/ocbar-auth --selftest >/dev/null
+run_checked auth/.build/release/ocbar-auth --selftest
 echo "release: HostScan gateway sequence"
-python3 tools/hostscan-sequence-test.py >/dev/null
+run_checked python3 tools/hostscan-sequence-test.py
 echo "release: WebKit learn self-test"
-auth/.build/release/ocbar-auth --learn-selftest >/dev/null
+run_checked auth/.build/release/ocbar-auth --learn-selftest
 echo "release: helper self-test"
-tools/helper-selftest.sh >/dev/null
+run_checked tools/helper-selftest.sh
 echo "release: CLI self-test"
-OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" bin/ocbar selftest >/dev/null
+OCBAR_AUTH="$root/auth/.build/release/ocbar-auth" run_checked bin/ocbar selftest
 # И в песочнице brew test (tools/brew-sandbox.sb): там нет прав машины —
 # записи экрана, камеры, служб системы. Проверка, которая на них молча
 # опирается, падает здесь, до push, а не в brew test после выпуска (0.15.2).
@@ -122,7 +136,7 @@ rm -rf "$sbtmp" "$sbtmp.log"
 echo "release: build app"
 app/make-app.sh >/dev/null
 echo "release: app self-test"
-app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest >/dev/null
+run_checked app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
 grep -q "^## $ver " CHANGELOG.md || { echo "release: в CHANGELOG.md нет раздела $ver" >&2; exit 1; }
 
 sed -i '' -E "s/^VERSION=\"[^\"]*\"/VERSION=\"$ver\"/" bin/ocbar
