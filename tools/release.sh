@@ -35,13 +35,13 @@ publish() {
     # Заметки к релизу — из CHANGELOG, раздел этой версии.
     notes=$(awk -v v="## $ver " 'index($0, v) == 1 {f = 1; next} f && /^## / {exit} f' CHANGELOG.md)
     if command -v gh >/dev/null; then
-        printf '%s\n' "$notes" | gh release create "v$ver" --title "ocbar $ver" --notes-file - >/dev/null \
+        printf '%s\n' "$notes" | gh release create "v$ver" --title "OpenConnect for Mac $ver" --notes-file - >/dev/null \
             && echo "release: GitHub Release v$ver создан" \
             || echo "release: GitHub Release не создан (проверьте gh auth)" >&2
     fi
 
     if [ "${OCBAR_RELEASE_LOCAL_UPDATE:-1}" = 0 ]; then
-        echo "release: ocbar $ver опубликован; локальное обновление и проверка меню отложены"
+        echo "release: OpenConnect for Mac $ver опубликован; локальное обновление и проверка меню отложены"
         return 0
     fi
 
@@ -54,7 +54,7 @@ publish() {
     brew test ocbar
     ocbar app stop >/dev/null 2>&1 || true
     ocbar app start
-    echo "release: ocbar $ver выпущен"
+    echo "release: OpenConnect for Mac $ver выпущен"
     menu_check
 }
 
