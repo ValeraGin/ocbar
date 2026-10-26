@@ -44,6 +44,7 @@ if(w==="ru")location.replace("%s"+location.hash)})()</script>
 # Анимация меню — та же, что в README: tools/demo-gif.sh пишет её в assets/ репозитория.
 for lang, source in (('en', 'assets/demo.gif'), ('ru', 'assets/ru/demo.gif')):
     shutil.copyfile(ROOT.parent / source, ROOT / f'dist/assets/demo-{lang}.gif')
+    shutil.copyfile(ROOT.parent / Path(source).with_name('profile.png'), ROOT / f'dist/assets/profile-{lang}.png')
 
 for lang in ('en', 'ru'):
     content = json.loads((ROOT / f'src/{lang}.json').read_text())

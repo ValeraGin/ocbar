@@ -17,7 +17,8 @@ Preview `/dist/` and `/dist/ru/`. The main page template is `src/page.html`;
 translations are in `src/en.json` and `src/ru.json`. Installation guides keep their
 own templates and their existing URLs. `dist/landing.css` styles the landing,
 `dist/style.css` the installation guides. The build copies the README animation
-`assets/demo.gif` and `assets/ru/demo.gif` to `dist/assets/demo-{en,ru}.gif`; the page
+`assets/demo.gif` and `assets/ru/demo.gif` to `dist/assets/demo-{en,ru}.gif`,
+and the profile screenshots to `dist/assets/profile-{en,ru}.png`; the page
 background matches the animation background `#EEF0EA`. Generated HTML is tracked.
 
 ## Publish
