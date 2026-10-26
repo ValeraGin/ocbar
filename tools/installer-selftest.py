@@ -47,7 +47,7 @@ def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501
     executable(fake / 'sudo', 'echo "sudo $*" >> "$TEST_LOG"; [ "$1" != -- ] || shift; exec "$@"\n')
     brew_body = '''echo "brew $*" >> "$TEST_LOG"
 case "$1" in
-    --prefix) if [ "$#" = 1 ]; then echo "$TEST_BASE/prefix"; else echo "$TEST_BASE/prefix"; fi ;;
+    --prefix) if [ "$#" = 1 ] || [ "$2" = ValeraGin/openconnect-for-mac/openconnect-for-mac ]; then echo "$TEST_BASE/prefix"; else echo "Ambiguous formula name" >&2; exit 1; fi ;;
     list) [ -f "$TEST_BASE/installed" ] ;;
     install|reinstall) touch "$TEST_BASE/installed" ;;
     upgrade) if [ "$TEST_OLD" = upgradable ]; then touch "$TEST_BASE/inline-supported"; fi ;;
@@ -252,6 +252,7 @@ def main():
         code, output = rerun()
         assert code == 0, output
         assert 'brew reinstall --HEAD' in (base / 'calls').read_text()
+        assert 'brew migrate ValeraGin/openconnect-for-mac/openconnect-for-mac' in (base / 'calls').read_text()
     print('OK: explicit HEAD install and reinstall')
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', migrated_profile=True)
     with tmp:

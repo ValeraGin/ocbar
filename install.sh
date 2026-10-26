@@ -103,12 +103,12 @@ fi
 "$brew_bin" tap ValeraGin/openconnect-for-mac
 # New Homebrew requires explicit trust for third-party taps; older versions do not.
 if "$brew_bin" help trust >/dev/null 2>&1; then "$brew_bin" trust ValeraGin/openconnect-for-mac; fi
+formula=ValeraGin/openconnect-for-mac/openconnect-for-mac
 # Refresh the former tap so Homebrew sees its cross-tap migration rule.
 if "$brew_bin" list --versions ocbar >/dev/null 2>&1; then
     "$brew_bin" update
-    "$brew_bin" migrate ocbar
+    "$brew_bin" migrate "$formula"
 fi
-formula=ValeraGin/openconnect-for-mac/openconnect-for-mac
 if ! "$brew_bin" list --versions "$formula" >/dev/null 2>&1; then
     if [ "$head" = 1 ]; then "$brew_bin" install --HEAD "$formula"; else "$brew_bin" install "$formula"; fi
 elif [ "$head" = 1 ]; then
@@ -116,7 +116,12 @@ elif [ "$head" = 1 ]; then
 else
     "$brew_bin" upgrade "$formula"
 fi
-ocmac="$("$brew_bin" --prefix openconnect-for-mac)/bin/ocmac"
+# Both tap names can briefly expose the new formula during a repository rename.
+# Only remove the previous tap after a successful package install/upgrade.
+if "$brew_bin" tap | grep -Fxiq 'valeragin/ocbar'; then
+    "$brew_bin" untap ValeraGin/ocbar || printf 'Previous tap retained; use the fully qualified package name for updates.\n'
+fi
+ocmac="$("$brew_bin" --prefix "$formula")/bin/ocmac"
 [ -x "$ocmac" ] || fail 'Homebrew did not provide the ocmac executable'
 "$ocmac" migrate
 # Migration may have populated this filename: never replace it with an import.
@@ -132,7 +137,7 @@ if [ -n "$profile" ] && [ "$skip_profile" = 0 ]; then
         if "$ocmac" profile-check "$work/csd-capability.ocmac" >/dev/null 2>&1; then
             if [ "$head" = 0 ]; then
                 "$brew_bin" upgrade "$formula"
-                ocmac="$("$brew_bin" --prefix openconnect-for-mac)/bin/ocmac"
+                ocmac="$("$brew_bin" --prefix "$formula")/bin/ocmac"
             fi
             if "$ocmac" profile-check "$work/csd-capability.ocmac" >/dev/null 2>&1; then
                 fail 'Installed ocmac cannot read CsdScriptBase64. A newer release or --head is required.'

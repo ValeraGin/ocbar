@@ -5,7 +5,7 @@ Homebrew packages for [OpenConnect for Mac](https://github.com/ValeraGin/opencon
 ```sh
 brew tap ValeraGin/openconnect-for-mac
 brew trust ValeraGin/openconnect-for-mac
-brew install openconnect-for-mac
+brew install ValeraGin/openconnect-for-mac/openconnect-for-mac
 ocmac migrate
 sudo ocmac install
 ocmac app start

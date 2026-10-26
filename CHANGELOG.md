@@ -3,6 +3,10 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.25.1 — 2026-10-27
+
+- Установщик выбирает полное имя нового пакета Homebrew и после обновления убирает прежний tap. Два подключённых имени tap больше не мешают найти установленную команду.
+
 ## 0.25.0 — 2026-10-27
 
 - Репозиторий и пакет Homebrew теперь называются `openconnect-for-mac`, команда — `ocmac`, профили — `.ocmac`.

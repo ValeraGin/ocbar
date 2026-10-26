@@ -55,8 +55,8 @@ publish() {
     [ -d "$cache" ] && git -C "$cache" fetch -q origin --tags '+refs/heads/*:refs/remotes/origin/*'
     brew tap ValeraGin/openconnect-for-mac
     if brew help trust >/dev/null 2>&1; then brew trust ValeraGin/openconnect-for-mac; fi
-    brew upgrade openconnect-for-mac
-    brew test openconnect-for-mac
+    brew upgrade ValeraGin/openconnect-for-mac/openconnect-for-mac
+    brew test ValeraGin/openconnect-for-mac/openconnect-for-mac
     ocmac migrate
     if [ -e /usr/local/libexec/ocbar-helper ]; then
         sudo ocmac install
