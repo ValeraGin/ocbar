@@ -4,8 +4,8 @@ class OpenconnectForMac < Formula
   # Стабильная версия — тег и коммит: версия берётся из имени тега, а хеш
   # архива не нужно считать заранее.
   url "https://github.com/ValeraGin/openconnect-for-mac.git",
-      tag:      "v0.25.0",
-      revision: "a70bf73dc03e65645ac0688edffaf1294a50b1c1"
+      tag:      "v0.25.1",
+      revision: "d459888acab51dd3d40a904696a9dfb9c5254b6d"
   license "MIT"
   head "https://github.com/ValeraGin/openconnect-for-mac.git", branch: "main"
 
