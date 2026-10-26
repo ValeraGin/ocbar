@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://valeragin.github.io/openconnect-for-mac/sitemap.xml
