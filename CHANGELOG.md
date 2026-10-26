@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+All notable changes. Versions are git tags; the Homebrew formula pins each
+release to its tag and commit.
+
+## 0.24.0 — 2026-10-27
 
 - Приложение и сайт теперь называются OpenConnect for Mac. Это независимый
   проект, не официальный продукт OpenConnect. Команды `ocbar`, `.ocbar`-профили,
@@ -9,9 +12,6 @@
   сохраняет старый путь для уже настроенного автозапуска.
 - Копия приложения для лаунчера обновляет также название и ресурсы при той же
   версии исполняемого файла.
-
-All notable changes. Versions are git tags; the Homebrew formula pins each
-release to its tag and commit.
 
 ## 0.23.1 — 2026-10-25
 
