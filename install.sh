@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install ocbar and optionally a colleague's profile. Compatible with macOS Bash 3.2.
+# Install OpenConnect for Mac and optionally a colleague's profile. Compatible with macOS Bash 3.2.
 set -euo pipefail
 
 usage() {
@@ -15,7 +15,7 @@ Usage: /bin/bash install.sh [options]
 Run as your regular macOS user, not with sudo. The helper installer asks for sudo.
 EOF
 }
-fail() { printf 'ocbar installer: %s\n' "$*" >&2; exit 1; }
+fail() { printf 'OpenConnect for Mac installer: %s\n' "$*" >&2; exit 1; }
 ask() {
     local answer
     printf '%s [y/N] ' "$1" > /dev/tty
@@ -156,5 +156,5 @@ if [ -n "$language" ]; then defaults write ru.ocbar.app InterfaceLanguage -strin
 sudo -- "$ocbar" install < /dev/tty
 if [ "$autostart" = 1 ]; then "$ocbar" app autostart on; fi
 if [ "$start" = 1 ]; then "$ocbar" app stop; "$ocbar" app start; fi
-printf '\nInstalled. Open your .ocbar profile, enter your username and connect.\n'
-printf 'Готово. Откройте файл .ocbar, введите свой логин и подключитесь.\n'
+printf '\nOpenConnect for Mac installed. Open your .ocbar profile, enter your username and connect.\n'
+printf 'OpenConnect for Mac установлен. Откройте файл .ocbar, введите свой логин и подключитесь.\n'

@@ -97,7 +97,7 @@ struct DiagnosticsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(L("Уборка следов прошлой сессии")).font(.system(size: 12, weight: .medium))
                 Text(L("Снимает то, что осталось после падения: наши зоны в /etc/resolver, наши маршруты, ")
-                     + L("системный SOCKS без живого прокси. Системный DNS не трогает — ocbar его не ставит. ")
+                     + L("системный SOCKS без живого прокси. Системный DNS не трогает — OpenConnect for Mac его не ставит. ")
                      + L("Живой туннель и чужой openconnect не трогает. То же, что `ocbar cleanup`."))
                     .font(.system(size: 11)).foregroundStyle(Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)

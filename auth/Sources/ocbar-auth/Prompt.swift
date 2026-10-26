@@ -36,7 +36,7 @@ final class PromptDialog {
         // говорит; она есть в журнале входа.
         let info = secure
             ? (profile.isEmpty ? L("Введите пароль VPN.") : L("Введите пароль VPN для профиля «%@».", profile))
-                + " " + L("Чтобы не спрашивать каждый раз, сохраните его: настройки ocbar → Профили → Вход.")
+                + " " + L("Чтобы не спрашивать каждый раз, сохраните его: настройки OpenConnect for Mac → Профили → Вход.")
             : (profile.isEmpty ? L("Введите код из SMS.") : L("Введите код из SMS для профиля «%@».", profile))
         alert.informativeText = info
         alert.addButton(withTitle: L("Войти"))

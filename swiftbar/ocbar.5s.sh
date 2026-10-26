@@ -1,6 +1,6 @@
 #!/bin/bash
-# <xbar.title>ocbar</xbar.title>
-# <xbar.desc>Статус и управление OpenConnect VPN (ocbar)</xbar.desc>
+# <xbar.title>OpenConnect for Mac</xbar.title>
+# <xbar.desc>Статус и управление OpenConnect for Mac VPN</xbar.desc>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
@@ -29,7 +29,7 @@ for c in "${OCBAR_BIN:-}" "$SELF_DIR/../bin/ocbar" "$SELF_DIR/../../bin/ocbar" \
 done
 if [ -z "$OCBAR" ]; then
     echo "| sfimage=exclamationmark.triangle sfcolor=red"; echo "---"
-    echo "ocbar не найден | color=red"
+    echo "OpenConnect for Mac не найден | color=red"
     echo "Искал рядом с $SELF и в PATH Homebrew | color=gray size=11"
     echo "Задать путь явно: OCBAR_BIN в окружении плагина | color=gray size=11"
     exit 0
@@ -92,8 +92,8 @@ case "$state" in
         echo "Отменить | $(act) param1=disconnect" ;;
     *)
         if [ "$foreign" = 1 ]; then
-            echo "Работает чужой openconnect (не ocbar) | color=gray"
-            echo "Это, скорее всего, vpn_manager.sh — ocbar его не трогает | color=gray size=11"
+            echo "Работает чужой openconnect (не OpenConnect for Mac) | color=gray"
+            echo "Это, скорее всего, vpn_manager.sh — OpenConnect for Mac его не трогает | color=gray size=11"
         else
             echo "Отключён | color=gray"
         fi

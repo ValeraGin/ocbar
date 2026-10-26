@@ -53,10 +53,10 @@
 "Войти и запомнить вход…" = "Sign in and learn the form…";
 "Не подключаться" = "Stay disconnected";
 "Подключить и запомнить вход…" = "Connect and learn the form…";
-"Настроить ocbar…" = "Set up ocbar…";
+"Настроить OpenConnect for Mac…" = "Set up OpenConnect for Mac…";
 "Настройки…" = "Settings…";
 "Диагностика и журналы…" = "Diagnostics and logs…";
-"Выйти из ocbar" = "Quit ocbar";
+"Выйти из OpenConnect for Mac" = "Quit OpenConnect for Mac";
 "туннель останется" = "the tunnel stays up";
 "Назад" = "Back";
 "Сети в туннеле" = "Networks in the tunnel";
@@ -79,12 +79,12 @@
 "Нужен вход" = "Sign-in needed";
 "Отключено" = "Disconnected";
 "Чужой openconnect" = "Someone else's openconnect";
-"поднят не через ocbar" = "not started by ocbar";
-"Не найден клиент ocbar" = "The ocbar client is missing";
+"поднят не через OpenConnect for Mac" = "not started by OpenConnect for Mac";
+"Не найден клиент OpenConnect for Mac" = "The OpenConnect for Mac client is missing";
 "подключение недоступно" = "connecting is not possible";
 
 /* Уведомления */
-"Система не показывает уведомления ocbar." = "The system is not showing ocbar notifications.";
+"Система не показывает уведомления OpenConnect for Mac." = "The system is not showing OpenConnect for Mac notifications.";
 "Разрешить…" = "Allow…";
 "Показывать" = "Show";
 "Одно и то же уведомление — не чаще раза в 10 минут. Стиль и звук — в Системных настройках." = "The same notification comes at most once every 10 minutes. Style and sound are in System Settings.";
@@ -178,18 +178,18 @@
 "Рабочий" = "Work";
 "необязательно" = "optional";
 "Импортировать файл…" = "Import a file…";
-"Профиль ocbar (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)." = "An ocbar profile (.ocbar) — your own or from a colleague — or a Cisco AnyConnect profile (.xml).";
+"Профиль OpenConnect for Mac (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)." = "An OpenConnect for Mac profile (.ocbar) — your own or from a colleague — or a Cisco AnyConnect profile (.xml).";
 "Позже" = "Later";
 
 /* Трафик */
 
 /* Состояния, плашки, редактор — часть вторая */
 "из исходников (без бандла)" = "from source (no bundle)";
-"Клиент ocbar" = "ocbar client";
+"Клиент OpenConnect for Mac" = "OpenConnect for Mac client";
 "Хелпер (root)" = "Helper (root)";
 "Копия для root" = "Copy for root";
 "Аутентификатор" = "Authenticator";
-"как ocbar" = "same as ocbar";
+"как OpenConnect for Mac" = "same as OpenConnect for Mac";
 "Пауза — ⌥⌘P из любой программы." = "Pause with ⌥⌘P from any app.";
 "⌥⌘P занято другой программой: пауза только из меню." = "⌥⌘P is taken by another app: pause from the menu only.";
 "Каталог конфигурации" = "Configuration folder";
@@ -203,7 +203,7 @@
 "супервизор не запущен" = "supervisor is not running";
 "Адреса, домены и логины в отчёте заменены метками. Перед отправкой посмотрите файл." = "Addresses, domains and logins in the report are masked. Look through the file before sending it.";
 "отчёт не сохранился: " = "the report was not saved: ";
-"системный SOCKS без живого прокси. Системный DNS не трогает — ocbar его не ставит. " = "a system-wide SOCKS with no live proxy. System DNS is left alone — ocbar never sets it. ";
+"системный SOCKS без живого прокси. Системный DNS не трогает — OpenConnect for Mac его не ставит. " = "a system-wide SOCKS with no live proxy. System DNS is left alone — OpenConnect for Mac never sets it. ";
 "Живой туннель и чужой openconnect не трогает. То же, что `ocbar cleanup`." = "A live tunnel and someone else's openconnect are left alone. Same as `ocbar cleanup`.";
 "Значок появится в строке меню сам; туннель при этом не поднимается." = "The icon appears in the menu bar by itself; the tunnel is not brought up.";
 "Всегда: %@" = "Always: %@";
@@ -229,14 +229,14 @@
 "Связи нет %@ с — восстанавливаю сессию. Повторный вход не нужен." = "No connection for %@ s — restoring the session. No new sign-in needed.";
 "Сети и DNS временно сняты, сессия жива — возобновление без входа." = "Networks and DNS are removed for now, the session is alive — resuming needs no sign-in.";
 "Сессия истекла, автоматически войти не удалось. Автоподключение ждёт вас." = "The session expired and signing in automatically failed. Auto-connect is waiting for you.";
-"Это подключение ocbar не управляет и не трогает." = "ocbar does not manage or touch this connection.";
+"Это подключение OpenConnect for Mac не управляет и не трогает." = "OpenConnect for Mac does not manage or touch this connection.";
 "Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN." = "Looked in /opt/homebrew/bin, /usr/local/bin and next to the app. The path can be set with OCBAR_BIN.";
 "Сессия истекла, молча войти не удалось" = "The session expired and signing in silently failed";
 "Проблемы со связью и доступом" = "Connection and access problems";
 "Связь потеряна, доступ не проходит, SOCKS не включён" = "Connection lost, access fails, SOCKS not set";
 "Восстановление соединения" = "Connection restored";
 "Связь вернулась, пауза и возобновление, перезапуск прокси" = "Connection is back, pause and resume, proxy restarted";
-"Так выглядят уведомления ocbar." = "This is what ocbar notifications look like.";
+"Так выглядят уведомления OpenConnect for Mac." = "This is what OpenConnect for Mac notifications look like.";
 "Режим" = "Mode";
 "Несохранённые правки в «%@»" = "Unsaved changes in “%@”";
 "Файл профиля изменился на диске" = "The profile file changed on disk";
@@ -249,7 +249,7 @@
 "Подключиться этим профилем" = "Connect with this profile";
 "Переключиться на «%@»?" = "Switch to “%@”?";
 "Сейчас подключён «%@». Он отключится, для нового профиля потребуется вход." = "“%@” is connected now. It will disconnect, and the new profile will need a sign-in.";
-"Пароль ocbar подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может." = "ocbar fills in the password and asks for the SMS code in a window. Such a profile can never reconnect silently.";
+"Пароль OpenConnect for Mac подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может." = "OpenConnect for Mac fills in the password and asks for the SMS code in a window. Such a profile can never reconnect silently.";
 "Пароль вводит человек — молчаливое переподключение работать не будет." = "You type the password — silent reconnection will not work.";
 "Секреты хранятся вне профиля: в связке ключей или в KeePassXC." = "Secrets live outside the profile: in the keychain or in KeePassXC.";
 "Туннель" = "Tunnel";
@@ -258,7 +258,7 @@
 "Для программ с поддержкой SOCKS" = "For apps that speak SOCKS";
 "Нужен ocproxy: brew install ocproxy" = "Needs ocproxy: brew install ocproxy";
 "Без прав администратора" = "No administrator rights";
-"Прокси ставится на активную сетевую службу и снимается при отключении. Чужой SOCKS ocbar не перезаписывает." = "The proxy is set on the active network service and removed on disconnect. ocbar never overwrites someone else's SOCKS.";
+"Прокси ставится на активную сетевую службу и снимается при отключении. Чужой SOCKS OpenConnect for Mac не перезаписывает." = "The proxy is set on the active network service and removed on disconnect. OpenConnect for Mac never overwrites someone else's SOCKS.";
 "Система не трогается: SOCKS 127.0.0.1:%@ указывают тем программам, которым он нужен." = "The system is left alone: point the apps that need it at SOCKS 127.0.0.1:%@.";
 
 /* Редактор, разметка формы, мастер — часть третья */
@@ -283,7 +283,7 @@
 "зоны" = "zones";
 "зон" = "zones";
 "сохранён в связке ключей" = "saved in the keychain";
-"не сохранён — ocbar предложит сохранить после входа" = "not saved — ocbar will offer to save it after a sign-in";
+"не сохранён — OpenConnect for Mac предложит сохранить после входа" = "not saved — OpenConnect for Mac will offer to save it after a sign-in";
 "секрет в связке ключей" = "secret in the keychain";
 "источник кода не настроен — «Подключить и запомнить вход…»" = "no source for the code — use “Connect and learn the form…”";
 "Укажите имя файла профиля — размечать нужно его форму входа." = "Set the profile file name — the form of that profile is what gets learned.";
@@ -308,7 +308,7 @@
 "клиент не принимает профиль: " = "the client does not accept this profile: ";
 "не удалось записать: %@" = "could not write: %@";
 "сохранено" = "saved";
-"профиль %@ переведён в файл — теперь ocbar читает его оттуда" = "profile %@ converted to a file — ocbar now reads it from there";
+"профиль %@ переведён в файл — теперь OpenConnect for Mac читает его оттуда" = "profile %@ converted to a file — OpenConnect for Mac now reads it from there";
 "перевод не удался: %@" = "converting failed: %@";
 "Системная часть" = "System component";
 "Профиль" = "Profile";
@@ -323,16 +323,16 @@
 "не установлена" = "not installed";
 "Проверяю…" = "Checking…";
 "Проверить ещё раз" = "Check again";
-"После обновления ocbar помощника обновляет та же команда." = "After an ocbar update the same command updates the helper.";
+"После обновления OpenConnect for Mac помощника обновляет та же команда." = "After an OpenConnect for Mac update the same command updates the helper.";
 "Выполните команду в Терминале: sudo спросит пароль там, приложение само этого сделать не может. Режиму «Прокси SOCKS» помощник не нужен." = "Run the command in Terminal: sudo asks for your password there, the app cannot do it itself. The SOCKS proxy mode needs no helper.";
 "Добавьте профиль" = "Add a profile";
 "Профиль сохранён" = "Profile saved";
 "Адрес — как в штатном клиенте: хост и группа. Сети и DNS можно добавить позже." = "The address is as in the vendor client: host and group. Networks and DNS can be added later.";
 "Файл %@.ocbar. Изменить его можно в «Настройках → Профили»." = "File %@.ocbar. You can change it in Settings → Profiles.";
-"Пароль ocbar подставит из связки ключей, код из SMS спросит окном." = "ocbar fills in the password from the keychain and asks for the SMS code in a window.";
-"Пароль и источник кода ocbar предложит сохранить после первого входа." = "ocbar will offer to save the password and the source of the code after the first sign-in.";
-"Дальше ocbar подключается автоматически; если понадобится вход, он скажет в меню." = "From now on ocbar connects by itself; if a sign-in is needed it says so in the menu.";
-"Войдите как обычно, руками. ocbar запомнит форму входа и предложит сохранить пароль и источник кода." = "Sign in as usual, by hand. ocbar learns the form and offers to save the password and the source of the code.";
+"Пароль OpenConnect for Mac подставит из связки ключей, код из SMS спросит окном." = "OpenConnect for Mac fills in the password from the keychain and asks for the SMS code in a window.";
+"Пароль и источник кода OpenConnect for Mac предложит сохранить после первого входа." = "OpenConnect for Mac will offer to save the password and the source of the code after the first sign-in.";
+"Дальше OpenConnect for Mac подключается автоматически; если понадобится вход, он скажет в меню." = "From now on OpenConnect for Mac connects by itself; if a sign-in is needed it says so in the menu.";
+"Войдите как обычно, руками. OpenConnect for Mac запомнит форму входа и предложит сохранить пароль и источник кода." = "Sign in as usual, by hand. OpenConnect for Mac learns the form and offers to save the password and the source of the code.";
 "Продолжить" = "Continue";
 "Сохранить и продолжить" = "Save and continue";
 "Готово" = "Done";
@@ -369,7 +369,7 @@
 "вводите при входе" = "you type it at sign-in";
 "из SMS — вводите при входе" = "from SMS — you type it at sign-in";
 "Пароль VPN" = "VPN password";
-"Ляжет в связку ключей macOS. ocbar подставит его при входе." = "It goes to the macOS keychain. ocbar fills it in at sign-in.";
+"Ляжет в связку ключей macOS. OpenConnect for Mac подставит его при входе." = "It goes to the macOS keychain. OpenConnect for Mac fills it in at sign-in.";
 "Код второго фактора" = "Second-factor code";
 "Ссылка otpauth://… из QR или ключ настройки, который показывает портал вместо QR." = "The otpauth://… link from the QR code, or the setup key the portal shows instead of a QR code.";
 "Добавить" = "Add";
@@ -381,7 +381,7 @@
 "код не добавлен: %@" = "the code was not added: %@";
 "%@ с" = "%@ s";
 "одноразовый код %@" = "one-time code %@";
-"ocbar не найден" = "ocbar is not found";
+"OpenConnect for Mac не найден" = "OpenConnect for Mac is not found";
 "Основной" = "Main";
 "Любые устройства" = "Any device";
 "Из офиса" = "Office";
@@ -390,10 +390,10 @@
 "пароль + код из SMS" = "password + SMS code";
 
 /* Строки, которые скан не видел до 0.17.6: подписи действий, ошибки, подсказки редактора. */
-"Настройка ocbar" = "ocbar Settings";
-"Первый запуск ocbar" = "ocbar Setup";
-"Журналы ocbar" = "ocbar Logs";
-"Диагностика ocbar" = "ocbar Diagnostics";
+"Настройка OpenConnect for Mac" = "OpenConnect for Mac Settings";
+"Первый запуск OpenConnect for Mac" = "OpenConnect for Mac Setup";
+"Журналы OpenConnect for Mac" = "OpenConnect for Mac Logs";
+"Диагностика OpenConnect for Mac" = "OpenConnect for Mac Diagnostics";
 "файла нет: %@" = "no such file: %@";
 "нет доступа на чтение: %@" = "no read access: %@";
 "журнал пуст" = "the log is empty";
@@ -440,7 +440,7 @@
 "порт SOCKS %@ вне диапазона 1024-65535" = "SOCKS port %@ is outside 1024-65535";
 "порт 10808 часто занят другим прокси-клиентом — лучше другой" = "port 10808 is often taken by another proxy client — better pick another";
 "порт SOCKS «%@» — не число" = "SOCKS port “%@” is not a number";
-"SystemProxy = «%@» — ocbar включает системный SOCKS только при on, так что сейчас это off" = "SystemProxy = “%@” — ocbar sets the system-wide SOCKS only for on, so this means off";
+"SystemProxy = «%@» — OpenConnect for Mac включает системный SOCKS только при on, так что сейчас это off" = "SystemProxy = “%@” — OpenConnect for Mac sets the system-wide SOCKS only for on, so this means off";
 "системный SOCKS имеет смысл только в прокси-режиме" = "the system-wide SOCKS only makes sense in proxy mode";
 "путь CsdWrapper с пробелом — хелпер берёт только имя файла из своего каталога" = "CsdWrapper path has a space — the helper takes only a file name from its own directory";
 "правило «%@» — бывает stop <сел>, fill username|password|totp|manual <сел>, click <сел>, click! <сел>" = "rule “%@” — it can be stop <sel>, fill username|password|totp|manual <sel>, click <sel>, click! <sel>";
@@ -534,7 +534,7 @@
 "Профиль с таким именем уже есть. Выберите другое название." = "A profile with this name already exists. Choose another name.";
 
 "Мастер настройки и проверка доступа…" = "Setup wizard and access check…";
-"Открыть профиль ocbar" = "Open an ocbar profile";
+"Открыть профиль OpenConnect for Mac" = "Open an OpenConnect for Mac profile";
 "Подготовьте системную часть для этого профиля" = "Set up the system components for this profile";
 "Выберите полученный профиль .ocbar или Cisco .xml" = "Choose the .ocbar or Cisco .xml profile you received";
 "Дождитесь завершения текущего действия и откройте файл ещё раз." = "Wait for the current action to finish, then open the file again.";
@@ -568,3 +568,5 @@
 "Подключиться" = "Connect";
 "Подготовка отменена или завершилась ошибкой. Повторите подключение, чтобы попробовать снова." = "Setup was cancelled or failed. Connect again to retry.";
 "Настроить вручную…" = "Set up manually…";
+
+"Независимый проект. Не связан с проектом OpenConnect или Cisco." = "Independent project. Not affiliated with the OpenConnect project or Cisco.";

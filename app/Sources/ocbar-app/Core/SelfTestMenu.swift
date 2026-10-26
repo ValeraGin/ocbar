@@ -30,7 +30,7 @@ extension SelfTest {
         let netItems = nets?.submenu?.items ?? []
         check("меню: сети — подменю с галочками", netItems.count == 3 && netItems.filter { $0.state == .on }.count == 2,
               netItems.map { "\($0.title)=\($0.state == .on)" }.joined(separator: ", "))
-        check("меню: «Выйти из ocbar» с ⌘Q", connected.items.contains { $0.title == L0("Выйти из ocbar") && $0.keyEquivalent == "q" })
+        check("меню: «Выйти из ocbar» с ⌘Q", connected.items.contains { $0.title == L0("Выйти из OpenConnect for Mac") && $0.keyEquivalent == "q" })
         let width = connected.size.width
         check("меню: ширина по пунктам, не шире 340", width > 150 && width <= 340, "\(Int(width))")
 

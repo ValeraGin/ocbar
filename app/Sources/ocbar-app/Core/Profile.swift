@@ -560,7 +560,7 @@ enum ProfileCheck {
         }
         let sys = d.systemProxyValue.trimmed
         if !sys.isEmpty, sys != "on", sys != "off" {
-            warn(L("SystemProxy = «%@» — ocbar включает системный SOCKS только при on, так что сейчас это off", sys))
+            warn(L("SystemProxy = «%@» — OpenConnect for Mac включает системный SOCKS только при on, так что сейчас это off", sys))
         }
         if d.systemProxy && d.mode != "proxy" {
             warn(L("системный SOCKS имеет смысл только в прокси-режиме"))

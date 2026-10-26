@@ -89,7 +89,7 @@ final class HostedMenu: NSObject {
         menu = NSHostingMenu(rootView: MenuContent(store: store, model: MenuModel(store: store)))
         super.init()
         statusItem.menu = menu
-        statusItem.button?.setAccessibilityTitle("ocbar")
+        statusItem.button?.setAccessibilityTitle("OpenConnect for Mac")
         // Делегата у NSHostingMenu до macOS 15 нет: открытие и закрытие меню
         // узнаём по уведомлениям самого NSMenu.
         let center = NotificationCenter.default
@@ -189,7 +189,7 @@ struct MenuContent: View {
             }
             .disabled(true)
             if s.profiles.isEmpty, s.presentation != .missing {
-                Button(L("Настроить ocbar…")) { WindowBridge.open(WindowID.setup) }
+                Button(L("Настроить OpenConnect for Mac…")) { WindowBridge.open(WindowID.setup) }
             }
         } else {
             Section(L("Профили")) {
@@ -419,7 +419,7 @@ struct MenuContent: View {
         Button {
             NSApplication.shared.terminate(nil)
         } label: {
-            Text(L("Выйти из ocbar"))
+            Text(L("Выйти из OpenConnect for Mac"))
             if up { Text(L("туннель останется")) }
         }
         .keyboardShortcut("q")

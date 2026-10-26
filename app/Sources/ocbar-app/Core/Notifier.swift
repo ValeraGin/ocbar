@@ -148,7 +148,7 @@ enum Notifier {
             title = String(title.dropFirst(prefix.count)); break
         }
         guard !title.isEmpty || !body.isEmpty else { return .rejected("пустое") }  // i18n: не интерфейс
-        return .show(title: title.isEmpty ? "ocbar" : title, body: body)
+        return .show(title: title.isEmpty ? "OpenConnect for Mac" : title, body: body)
     }
 
     static func parse(_ url: URL) -> (title: String, body: String)? {

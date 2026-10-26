@@ -58,7 +58,7 @@ struct SettingsWindow: View {
         VStack(alignment: .leading, spacing: 0) {
         HStack(spacing: 10) {
             AppMark(size: 30)
-            Text("ocbar").font(.system(size: 15, weight: .semibold))
+            Text("OpenConnect for Mac").font(.system(size: 15, weight: .semibold))
         }
         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 8)
         List(selection: $tab) {

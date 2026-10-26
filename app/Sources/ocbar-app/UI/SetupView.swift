@@ -69,7 +69,7 @@ struct SetupView: View {
         ZStack(alignment: .top) {
             HStack(spacing: 10) {
                 AppMark(size: 34)
-                Text("ocbar").font(.system(size: 16, weight: .semibold))
+                Text("OpenConnect for Mac").font(.system(size: 16, weight: .semibold))
                 Spacer()
             }
             .padding(.horizontal, 20).padding(.top, 14)
@@ -157,7 +157,7 @@ struct SetupView: View {
                 } footer: {
                     Footnote(store.helperWarning
                              ?? (helperReady
-                                 ? L("После обновления ocbar помощника обновляет та же команда.")
+                                 ? L("После обновления OpenConnect for Mac помощника обновляет та же команда.")
                                  : L("Выполните команду в Терминале: sudo спросит пароль там, приложение само этого сделать не может. Режиму «Прокси SOCKS» помощник не нужен.")))
                 }
             }
@@ -182,7 +182,7 @@ struct SetupView: View {
                         }
                     }
                 } header: { Text(L("Есть профиль от коллеги?")) } footer: {
-                    Footnote(L("Профиль ocbar (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)."))
+                    Footnote(L("Профиль OpenConnect for Mac (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)."))
                 }
                 if saved != nil && (checkingSystem || systemState?.ready == false) {
                     Section {
@@ -206,8 +206,8 @@ struct SetupView: View {
                     Text(L("Вход"))
                 } footer: {
                     Footnote(auth == "password"
-                             ? L("Пароль ocbar подставит из связки ключей, код из SMS спросит окном.")
-                             : L("Пароль и источник кода ocbar предложит сохранить после первого входа."))
+                             ? L("Пароль OpenConnect for Mac подставит из связки ключей, код из SMS спросит окном.")
+                             : L("Пароль и источник кода OpenConnect for Mac предложит сохранить после первого входа."))
                 }
 
             }
@@ -223,8 +223,8 @@ struct SetupView: View {
         VStack(spacing: 18) {
             pageTitle(connectedHere ? L("VPN подключён") : L("Первый вход"),
                       connectedHere
-                      ? L("Дальше ocbar подключается автоматически; если понадобится вход, он скажет в меню.")
-                      : L("Войдите как обычно, руками. ocbar запомнит форму входа и предложит сохранить пароль и источник кода."))
+                      ? L("Дальше OpenConnect for Mac подключается автоматически; если понадобится вход, он скажет в меню.")
+                      : L("Войдите как обычно, руками. OpenConnect for Mac запомнит форму входа и предложит сохранить пароль и источник кода."))
             if connectedHere {
                 Label(L("Соединение со шлюзом установлено"), systemImage: "checkmark.circle.fill").foregroundStyle(Palette.ok)
                 VStack(alignment: .leading, spacing: 10) {

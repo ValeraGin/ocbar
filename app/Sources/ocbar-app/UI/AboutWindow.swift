@@ -23,9 +23,11 @@ struct AboutView: View {
                 HStack(spacing: 14) {
                     AppMark(size: 56)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("ocbar").font(.system(size: 20, weight: .semibold))
+                        Text("OpenConnect for Mac").font(.system(size: 20, weight: .semibold))
                         Text(L("Клиент OpenConnect для macOS: SSO, split DNS, split tunneling"))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(L("Независимый проект. Не связан с проектом OpenConnect или Cisco."))
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
                         Text(L("ValeraGin — Ignatkovich Valery · лицензия MIT"))
                             .font(.system(size: 11)).foregroundStyle(.tertiary)
                     }
@@ -34,11 +36,11 @@ struct AboutView: View {
             }
             Section {
                 part(L("Приложение"), AppInfo.version, Bundle.main.executablePath ?? "")
-                part(L("Клиент ocbar"), v["ocbar"], v["ocbar_path"])
+                part(L("Клиент OpenConnect for Mac"), v["ocbar"], v["ocbar_path"])
                 part(L("Хелпер (root)"), helperVersion, v["helper_path"])
                 part("openconnect", v["openconnect"], v["openconnect_path"])
                 part(L("Копия для root"), nil, v["openconnect_root"])
-                part(L("Аутентификатор"), L("как ocbar"), v["auth_path"])
+                part(L("Аутентификатор"), L("как OpenConnect for Mac"), v["auth_path"])
             } header: {
                 Text(L("Компоненты"))
             } footer: {

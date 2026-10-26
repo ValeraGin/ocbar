@@ -1,6 +1,6 @@
-<img src="assets/mark.svg" width="72" height="72" alt="ocbar">
+<img src="assets/mark.svg" width="72" height="72" alt="OpenConnect for Mac">
 
-# ocbar
+# OpenConnect for Mac
 
 [Website](https://valeragin.github.io/ocbar/)
 
@@ -15,9 +15,9 @@ native macOS menu. The supervisor reconnects after sleep and network changes.
 
 Free under the MIT license. Install through Homebrew, which builds the app
 on your Mac. Requires macOS 14.4+ and access to your own compatible VPN gateway;
-ocbar does not provide VPN servers.
+OpenConnect for Mac does not provide VPN servers.
 
-![ocbar menu: connect, toggle a network, pause](assets/demo.gif)
+![OpenConnect for Mac menu: connect, toggle a network, pause](assets/demo.gif)
 
 <sub>The real menu on a demo profile: connect, switch off a network, pause.</sub>
 
@@ -28,8 +28,13 @@ support English and Russian, selectable in Settings; the longer guides,
 Russian; the first-connection problems are also in
 [TROUBLESHOOTING.en.md](TROUBLESHOOTING.en.md). Version history is in [CHANGELOG.md](CHANGELOG.md).
 
-> Not affiliated with Cisco. "AnyConnect" is used only to describe protocol
-> compatibility.
+> Independent project, not an official OpenConnect product. Not affiliated with
+> the OpenConnect project or Cisco. “AnyConnect” describes protocol compatibility.
+
+Formerly **ocbar**. The CLI and Homebrew formula remain `ocbar`, the app bundle
+in Homebrew is still `ocbar.app`. The launcher copy is named
+`OpenConnect for Mac.app`; a hidden link preserves the old path for existing
+login items. Existing `.ocbar` profiles and settings keep working. Repository and website URLs are unchanged.
 
 ## Quick install
 
@@ -40,7 +45,7 @@ Open Terminal and run:
 ```
 
 The [installer](install.sh) offers to install missing Apple Command Line Tools
-and Homebrew, installs ocbar and its helper, and opens the menu app. It asks for
+and Homebrew, installs OpenConnect for Mac and its helper, and opens the menu app. It asks for
 administrator access when needed. Share one `.ocbar` file and the
 [profile installation guide](https://valeragin.github.io/ocbar/guide/#profile)
 with a teammate. After installation, double-click their `.ocbar` file, enter their
@@ -53,7 +58,7 @@ Choose English, Russian or System default in Settings → General → Interface 
 OpenConnect speaks the AnyConnect protocol, but on macOS the gaps are
 everything around it: gateways that only allow SAML login, a
 `vpnc-script` that routes all traffic and rewrites DNS, no reconnect after
-sleep, and no menu bar UI. ocbar fills those gaps without a kernel extension,
+sleep, and no menu bar UI. OpenConnect for Mac fills those gaps without a kernel extension,
 a root daemon, or an Apple Developer ID.
 
 ## How it works
@@ -227,7 +232,7 @@ work; do not put quotes around the value in the profile.
 The script runs as your user before SSO, using OpenConnect's wrapper
 arguments and `CSD_HOSTNAME`, `CSD_TOKEN`, `CSD_SHA256` environment variables.
 It submits the prepared report itself; stdout is diagnostic output, not a
-report for ocbar to submit. ocbar waits for the gateway, then resumes SSO.
+report for OpenConnect for Mac to submit. OpenConnect for Mac waits for the gateway, then resumes SSO.
 A required HostScan check without a configured wrapper stops before SSO.
 Missing files, execution errors and non-zero exit codes also stop sign-in.
 Whether the report satisfies the device policy is decided by the gateway.
@@ -264,7 +269,7 @@ SSO gateways running on localhost.
 
 CSD wrappers receive `http_proxy`, `https_proxy`, `all_proxy` and uppercase
 variants, with `NO_PROXY` cleared. Custom scripts must honor these variables;
-ocbar does not intercept arbitrary sockets opened by a script. The proxy must
+OpenConnect for Mac does not intercept arbitrary sockets opened by a script. The proxy must
 already be running. An empty setting preserves existing connection behavior.
 
 ## Commands
@@ -338,10 +343,10 @@ They run in CI on every push.
 | macOS 14.4, Apple Silicon | deployment target; no real-device verification |
 | Intel Macs | expected to work; Homebrew prefix is `/usr/local`, which the helper checks for ownership. Not verified |
 
-Tried ocbar with your gateway? [Tell whether it worked](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml) — one short report
+Tried OpenConnect for Mac with your gateway? [Tell whether it worked](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml) — one short report
 per gateway and sign-in method fills the compatibility table.
 
-No telemetry, crash reporting or analytics. ocbar talks to your gateway and
+No telemetry, crash reporting or analytics. OpenConnect for Mac talks to your gateway and
 identity provider; configured resource checks contact the resource you choose.
 Logs stay under `~/Library/Logs/ocbar`. Installing and updating downloads code
 from GitHub and Homebrew; the app has no automatic update check.
@@ -349,7 +354,7 @@ from GitHub and Homebrew; the app has no automatic update check.
 ## Limitations
 
 - Password groups (`Auth = password`: login, password and an SMS code) need a
-  human for the code: ocbar fills in the password and asks for the SMS code in
+  human for the code: OpenConnect for Mac fills in the password and asks for the SMS code in
   a small window, so they never reconnect silently.
 - Full tunnel is configured as `0.0.0.0/1` + `128.0.0.0/1`; there is no
   "route everything and rewrite system DNS" mode.

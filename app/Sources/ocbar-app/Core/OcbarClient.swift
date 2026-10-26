@@ -100,7 +100,7 @@ final class OcbarClient: @unchecked Sendable {
     /// Сохранить пароль в связке ключей. Пароль идёт на стандартный вход
     /// клиента, в аргументах его нет. nil — сохранено, иначе причина.
     func savePassword(profile: String, password: String) -> String? {
-        guard let binary else { return L("ocbar не найден") }
+        guard let binary else { return L("OpenConnect for Mac не найден") }
         let r = Shell.run(binary, ["secret", "set-password", profile, "--stdin"], stdin: password + "\n", timeout: 20)
         return r.code == 0 ? nil : (r.err.isEmpty ? r.out : r.err).trimmed
     }
@@ -111,7 +111,7 @@ final class OcbarClient: @unchecked Sendable {
     /// Добавить код второго фактора: QR с экрана, с камеры или ссылкой.
     /// Ответ — текущий код (для сверки) или причина отказа.
     func addTOTP(profile: String, from source: TOTPSource, text: String? = nil) -> TOTPAdded {
-        guard let binary else { return .failure(L("ocbar не найден")) }
+        guard let binary else { return .failure(L("OpenConnect for Mac не найден")) }
         // Рамку на экране и камеру человек может держать долго.
         let r = Shell.run(binary, ["secret", "add-totp", profile, source.rawValue],
                           stdin: text.map { $0 + "\n" }, timeout: 300)
@@ -153,7 +153,7 @@ final class OcbarClient: @unchecked Sendable {
     }
 
     func action(_ args: [String], timeout: TimeInterval = 60, cancel: CancelToken? = nil) -> ActionResult {
-        guard let binary else { return .failed(127, L("ocbar не найден")) }
+        guard let binary else { return .failed(127, L("OpenConnect for Mac не найден")) }
         let r = Shell.run(binary, args, timeout: timeout, cancel: cancel)
         if r.code == Shell.cancelledCode { return .cancelled }
         if r.code == 0 { return .ok(r.out.trimmed) }
@@ -227,7 +227,7 @@ final class OcbarClient: @unchecked Sendable {
     }
 
     func doctor() -> String {
-        guard let binary else { return L("ocbar не найден") }
+        guard let binary else { return L("OpenConnect for Mac не найден") }
         let r = Shell.run(binary, ["doctor"], timeout: 60)
         let text = (r.out + (r.err.isEmpty ? "" : "\n" + r.err)).trimmed
         return text.isEmpty ? L("ocbar doctor ничего не напечатал (код %@)", r.code) : text

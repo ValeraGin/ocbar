@@ -102,7 +102,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
         }
         var candidates = entries.filter(\.isTOTP)
         if candidates.isEmpty {
-            return (nil, L("это HOTP (код по счётчику) — ocbar его не ведёт"))
+            return (nil, L("это HOTP (код по счётчику) — OpenConnect for Mac его не ведёт"))
         }
         if let want = select?.lowercased(), !want.isEmpty {
             let all = candidates
@@ -172,7 +172,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
 
         window = NSWindow(contentRect: content.frame, styleMask: [.titled, .closable],
                           backing: .buffered, defer: false)
-        window.title = L("ocbar — QR второго фактора с камеры")
+        window.title = L("OpenConnect for Mac — QR второго фактора с камеры")
         window.contentView = content
         window.delegate = self
         window.isReleasedWhenClosed = false
@@ -198,7 +198,7 @@ final class QRCameraWindow: NSObject, NSWindowDelegate {
             }
             if granted != true { return (nil, L("доступ к камере не дан — секрет можно вставить или выбрать файл QR")) }
         default:
-            return (nil, L("доступ к камере запрещён: Системные настройки → Конфиденциальность и безопасность → Камера — разрешите ocbar или терминалу, из которого входите"))
+            return (nil, L("доступ к камере запрещён: Системные настройки → Конфиденциальность и безопасность → Камера — разрешите OpenConnect for Mac или терминалу, из которого входите"))
         }
         devices = QRCameraScanner.cameras()
         guard let device = QRCameraScanner.preferred(devices) else { return (nil, L("камера не найдена")) }

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Приложение и сайт теперь называются OpenConnect for Mac. Это независимый
+  проект, не официальный продукт OpenConnect. Команды `ocbar`, `.ocbar`-профили,
+  пути настроек, идентификаторы macOS и адреса проекта сохранены.
+- Копия в лаунчере называется `OpenConnect for Mac.app`. Скрытая ссылка
+  сохраняет старый путь для уже настроенного автозапуска.
+- Копия приложения для лаунчера обновляет также название и ресурсы при той же
+  версии исполняемого файла.
+
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 

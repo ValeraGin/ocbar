@@ -425,7 +425,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
         stack.addArrangedSubview(rulesBox)
         stack.addArrangedSubview(label(input.summary))
         if input.manualCount > 0 {
-            stack.addArrangedSubview(label(L("Полей, которые вводите только вы: %@. На них ocbar остановится и подождёт вас — пустыми они не уйдут.", input.manualCount), color: .systemOrange))
+            stack.addArrangedSubview(label(L("Полей, которые вводите только вы: %@. На них OpenConnect for Mac остановится и подождёт вас — пустыми они не уйдут.", input.manualCount), color: .systemOrange))
         }
 
         switch input.passwordOffer {
@@ -436,7 +436,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             var title = L("Сохранить пароль в связке ключей"), note: String?
             switch input.passwordOffer {
             case .update: title = L("Обновить пароль в связке ключей"); note = L("Введённый пароль отличается от сохранённого.")
-            case .askToKeychain: note = L("Сейчас пароль вводите вы — ocbar будет подставлять его сам.")
+            case .askToKeychain: note = L("Сейчас пароль вводите вы — OpenConnect for Mac будет подставлять его сам.")
             default: break
             }
             let box = NSButton(checkboxWithTitle: title, target: nil, action: nil)
@@ -445,7 +445,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             if let note { stack.addArrangedSubview(label(note)) }
             passwordBox = box
         case .elsewhere(let src):
-            stack.addArrangedSubview(label(L("Пароль берётся из %@ — ocbar его не сохраняет.", src)))
+            stack.addArrangedSubview(label(L("Пароль берётся из %@ — OpenConnect for Mac его не сохраняет.", src)))
         }
 
         if input.offerCode {
@@ -567,7 +567,7 @@ final class TeachDialog: NSObject, NSTextFieldDelegate {
             } else {
                 verified = false
                 verifyLabel?.stringValue = e.isTOTP ? L("✗ секрет из ссылки не даёт введённый вами код")
-                                                    : L("✗ это код по счётчику (HOTP) — ocbar его не ведёт")
+                                                    : L("✗ это код по счётчику (HOTP) — OpenConnect for Mac его не ведёт")
             }
             refresh()
             return

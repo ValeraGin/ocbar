@@ -27,7 +27,7 @@ func label(_ s: String, _ x: CGFloat, _ y: CGFloat, _ font: NSFont, _ c: NSColor
 color(0xEEF0EA).setFill(); NSRect(origin: .zero, size: size).fill()
 let ink = color(0x17201D), muted = color(0x56605A)
 NSImage(contentsOfFile: "app/Resources/AppIcon.icns")!.draw(in: NSRect(x: 62, y: 500, width: 76, height: 76))
-label("ocbar", 150, 517, .systemFont(ofSize: 38, weight: .semibold), ink)
+label("OpenConnect for Mac", 150, 517, .systemFont(ofSize: 30, weight: .semibold), ink)
 let headline = NSFont.systemFont(ofSize: 62, weight: .bold)
 label(first, 66, 330, headline, ink)
 label(second, 66, 252, headline, ink)

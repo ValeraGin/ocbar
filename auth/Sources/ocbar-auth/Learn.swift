@@ -195,7 +195,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         window = NSWindow(contentRect: content.frame,
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
-        window.title = L("ocbar — разметка формы входа")
+        window.title = L("OpenConnect for Mac — разметка формы входа")
         window.contentView = content
         window.delegate = self
         window.center()
@@ -530,7 +530,7 @@ final class LearnSession: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         applyState()
         if let host = webView.url?.host {
             lastHost = host
-            window.title = L("ocbar — разметка формы входа") + " · \(host)"
+            window.title = L("OpenConnect for Mac — разметка формы входа") + " · \(host)"
         }
         // Новая страница после отмеченного окна — следующее окно формы: так
         // шаги различаются и тогда, когда человек прошёл окно сам, руками.

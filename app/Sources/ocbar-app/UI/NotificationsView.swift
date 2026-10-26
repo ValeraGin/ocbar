@@ -15,7 +15,7 @@ struct NotificationsView: View {
                 Section {
                     HStack(spacing: 8) {
                         Image(systemName: "bell.slash.fill").foregroundStyle(Palette.warn)
-                        Text(L("Система не показывает уведомления ocbar."))
+                        Text(L("Система не показывает уведомления OpenConnect for Mac."))
                         Spacer()
                         Button(L("Разрешить…")) { Notifier.openSettings() }
                     }
@@ -33,7 +33,7 @@ struct NotificationsView: View {
             Section {
                 HStack {
                     Button(L("Проверить уведомление")) {
-                        Notifier.show(title: L("Проверка"), body: L("Так выглядят уведомления ocbar."))
+                        Notifier.show(title: L("Проверка"), body: L("Так выглядят уведомления OpenConnect for Mac."))
                     }
                     Spacer()
                     Button(L("Системные настройки…")) { Notifier.openSettings() }

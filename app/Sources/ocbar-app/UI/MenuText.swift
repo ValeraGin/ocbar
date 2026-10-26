@@ -67,7 +67,7 @@ struct StateLook {
 
     static func profileName(_ s: Status) -> String {
         let n = targetName(s)
-        if n.isEmpty { return "ocbar" }
+        if n.isEmpty { return "OpenConnect for Mac" }
         return s.profiles.first { $0.name == n }?.display ?? n
     }
 
@@ -100,11 +100,11 @@ struct StateLook {
             return .init(color: Palette.line2, title: name, subtitle: L("Отключено"), note: nil,
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .foreign:
-            return .init(color: Palette.tertiary, title: L("Чужой openconnect"), subtitle: L("поднят не через ocbar"),
-                         note: L("Это подключение ocbar не управляет и не трогает."),
+            return .init(color: Palette.tertiary, title: L("Чужой openconnect"), subtitle: L("поднят не через OpenConnect for Mac"),
+                         note: L("Это подключение OpenConnect for Mac не управляет и не трогает."),
                          showsTime: false, graph: false, graphActive: false, pulsing: false, details: false)
         case .missing:
-            return .init(color: Palette.bad, title: L("Не найден клиент ocbar"), subtitle: L("подключение недоступно"),
+            return .init(color: Palette.bad, title: L("Не найден клиент OpenConnect for Mac"), subtitle: L("подключение недоступно"),
                          note: OcbarClient.shared.lookupNote.isEmpty
                              ? L("Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN.")
                              : OcbarClient.shared.lookupNote,

@@ -982,8 +982,25 @@ STUB
     is "лаунчер: в копии та же версия" 9.9.1 "$(plutil -extract CFBundleShortVersionString raw "$dst/Contents/Info.plist" 2>/dev/null || true)"
     : > "$dst/marker"; OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$src" >/dev/null || true
     is "лаунчер: одинаковая копия не перекладывается" yes "$([ -f "$dst/marker" ] && echo yes || echo no)"
+    # Название и переводы тоже обновляются, даже при той же версии бинаря.
+    mkdir -p "$src/Contents/Resources/en.lproj"
+    printf '"CFBundleDisplayName" = "OpenConnect for Mac";\n' > "$src/Contents/Resources/en.lproj/InfoPlist.strings"
+    OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$src" >/dev/null || true
+    has "лаунчер: новое название доходит при той же версии" "OpenConnect for Mac" "$(cat "$dst/Contents/Resources/en.lproj/InfoPlist.strings" 2>/dev/null)"
+    : > "$dst/marker"
     mkb "$src" 9.9.2; OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$src" >/dev/null || true
     is "лаунчер: новая версия заменяет копию" "9.9.2 no" "$(plutil -extract CFBundleShortVersionString raw "$dst/Contents/Info.plist" 2>/dev/null) $([ -f "$dst/marker" ] && echo yes || echo no)"
+    legacy="$tmp/Applications/ocbar.app"; renamed="$tmp/Applications/OpenConnect for Mac.app"
+    mv "$dst" "$renamed"; mkb "$legacy" 9.9.1
+    /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string ru.ocbar.app' "$legacy/Contents/Info.plist"
+    run _selftest-fn app_legacy_alias "$legacy" "$renamed" >/dev/null || true
+    is "лаунчер: старый путь сохранён ссылкой на новое имя" "$renamed" "$(readlink "$legacy")"
+    is "лаунчер: старый автозапуск видит новую версию" 9.9.2 "$(plutil -extract CFBundleShortVersionString raw "$legacy/Contents/Info.plist")"
+    run _selftest-fn app_legacy_alias "$legacy" "$renamed" >/dev/null || true
+    is "лаунчер: повторная миграция не меняет ссылку" "$renamed" "$(readlink "$legacy")"
+    rm -rf "$legacy"; mkb "$legacy" 1.0
+    run _selftest-fn app_legacy_alias "$legacy" "$renamed" >/dev/null || true
+    is "лаунчер: чужой бандл не заменяется" no "$([ -L "$legacy" ] && echo yes || echo no)"
     mkb "$tmp/proj/app/.build/ocbar.app" 9.9.3
     is "лаунчер: сборка проекта не копируется" "$tmp/proj/app/.build/ocbar.app" "$(OCBAR_APP_COPY="$dst" run _selftest-fn app_sync_copy "$tmp/proj/app/.build/ocbar.app" || true)"
     rm -rf "$tmp/Cellar" "$tmp/Applications" "$tmp/proj"

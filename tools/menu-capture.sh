@@ -45,7 +45,7 @@ for frame in "$@"; do
     for try in 1 2 3 4; do
         print -r -- "$frame" > "$state"
         OCBAR_DEMO_STATE="$state" OCBAR_DEMO_OPEN=1 "$app" --stage --demo-menu "--$theme" --backdrop "$bg" \
-            -AppleLanguages "($lang)" >/dev/null 2>&1 &
+            -AppleLanguages "($lang)" -InterfaceLanguage "$lang" >/dev/null 2>&1 &
         pid=$!
         id=""
         for _ in {1..40}; do id=$("$work/winid" "$pid"); [ -n "$id" ] && break; sleep 0.25; done

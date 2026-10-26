@@ -391,7 +391,7 @@ struct ProfileEditorView: View {
         } footer: {
             Footnote(SecretNote.shown(secretNote, for: loadedName)
                  ?? (doc.auth == "password"
-                 ? L("Пароль ocbar подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может.")
+                 ? L("Пароль OpenConnect for Mac подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может.")
                  : doc.password == "ask" ? L("Пароль вводит человек — молчаливое переподключение работать не будет.")
                  : L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC.")))
         }
@@ -547,7 +547,7 @@ struct ProfileEditorView: View {
     private var passwordSheet: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(L("Пароль VPN")).font(.headline)
-            Text(L("Ляжет в связку ключей macOS. ocbar подставит его при входе.")).foregroundStyle(.secondary)
+            Text(L("Ляжет в связку ключей macOS. OpenConnect for Mac подставит его при входе.")).foregroundStyle(.secondary)
             SecureField(L("Пароль"), text: $newPassword).frame(width: 320)
             HStack {
                 Spacer()
@@ -654,7 +654,7 @@ struct ProfileEditorView: View {
                 Text(L("Параметры SOCKS"))
             } footer: {
                 Footnote(doc.systemProxy
-                     ? L("Прокси ставится на активную сетевую службу и снимается при отключении. Чужой SOCKS ocbar не перезаписывает.")
+                     ? L("Прокси ставится на активную сетевую службу и снимается при отключении. Чужой SOCKS OpenConnect for Mac не перезаписывает.")
                      : L("Система не трогается: SOCKS 127.0.0.1:%@ указывают тем программам, которым он нужен.", doc.proxyPort))
             }
             Section {
@@ -804,7 +804,7 @@ struct ProfileEditorView: View {
         guard !dirty, let v = secrets["password"] else { return nil }
         switch v {
         case "keychain ok": return (L("сохранён в связке ключей"), Palette.ok)
-        case "keychain missing": return (L("не сохранён — ocbar предложит сохранить после входа"), Palette.warn)
+        case "keychain missing": return (L("не сохранён — OpenConnect for Mac предложит сохранить после входа"), Palette.warn)
         default: return nil
         }
     }
@@ -1321,7 +1321,7 @@ struct ProfileEditorView: View {
                     files = ProfileStore.list()
                     reloadLegacy()
                     if dirty { alert = .unsaved(.file(name)) } else { open(name) }
-                    message = L("профиль %@ переведён в файл — теперь ocbar читает его оттуда", name)
+                    message = L("профиль %@ переведён в файл — теперь OpenConnect for Mac читает его оттуда", name)
                 case .needsLogin, .cancelled:
                     message = nil
                 case .failed(_, let text):

@@ -20,20 +20,20 @@ struct OcbarApp: App {
         // Ссылки ocbar:// (уведомления от клиента, проверки) разбирает
         // AppDelegate. Без пустого handlesExternalEvents SwiftUI на каждую
         // ссылку открывал бы окно настроек.
-        Window(L("Настройка ocbar"), id: WindowID.settings) { SettingsWindow() }
+        Window(L("Настройка OpenConnect for Mac"), id: WindowID.settings) { SettingsWindow() }
             .handlesExternalEvents(matching: [])
-        Window(L("Открыть профиль ocbar"), id: WindowID.quickProfile) { QuickProfileView() }
+        Window(L("Открыть профиль OpenConnect for Mac"), id: WindowID.quickProfile) { QuickProfileView() }
             .windowResizability(.contentSize)
             .handlesExternalEvents(matching: [])
-        Window(L("Первый запуск ocbar"), id: WindowID.setup) { SetupView().tint(Palette.control).accentColor(Palette.control) }
+        Window(L("Первый запуск OpenConnect for Mac"), id: WindowID.setup) { SetupView().tint(Palette.control).accentColor(Palette.control) }
             .defaultSize(width: 740, height: 560)
             .handlesExternalEvents(matching: [])
 
-        Window(L("Журналы ocbar"), id: WindowID.logs) { LogsView() }
+        Window(L("Журналы OpenConnect for Mac"), id: WindowID.logs) { LogsView() }
             .defaultSize(width: 880, height: 540)
             .handlesExternalEvents(matching: [])
 
-        Window(L("Диагностика ocbar"), id: WindowID.diagnostics) { DiagnosticsView() }
+        Window(L("Диагностика OpenConnect for Mac"), id: WindowID.diagnostics) { DiagnosticsView() }
             .defaultSize(width: 760, height: 620)
             .handlesExternalEvents(matching: [])
     }
@@ -226,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 60, y: 60), size: size),
                               styleMask: screenshot != nil ? [.borderless] : [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
-        window.title = "ocbar — витрина состояний"  // i18n: не интерфейс
+        window.title = "OpenConnect for Mac — витрина состояний"  // i18n: не интерфейс
         if CommandLine.arguments.contains("--light") {
             window.appearance = NSAppearance(named: .aqua)
         } else if CommandLine.arguments.contains("--dark") {
@@ -234,7 +234,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         if screenshot == "quick-profile" {
             if let id = ProfileStore.list().first { QuickProfileFlow.shared.openExisting(id) }
-            window.contentView = NSHostingView(rootView: QuickProfileView().padding(24))
+            window.contentView = NSHostingView(rootView: QuickProfileView().padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: .windowBackgroundColor)))
         } else if screenshot == "settings" {
             let host = NSHostingView(rootView: ScreenshotSettingsView())
             host.sizingOptions = []
@@ -356,7 +358,7 @@ enum MenuBarIcon {
             return true
         }
         image.isTemplate = false
-        image.accessibilityDescription = step.map { "ocbar: \($0.title)" } ?? "ocbar"
+        image.accessibilityDescription = step.map { "OpenConnect for Mac: \($0.title)" } ?? "OpenConnect for Mac"
         return image
     }
 

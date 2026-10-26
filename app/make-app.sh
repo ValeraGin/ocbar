@@ -88,8 +88,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>ocbar</string>
-    <key>CFBundleDisplayName</key><string>ocbar</string>
+    <key>CFBundleName</key><string>OpenConnect for Mac</string>
+    <key>CFBundleDisplayName</key><string>OpenConnect for Mac</string>
     <key>CFBundleIdentifier</key><string>ru.ocbar.app</string>
     <key>CFBundleExecutable</key><string>ocbar-app</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -97,7 +97,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>CFBundleDocumentTypes</key>
     <array><dict>
-        <key>CFBundleTypeName</key><string>ocbar VPN profile</string>
+        <key>CFBundleTypeName</key><string>OpenConnect for Mac VPN profile</string>
         <key>CFBundleTypeRole</key><string>Viewer</string>
         <key>LSHandlerRank</key><string>Owner</string>
         <key>LSItemContentTypes</key><array><string>ru.ocbar.profile</string></array>
@@ -105,7 +105,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>UTExportedTypeDeclarations</key>
     <array><dict>
         <key>UTTypeIdentifier</key><string>ru.ocbar.profile</string>
-        <key>UTTypeDescription</key><string>ocbar VPN profile</string>
+        <key>UTTypeDescription</key><string>OpenConnect for Mac VPN profile</string>
         <key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
         <key>UTTypeTagSpecification</key><dict>
             <key>public.filename-extension</key><array><string>ocbar</string></array>
@@ -113,7 +113,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     </dict></array>
     <key>LSMinimumSystemVersion</key><string>14.4</string>
     <key>LSUIElement</key><true/>
-    <key>NSCameraUsageDescription</key><string>ocbar читает QR второго фактора с экрана телефона, чтобы сохранить секрет одноразового кода. Кадры никуда не сохраняются.</string>
+    <key>NSCameraUsageDescription</key><string>OpenConnect for Mac читает QR второго фактора с экрана телефона, чтобы сохранить секрет одноразового кода. Кадры никуда не сохраняются.</string>
     <key>CFBundleURLTypes</key>
     <array><dict>
         <key>CFBundleURLName</key><string>ru.ocbar.app.notify</string>

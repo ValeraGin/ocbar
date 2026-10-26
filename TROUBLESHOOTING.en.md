@@ -15,7 +15,7 @@ ocbar logs -n 100   # all logs in one timeline: supervisor, sign-in, openconnect
 
 ### The sign-in window waits and fills nothing
 
-On a form it does not recognise, ocbar fills and clicks nothing — by design.
+On a form it does not recognise, OpenConnect for Mac fills and clicks nothing — by design.
 Record the form once: `ocbar learn <profile>`, "Learn the form…" in the
 profile editor, or connect with `ocbar connect --teach` and tick "Remember
 how I sign in" in the sign-in window. Check which rules apply and where they come from:
@@ -30,7 +30,7 @@ and buttons.
 
 ### The second factor is rejected
 
-Compare the code ocbar would use with your authenticator app:
+Compare the code OpenConnect for Mac would use with your authenticator app:
 
 ```bash
 ocbar secret status          # source of the secret and the current code
@@ -44,15 +44,15 @@ ocbar secret import-qr <image> --list
 ocbar secret import-qr <image> --select <part of the name>
 ```
 
-ocbar submits a code once per sign-in, so it never locks your account with
+OpenConnect for Mac submits a code once per sign-in, so it never locks your account with
 repeated guesses. An account that is already locked is unlocked by your
-identity provider, not by ocbar.
+identity provider, not by OpenConnect for Mac.
 
 ### Signed in, but the tunnel fails with `401 Unauthorized`
 
 A load balancer moved the sign-in to a specific node, and the session belongs
-to that node. ocbar follows it and logs "the load balancer redirected to … —
-the tunnel goes there too"; if that line is missing, update ocbar.
+to that node. OpenConnect for Mac follows it and logs "the load balancer redirected to … —
+the tunnel goes there too"; if that line is missing, update OpenConnect for Mac.
 
 ### `Server certificate verify failed: signer not found`
 
@@ -87,10 +87,10 @@ ocbar status                     # each network: via utunN, bypassing, or switch
 ocbar routes on 10.0.0.0/8       # switch a network back on
 ```
 
-ocbar installs only the networks listed in the profile's `[Routes]`; the
+OpenConnect for Mac installs only the networks listed in the profile's `[Routes]`; the
 list the gateway sends is ignored on purpose. Add the network to the profile
 if it is missing. If `route -n get <address>` shows another interface, a
-different VPN client owns that route; ocbar never removes routes it did not
+different VPN client owns that route; OpenConnect for Mac never removes routes it did not
 create.
 
 ### The menu shows "Connecting…" for a long time
@@ -107,7 +107,7 @@ ocbar doctor       # lists leftovers
 ocbar cleanup      # removes only what ocbar created
 ```
 
-Files in `/etc/resolver` that ocbar did not create are never touched.
+Files in `/etc/resolver` that OpenConnect for Mac did not create are never touched.
 
 ## Installation
 

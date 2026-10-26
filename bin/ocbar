@@ -85,7 +85,7 @@ RESOLVER_DIR="/etc/resolver"
 AGENT_LABEL="ru.ocbar.supervisor"
 AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 APP_LABEL="ru.ocbar.app"                 # приложение меню-бара, запуск при входе
-APP_USER_COPY="${OCBAR_APP_COPY:-$HOME/Applications/ocbar.app}"   # копия для лаунчера
+APP_USER_COPY="${OCBAR_APP_COPY:-$HOME/Applications/OpenConnect for Mac.app}"   # копия для лаунчера
 APP_PLIST="$HOME/Library/LaunchAgents/$APP_LABEL.plist"
 
 DRY_RUN=0
@@ -3643,7 +3643,8 @@ cmd_uninstall() {
     #    найден», а launchd — перезапускать агента. pkill — только процессы
     #    этого пользователя.
     steps+=("sudo -u $me launchctl bootout gui/$uid/$APP_LABEL" "rm -f $q_home/Library/LaunchAgents/$APP_LABEL.plist"
-            "pkill -u $uid -f ocbar.app/Contents/MacOS/ocbar-app" "rm -rf $q_home/Applications/ocbar.app"
+            "pkill -u $uid -f '(ocbar|OpenConnect for Mac)\.app/Contents/MacOS/ocbar-app'"
+            "rm -rf $q_home/Applications/ocbar.app $q_home/Applications/\"OpenConnect for Mac.app\""
             "launchctl bootout gui/$uid/$AGENT_LABEL" "rm -f $q_home/Library/LaunchAgents/$AGENT_LABEL.plist")
     # 4. Беспарольное правило и файлы. Старый каталог манифеста — только
     #    rmdir: если в нём есть чужое, пусть остаётся.
@@ -3810,14 +3811,14 @@ app_path() {
     local c
     for c in "${OCBAR_APP:-}" "$SELF_DIR/../ocbar.app" "$SELF_DIR/../app/.build/ocbar.app" \
              /opt/homebrew/opt/ocbar/ocbar.app /usr/local/opt/ocbar/ocbar.app \
-             /Applications/ocbar.app "$APP_USER_COPY"; do
+             "/Applications/OpenConnect for Mac.app" /Applications/ocbar.app "$APP_USER_COPY" "$HOME/Applications/ocbar.app"; do
         [ -n "$c" ] && [ -d "$c" ] && { printf '%s' "$(cd "$c" && pwd)"; return 0; }
     done
     return 1
 }
 # Самопроверка подставляет свой шаблон: иначе она нашла бы (и остановила)
 # настоящее приложение.
-app_pid() { pgrep -f "${OCBAR_SELFTEST_APP_PATTERN:-ocbar\.app/Contents/MacOS/ocbar-app}" 2>/dev/null | head -1 || true; }
+app_pid() { pgrep -f "${OCBAR_SELFTEST_APP_PATTERN:-(ocbar|OpenConnect for Mac)\.app/Contents/MacOS/ocbar-app}" 2>/dev/null | head -1 || true; }
 
 # Лаунчер и Spotlight видят программы только в /Applications и ~/Applications,
 # а Homebrew кладёт бандл в свой Cellar и за пределы префикса писать не может.
@@ -3826,11 +3827,34 @@ app_pid() { pgrep -f "${OCBAR_SELFTEST_APP_PATTERN:-ocbar\.app/Contents/MacOS/oc
 # годится — лаунчер ссылки не показывает. Сборка из дерева проекта не
 # копируется: это сборка разработчика. Печатает путь, который запускать.
 app_bundle_version() { plutil -extract CFBundleShortVersionString raw "$1/Contents/Info.plist" 2>/dev/null || true; }
+# Старый путь нужен уже загруженному LaunchAgent и сохранённым ссылкам.
+# В Finder остаётся новая копия; скрытый алиас не дублирует приложение.
+app_legacy_alias() { # старый путь, новая копия
+    local old="$1" dst="$2" id backup="$1.rename.$$"
+    [ "$DRY_RUN" != 1 ] || return 0
+    [ "$old" != "$dst" ] && [ -d "$dst" ] || return 0
+    [ -L "$old" ] && return 0
+    [ -d "$old" ] || return 0
+    id=$(plutil -extract CFBundleIdentifier raw "$old/Contents/Info.plist" 2>/dev/null || true)
+    [ "$id" = ru.ocbar.app ] || return 0
+    mv "$old" "$backup" || return 0
+    if ! ln -s "$dst" "$old"; then
+        mv "$backup" "$old"; return 0
+    fi
+    rm -rf "$backup"
+    chflags -h hidden "$old" 2>/dev/null || true
+}
+app_keep_legacy_path() {
+    [ -z "${OCBAR_APP_COPY:-}" ] || return 0
+    app_legacy_alias "$HOME/Applications/ocbar.app" "$APP_USER_COPY"
+}
+
 app_sync_copy() { # источник
     local src="$1" dst="$APP_USER_COPY"
     case "$src" in */opt/ocbar/ocbar.app|*/Cellar/ocbar/*/ocbar.app) ;; *) printf '%s' "$src"; return 0 ;; esac
     if [ -d "$dst" ] && [ "$(app_bundle_version "$dst")" = "$(app_bundle_version "$src")" ] \
-       && cmp -s "$src/Contents/MacOS/ocbar-app" "$dst/Contents/MacOS/ocbar-app"; then
+       && diff -qr "$src/Contents" "$dst/Contents" >/dev/null 2>&1; then
+        app_keep_legacy_path
         printf '%s' "$dst"; return 0
     fi
     if [ "$DRY_RUN" = 1 ]; then info "[dry-run] копия для лаунчера: $src → $dst" >&2; printf '%s' "$src"; return 0; fi
@@ -3839,7 +3863,12 @@ app_sync_copy() { # источник
         rm -rf "$tmp"; warn "копия для лаунчера" "не записалась в ${dst%/*} — запускаю из $src" >&2
         printf '%s' "$src"; return 0; }
     if [ -d "$dst" ]; then mv "$dst" "$old"; fi
-    mv "$tmp" "$dst" && rm -rf "$old"
+    if ! mv "$tmp" "$dst"; then
+        [ ! -d "$old" ] || mv "$old" "$dst"
+        printf '%s' "$src"; return 0
+    fi
+    rm -rf "$old"
+    app_keep_legacy_path
     # Лаунчеру — сразу, не дожидаясь, пока Spotlight найдёт сам. Самопроверка
     # (OCBAR_APP_COPY) временный бандл в базу LaunchServices не заносит.
     if [ -z "${OCBAR_APP_COPY:-}" ]; then
@@ -4195,6 +4224,7 @@ case "${1:-}" in
             helper_supports_upstream) helper_supports_upstream ;;
             socks_apply|socks_clear_all|proxy_stop|proxy_cleanup) "$1" ;;
             app_sync_copy) app_sync_copy "${2:-}" ;;
+            app_legacy_alias) app_legacy_alias "${2:-}" "${3:-}" ;;
             auth_rc_action) auth_rc_action "${2:-}" ;;
             auth_result) parse_auth_result "${2:-}"; printf '%s\n' "$token" "$hash" "$post_url" ;;
             report_redact) report_redact ;;

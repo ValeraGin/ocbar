@@ -9,7 +9,7 @@ credentials. This is a single-maintainer project; reports are handled on a best-
 
 ## Threat model
 
-ocbar installs a root helper that the logged-in admin user may run without a
+OpenConnect for Mac installs a root helper that the logged-in admin user may run without a
 password. That is the main attack surface, and it is kept narrow.
 
 **The helper** (`/usr/local/libexec/ocbar-helper`, `root:wheel 755`):

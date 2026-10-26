@@ -237,7 +237,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
             box.font = .systemFont(ofSize: 11)
             box.frame = NSRect(x: 520 - 200, y: 2, width: 192, height: 18)
             box.autoresizingMask = [.minXMargin]
-            box.toolTip = L("Входите как обычно — ocbar запомнит, как устроена форма, и после входа предложит сохранить правила, пароль и источник кода. Без вашего подтверждения ничего не сохраняется.")
+            box.toolTip = L("Входите как обычно — OpenConnect for Mac запомнит, как устроена форма, и после входа предложит сохранить правила, пароль и источник кода. Без вашего подтверждения ничего не сохраняется.")
             content.addSubview(box)
             teachBox = box
             statusLabel.frame.size.width = max(60, 520 - statusLabel.frame.minX - 208)
@@ -247,7 +247,7 @@ final class WebAuth: NSObject, WKNavigationDelegate, NSWindowDelegate, WKUIDeleg
         window = NSWindow(contentRect: content.frame,
                           styleMask: [.titled, .closable, .resizable, .miniaturizable],
                           backing: .buffered, defer: false)
-        window.title = L("ocbar — вход в VPN")
+        window.title = L("OpenConnect for Mac — вход в VPN")
         window.contentView = content
         window.delegate = self
         window.center()

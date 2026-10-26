@@ -1,5 +1,5 @@
 class Ocbar < Formula
-  desc "AnyConnect-compatible VPN client: SSO, split DNS, split tunnel, menu bar"
+  desc "OpenConnect for Mac: SSO, split DNS, split tunnel, menu bar"
   homepage "https://valeragin.github.io/ocbar/"
   # Стабильная версия — тег и коммит: версия берётся из имени тега, а хеш
   # архива не нужно считать заранее.
@@ -55,7 +55,7 @@ class Ocbar < Formula
 
       Меню-бар — приложение (плагин SwiftBar остаётся как запасной вариант):
         ocbar app start                 запустить; кладёт копию в ~/Applications,
-                                        чтобы ocbar был в лаунчере и Spotlight
+                                        чтобы OpenConnect for Mac был в лаунчере и Spotlight
         ocbar app autostart on          запускать при входе в систему
       После brew upgrade: ocbar app stop && ocbar app start — обновит и копию.
 
@@ -93,6 +93,8 @@ class Ocbar < Formula
     assert_predicate prefix/"ocbar.app/Contents/MacOS/ocbar-app", :executable?
     plist = prefix/"ocbar.app/Contents/Info.plist"
     system "plutil", "-lint", plist
+    assert_equal "OpenConnect for Mac",
+                 shell_output("plutil -extract CFBundleDisplayName raw #{plist}").strip
     # Без строки о камере macOS завершает процесс при чтении QR камерой,
     # без схемы ocbar:// не доходят уведомления от приложения.
     refute_empty shell_output("plutil -extract NSCameraUsageDescription raw #{plist}").strip

@@ -509,7 +509,7 @@ if args.importCamera && args.cameraWindowShot == nil {
     DispatchQueue.main.async {
         let r = QRCameraWindow(code: "", at: Date(), select: args.selectEntry).run()
         guard let e = r.entry, e.isTOTP else {
-            Log.error(r.entry == nil ? r.note : L("это HOTP (код по счётчику) — ocbar его не ведёт"))
+            Log.error(r.entry == nil ? r.note : L("это HOTP (код по счётчику) — OpenConnect for Mac его не ведёт"))
             exit(1)
         }
         out("TOTP \(e.algorithm) \(e.digits) \(e.period)")

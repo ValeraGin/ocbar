@@ -1,7 +1,7 @@
-# ocbar website
+# OpenConnect for Mac website
 
 English and Russian landing pages and installation guides, published on GitHub Pages.
-The landing is one short page: what ocbar is, the menu animation, five advantages,
+The landing is one short page: what OpenConnect for Mac is, the menu animation, five advantages,
 the install commands and links. No runtime dependencies or tracking; the only
 scripts are language detection and the copy button.
 
@@ -43,7 +43,7 @@ a portable local preview and removes sitemap/robots files.
 `tools/demo-gif.sh` rebuilds the README animation `assets/demo.gif` and `assets/ru/demo.gif`,
 `tools/social-card.sh` the link cards in `dist/assets/`.
 The menu is a real NSMenu and is captured from the screen (`tools/menu-capture.sh`,
-the `--stage --demo-menu` app on demonstration profiles): while it runs, a second ocbar
+the `--stage --demo-menu` app on demonstration profiles): while it runs, a second OpenConnect for Mac
 icon and the open demo menu appear on screen. Windows are rendered off screen.
 Use only demonstration profiles for public images.
 

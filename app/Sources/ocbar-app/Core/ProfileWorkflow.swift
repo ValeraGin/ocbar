@@ -28,7 +28,7 @@ struct ProfileSystemState: Decodable {
 
 extension OcbarClient {
     func importProfiles(_ path: String, name: String? = nil) -> (ids: [String], error: String?) {
-        guard let binary else { return ([], L("ocbar не найден")) }
+        guard let binary else { return ([], L("OpenConnect for Mac не найден")) }
         let result = Shell.run(binary, ["import", "--json", path] + (name.map { [$0] } ?? []), timeout: 30)
         guard result.ok, let imported = ImportedProfiles.parse(result.out) else {
             return ([], result.err.trimmed.isEmpty ? L("Не удалось получить список импортированных профилей") : result.err.trimmed)
@@ -45,7 +45,7 @@ extension OcbarClient {
     }
 
     func profileSystemState(_ profile: String) -> ProfileSystemState {
-        guard let binary else { return ProfileSystemState(required: true, ready: false, error: L("ocbar не найден")) }
+        guard let binary else { return ProfileSystemState(required: true, ready: false, error: L("OpenConnect for Mac не найден")) }
         let result = Shell.run(binary, ["csd-status", profile], timeout: 15)
         if result.ok, let state = ProfileSystemState.parse(result.out) { return state }
         return ProfileSystemState(required: true, ready: false,
