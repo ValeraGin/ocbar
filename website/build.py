@@ -31,7 +31,7 @@ def metadata(page, base, canonical_suffix, alternatives):
 # английского, она сразу уводит на русскую. Выбор в переключателе EN/RU запоминается
 # и важнее браузера. Русская страница не уводит никуда: ссылку на /ru/ дают нарочно.
 # Скрипт в <head>, чтобы английская версия не мелькала перед переходом.
-LANGUAGE_SCRIPT = '''<script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
+LANGUAGE_SCRIPT = '''<script>(function(){var k="ocmac-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
 if(a)try{localStorage.setItem(k,a.lang)}catch(e){}});
@@ -50,7 +50,7 @@ for lang in ('en', 'ru'):
     content = json.loads((ROOT / f'src/{lang}.json').read_text())
     content = {k: html.escape(v, quote=True).replace('&lt;br&gt;', '<br>').replace('&lt;span&gt;', '<span>').replace('&lt;/span&gt;', '</span>') for k, v in content.items()}
     prefix = '' if lang == 'en' else 'ru/'
-    install_command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)"'
+    install_command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)"'
     commands = dict(install_command=html.escape(install_command),
                     profile_command=html.escape(install_command + ' -- --language ' + lang))
     for guide in (False, True):

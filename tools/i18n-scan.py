@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Строки интерфейса приложения и окон ocbar-auth: сбор и сверка с переводом.
+"""Строки интерфейса приложения и окон ocmac-auth: сбор и сверка с переводом.
 
 SwiftUI берёт русский текст как ключ и ищет перевод в Localizable.strings.
 Здесь мы собираем ключи по местам вызова (Text, Button, Toggle…), а не по
@@ -10,11 +10,11 @@ SwiftUI берёт русский текст как ключ и ищет пер�
     tools/i18n-scan.py --check           чего не хватает в en.lproj (код 1)
     tools/i18n-scan.py --update          дописать недостающие с пометкой TODO
 
-ocbar-auth — голый файл без бандла: перевод у него в коде, словарём
-auth/Sources/ocbar-auth/Translations.swift; --check сверяет и его (--update
+ocmac-auth — голый файл без бандла: перевод у него в коде, словарём
+auth/Sources/ocmac-auth/Translations.swift; --check сверяет и его (--update
 туда не пишет — пары добавляются руками).
 
-Клиент bin/ocbar переводится при выводе, по шаблонам libexec/ocbar-en.tsv
+Клиент bin/ocmac переводится при выводе, по шаблонам libexec/ocmac-en.tsv
 («русский<TAB>английский», {} — подстановка, {1}, {2}… — если порядок
 другой); --check сверяет и его.
 """
@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = [ROOT / "app/Sources/ocbar-app"]
+SOURCES = [ROOT / "app/Sources/ocmac-app"]
 STRINGS = ROOT / "app/Resources/en.lproj/Localizable.strings"
 
 # Строки интерфейса помечены вызовом L("…") — он же делает перевод. Здесь
@@ -153,8 +153,8 @@ def main() -> int:
     return 1 if missing or todo or extra or getattr(keys, "unwrapped", []) else 0
 
 
-# --- ocbar-auth ------------------------------------------------------------
-AUTH = ROOT / "auth/Sources/ocbar-auth"
+# --- ocmac-auth ------------------------------------------------------------
+AUTH = ROOT / "auth/Sources/ocmac-auth"
 AUTH_TABLE = AUTH / "Translations.swift"
 AUTH_SKIP = {"SelfTest.swift", "LearnCheck.swift", "Translations.swift", "Localization.swift"}
 # Текст окна AppKit, который забыли обернуть: заголовки, подписи, подсказки.
@@ -186,20 +186,20 @@ def auth_check() -> int:
     missing = [k for k in found if k not in table]
     extra = [k for k in table if k not in found]
     for u in unwrapped:
-        print("ocbar-auth: без перевода в коде: " + u)
+        print("ocmac-auth: без перевода в коде: " + u)
     for k in missing:
-        print(f"ocbar-auth: нет перевода: {k}")
+        print(f"ocmac-auth: нет перевода: {k}")
     for k in extra:
-        print(f"ocbar-auth: лишний перевод (строки в коде нет): {k}")
-    print(f"строк окон ocbar-auth: {len(found)}, переведено: {len(found) - len(missing)}")
+        print(f"ocmac-auth: лишний перевод (строки в коде нет): {k}")
+    print(f"строк окон ocmac-auth: {len(found)}, переведено: {len(found) - len(missing)}")
     return 1 if missing or extra or unwrapped else 0
 
 
-# --- клиент (bin/ocbar) ------------------------------------------------------
+# --- клиент (bin/ocmac) ------------------------------------------------------
 # Сообщения человеку идут через ok/warn/bad/skip/info/die; перевод — по
-# шаблонам libexec/ocbar-en.tsv (подстановки $var, ${…}, $(…) — это {}).
-CLI = ROOT / "bin/ocbar"
-CLI_TABLE = ROOT / "libexec/ocbar-en.tsv"
+# шаблонам libexec/ocmac-en.tsv (подстановки $var, ${…}, $(…) — это {}).
+CLI = ROOT / "bin/ocmac"
+CLI_TABLE = ROOT / "libexec/ocmac-en.tsv"
 
 
 def cli_template(s: str) -> str:
@@ -260,7 +260,7 @@ def cli_var_messages() -> list[str]:
             continue
         for m in CLI_NAME.finditer(line):
             if CLI_VAR_MSG.match(line, m.end()):
-                out.append(f"bin/ocbar:{n}: {line.strip()}")
+                out.append(f"bin/ocmac:{n}: {line.strip()}")
     return out
 
 
@@ -281,7 +281,7 @@ def cli_keys() -> list[str]:
     return list(found)
 
 
-HELPER = ROOT / "libexec/ocbar-helper"
+HELPER = ROOT / "libexec/ocmac-helper"
 HELPER_MSG = re.compile(r'(?:^|[;&|{(\s])(?:die|say)\s+(?=")')
 
 
@@ -319,14 +319,14 @@ def cli_check() -> int:
     missing = [k for k in keys if k not in table]
     extra = [k for k in table if k not in keys and k not in from_helper]
     for k in missing:
-        print(f"ocbar: нет перевода: {k}")
+        print(f"ocmac: нет перевода: {k}")
     for k in extra:
-        print(f"ocbar: лишний перевод (сообщения в коде нет): {k}")
+        print(f"ocmac: лишний перевод (сообщения в коде нет): {k}")
     for k in bad:
-        print(f"ocbar: перевод не сходится с шаблоном (подстановки или кириллица): {k}")
+        print(f"ocmac: перевод не сходится с шаблоном (подстановки или кириллица): {k}")
     var_msgs = cli_var_messages()
     for v in var_msgs:
-        print(f"ocbar: сообщение из переменной — скан его не видит, пишите литерал: {v}")
+        print(f"ocmac: сообщение из переменной — скан его не видит, пишите литерал: {v}")
     print(f"сообщений клиента: {len(keys)}, переведено: {len(keys) - len(missing)}")
     return 1 if missing or extra or bad or var_msgs else 0
 

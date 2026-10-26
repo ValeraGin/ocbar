@@ -2,7 +2,7 @@
 
 # OpenConnect for Mac
 
-[Website](https://valeragin.github.io/ocbar/)
+[Website](https://valeragin.github.io/openconnect-for-mac/)
 
 **English** · [Русский](README.ru.md)
 
@@ -31,24 +31,23 @@ Russian; the first-connection problems are also in
 > Independent project, not an official OpenConnect product. Not affiliated with
 > the OpenConnect project or Cisco. “AnyConnect” describes protocol compatibility.
 
-Formerly **ocbar**. The CLI and Homebrew formula remain `ocbar`, the app bundle
-in Homebrew is still `ocbar.app`. The launcher copy is named
-`OpenConnect for Mac.app`; a hidden link preserves the old path for existing
-login items. Existing `.ocbar` profiles and settings keep working. Repository and website URLs are unchanged.
+The CLI is `ocmac`; profiles use `.ocmac`. Existing installations can be
+migrated with `ocmac migrate` followed by `sudo ocmac install`. Original user
+files are preserved. System setup stops the previous VPN session.
 
 ## Quick install
 
 Open Terminal and run:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)"
 ```
 
 The [installer](install.sh) offers to install missing Apple Command Line Tools
 and Homebrew, installs OpenConnect for Mac and its helper, and opens the menu app. It asks for
-administrator access when needed. Share one `.ocbar` file and the
-[profile installation guide](https://valeragin.github.io/ocbar/guide/#profile)
-with a teammate. After installation, double-click their `.ocbar` file, enter their
+administrator access when needed. Share one `.ocmac` file and the
+[profile installation guide](https://valeragin.github.io/openconnect-for-mac/guide/#profile)
+with a teammate. After installation, double-click their `.ocmac` file, enter their
 own username and choose **Connect**. Networks and DNS come from the profile.
 Choose English, Russian or System default in Settings → General → Interface language.
 
@@ -64,20 +63,20 @@ a root daemon, or an Apple Developer ID.
 ## How it works
 
 ```
-ocbar connect
+ocmac connect
   │
-  ├─ ocbar-auth (Swift, WKWebView)        runs as the user
+  ├─ ocmac-auth (Swift, WKWebView)        runs as the user
   │    init → SAML window → cookie → auth-reply → session token + server cert hash
   │
-  └─ sudo -n ocbar-helper tunnel-start    root, the only NOPASSWD entry
-       ├─ openconnect --cookie-on-stdin --script "ocbar-helper vpnc" -b
+  └─ sudo -n ocmac-helper tunnel-start    root, the only NOPASSWD entry
+       ├─ openconnect --cookie-on-stdin --script "ocmac-helper vpnc" -b
        └─ vpnc: ifconfig utunN, our routes, our /etc/resolver zones — nothing else
 
-ocbar supervise (LaunchAgent)             runs as the user, every 5 s
+ocmac supervise (LaunchAgent)             runs as the user, every 5 s
        tunnel pid · kern.waketime · primary interface · routes in place
 ```
 
-Privileged code lives in one file, [libexec/ocbar-helper](libexec/ocbar-helper):
+Privileged code lives in one file, [libexec/ocmac-helper](libexec/ocmac-helper):
 fixed subcommands, every argument validated, state only in root-owned
 directories, and it only touches what it created itself. See
 [SECURITY.md](SECURITY.md) for the threat model.
@@ -88,8 +87,8 @@ directories, and it only touches what it created itself. See
   hidden while a saved identity-provider session is enough, and appears only
   when a human is needed.
 - **Autofill** with per-profile rules: username, password, TOTP, buttons,
-  multi-step forms. Rules are recorded by clicking the form (`ocbar learn`) or
-  by logging in once with "Remember how I sign in" (`ocbar connect --teach`).
+  multi-step forms. Rules are recorded by clicking the form (`ocmac learn`) or
+  by logging in once with "Remember how I sign in" (`ocmac connect --teach`).
   Filling happens only on HTTPS hosts of the login chain started by the
   gateway.
 - **Secrets** from the macOS Keychain, KeePassXC (`keepassxc-cli`) or any
@@ -124,8 +123,8 @@ The interface runs on synthetic data, so you can look before installing
 anything that touches your network:
 
 ```bash
-ocbar ui-lab                                              # menu states in a browser page
-app/.build/ocbar.app/Contents/MacOS/ocbar-app --stage     # the real menu, every state at once
+ocmac ui-lab                                              # menu states in a browser page
+app/.build/ocmac.app/Contents/MacOS/ocmac-app --stage     # the real menu, every state at once
 ```
 
 ## Install
@@ -133,25 +132,25 @@ app/.build/ocbar.app/Contents/MacOS/ocbar-app --stage     # the real menu, every
 Requires macOS 14.4+ and Command Line Tools (full Xcode is not needed).
 
 ```bash
-brew tap ValeraGin/ocbar
-brew trust ValeraGin/ocbar            # third-party tap: Homebrew refuses untrusted formulae
-brew install ocbar                    # builds from source on your machine
-sudo ocbar install                    # once: helper, sudoers rule, LaunchAgent
+brew tap ValeraGin/openconnect-for-mac
+brew trust ValeraGin/openconnect-for-mac            # third-party tap: Homebrew refuses untrusted formulae
+brew install openconnect-for-mac                    # builds from source on your machine
+sudo ocmac install                    # once: helper, sudoers rule, LaunchAgent
 
-mkdir -p ~/.config/ocbar/profiles
-cp "$(brew --prefix ocbar)"/share/ocbar/examples/example.ocbar ~/.config/ocbar/profiles/main.ocbar
-$EDITOR ~/.config/ocbar/profiles/main.ocbar
+mkdir -p ~/.config/ocmac/profiles
+cp "$(brew --prefix openconnect-for-mac)"/share/openconnect-for-mac/examples/example.ocmac ~/.config/ocmac/profiles/main.ocmac
+$EDITOR ~/.config/ocmac/profiles/main.ocmac
 
-ocbar secret set-password
-ocbar connect --show
-ocbar app start && ocbar app autostart on
+ocmac secret set-password
+ocmac connect --show
+ocmac app start && ocmac app autostart on
 ```
 
 Why a source build: without a Developer ID a prebuilt app is quarantined by
-Gatekeeper, while a locally built one is not. `brew upgrade ocbar` updates
-it; when a release changes the privileged helper, run `sudo ocbar install`
-once more (`ocbar doctor` says when the helper is behind). Uninstall in this order: `sudo ocbar uninstall`, then
-`brew uninstall ocbar` — otherwise the root helper and its sudoers rule stay
+Gatekeeper, while a locally built one is not. `brew upgrade openconnect-for-mac` updates
+it; when a release changes the privileged helper, run `sudo ocmac install`
+once more (`ocmac doctor` says when the helper is behind). Uninstall in this order: `sudo ocmac uninstall`, then
+`brew uninstall openconnect-for-mac` — otherwise the root helper and its sudoers rule stay
 behind. Details (in Russian): [INSTALL.md](INSTALL.md).
 
 ## Profile
@@ -161,7 +160,7 @@ behind. Details (in Russian): [INSTALL.md](INSTALL.md).
 ![Notification settings](assets/notifications.png)
 
 One file per connection, similar to WireGuard configs:
-`~/.config/ocbar/profiles/<name>.ocbar`. No secrets inside — only references
+`~/.config/ocmac/profiles/<name>.ocmac`. No secrets inside — only references
 to where they are stored, so a profile can be shared.
 
 ```ini
@@ -208,11 +207,11 @@ SystemProxy = off     # on — set this SOCKS on the active network service
 
 ```bash
 brew install ocproxy
-ocbar connect
+ocmac connect
 curl --socks5-hostname 127.0.0.1:11080 https://wiki.example.com
 ```
 
-A full annotated example: [etc/example.ocbar](etc/example.ocbar).
+A full annotated example: [etc/example.ocmac](etc/example.ocmac).
 
 ### External HostScan script
 
@@ -241,14 +240,14 @@ Whether the report satisfies the device policy is decided by the gateway.
 
 In the profile editor's advanced settings, choose **Embed CSD script…**.
 The file is stored in `[Connection] CsdScriptBase64`, as one line of Base64.
-The editor and `ocbar export` preserve it, so a colleague needs just one `.ocbar`.
+The editor and `ocmac export` preserve it, so a colleague needs just one `.ocmac`.
 Use a UTF-8 script starting with `#!`, up to 256 KiB. Choose either
 `CsdWrapper` or `CsdScriptBase64`.
 
-Import extracts the script into `~/.config/ocbar/csd/`; `sudo ocbar install`
+Import extracts the script into `~/.config/ocmac/csd/`; `sudo ocmac install`
 prepares its system copy. The installer handles both steps with `--profile`
 alone, without `--csd`. Reading, validating and importing never run the script.
-After changing the embedded script, rerun `sudo ocbar install` to update its
+After changing the embedded script, rerun `sudo ocmac install` to update its
 system copy.
 
 ### Connecting through an upstream proxy
@@ -260,7 +259,7 @@ configures the local SOCKS endpoint exposed to applications after VPN login.
 
 HTTP CONNECT and SOCKS5 without authentication are supported, with an explicit
 port (1–65535) and DNS hostname or IPv4 address. Credentials, paths and IPv6
-literals are rejected. Native tunnels require helper 0.8.3+ (`sudo ocbar install`).
+literals are rejected. Native tunnels require helper 0.8.3+ (`sudo ocmac install`).
 It applies to password login, SSO and form learning.
 Explicit upstream always disables DTLS: transport uses TCP. Proxy failure does
 not fall back to a direct connection to the external gateway. WebKit/URLSession
@@ -275,30 +274,30 @@ already be running. An empty setting preserves existing connection behavior.
 ## Commands
 
 ```
-ocbar connect [profile] [--show] [--teach] [-v]   log in and bring the tunnel up
-ocbar disconnect
-ocbar logout                          disconnect and forget identity-provider sessions
-ocbar status [--short|--json]
-ocbar profiles | import <file> | export <profile> [file] | order [name…]
-ocbar routes on|off|toggle <CIDR>     also: apply | clear | status
-ocbar dns on|off|toggle <zone>        also: apply | clear | status
-ocbar autoconnect [manual|resume|always <profile>] who brings the tunnel up
-ocbar report [file] [--raw]           support report; hosts and logins masked
-ocbar logs [-f] [-n N] [source…]      all logs merged by time (supervisor, openconnect, auth, app)
-ocbar profile-check <file>            will the client accept this profile file (the editor asks before saving)
-ocbar state [--json]                  runtime state in one place: profile, auto-connect, access, flags
-ocbar pause | resume | toggle
-ocbar secret set-password|set-totp|status|code [profile]
-ocbar secret add-totp <profile> --screen|--camera|--stdin   add the TOTP secret from a QR on screen, the camera or an otpauth:// link
-ocbar secret import-qr <image> [--list] [--select NAME] [profile]
-ocbar learn [profile] [--probe] [--out <file>]    record login form rules by clicking
-ocbar rules show|import <file>|clear [profile]
-ocbar app start|stop|status | autostart on|off | devmode on|off
-ocbar supervisor status|start|stop|restart
-ocbar doctor                          diagnostics, changes nothing: parts, leftovers, stray sessions, routes
-ocbar cleanup                         remove leftovers after a crash (only ours)
-ocbar selftest
-sudo ocbar install [--trust] | uninstall
+ocmac connect [profile] [--show] [--teach] [-v]   log in and bring the tunnel up
+ocmac disconnect
+ocmac logout                          disconnect and forget identity-provider sessions
+ocmac status [--short|--json]
+ocmac profiles | import <file> | export <profile> [file] | order [name…]
+ocmac routes on|off|toggle <CIDR>     also: apply | clear | status
+ocmac dns on|off|toggle <zone>        also: apply | clear | status
+ocmac autoconnect [manual|resume|always <profile>] who brings the tunnel up
+ocmac report [file] [--raw]           support report; hosts and logins masked
+ocmac logs [-f] [-n N] [source…]      all logs merged by time (supervisor, openconnect, auth, app)
+ocmac profile-check <file>            will the client accept this profile file (the editor asks before saving)
+ocmac state [--json]                  runtime state in one place: profile, auto-connect, access, flags
+ocmac pause | resume | toggle
+ocmac secret set-password|set-totp|status|code [profile]
+ocmac secret add-totp <profile> --screen|--camera|--stdin   add the TOTP secret from a QR on screen, the camera or an otpauth:// link
+ocmac secret import-qr <image> [--list] [--select NAME] [profile]
+ocmac learn [profile] [--probe] [--out <file>]    record login form rules by clicking
+ocmac rules show|import <file>|clear [profile]
+ocmac app start|stop|status | autostart on|off | devmode on|off
+ocmac supervisor status|start|stop|restart
+ocmac doctor                          diagnostics, changes nothing: parts, leftovers, stray sessions, routes
+ocmac cleanup                         remove leftovers after a crash (only ours)
+ocmac selftest
+sudo ocmac install [--trust] | uninstall
 --dry-run                             print privileged commands instead of running them
 ```
 
@@ -308,14 +307,14 @@ There is no Shortcuts action yet, but the CLI is the automation interface —
 use "Run Shell Script" in Shortcuts, or call it from anything else:
 
 ```bash
-ocbar connect work && ocbar status --short   # key=value lines, easy to parse
-ocbar status --json                          # the same state as JSON (what the app reads)
-ocbar pause; ocbar resume
-ocbar autoconnect manual                     # stop the supervisor from logging in
+ocmac connect work && ocmac status --short   # key=value lines, easy to parse
+ocmac status --json                          # the same state as JSON (what the app reads)
+ocmac pause; ocmac resume
+ocmac autoconnect manual                     # stop the supervisor from logging in
 ```
 
-Coming from Cisco Secure Client? `ocbar import profile.xml` reads the server
-list from an AnyConnect XML profile and creates one `.ocbar` per server
+Coming from Cisco Secure Client? `ocmac import profile.xml` reads the server
+list from an AnyConnect XML profile and creates one `.ocmac` per server
 (addresses only — routes, DNS and credentials stay yours to set).
 
 ## Self-tests
@@ -324,11 +323,11 @@ None of them needs a network or privileges: configs are synthetic, state and
 logs go to a temporary directory, the helper is replaced by a stub.
 
 ```bash
-ocbar selftest                  # CLI: profile parsing, rejections, cleanup, notifications
+ocmac selftest                  # CLI: profile parsing, rejections, cleanup, notifications
 tools/helper-selftest.sh        # privileged helper on --dry-run with stubs
-ocbar-auth --selftest           # TOTP (RFC 6238), XML, fill scope, limits, cookies
-ocbar-auth --learn-selftest     # form recording and autofill on sample pages
-ocbar-app --selftest            # profile read/write parity with the CLI, UI state
+ocmac-auth --selftest           # TOTP (RFC 6238), XML, fill scope, limits, cookies
+ocmac-auth --learn-selftest     # form recording and autofill on sample pages
+ocmac-app --selftest            # profile read/write parity with the CLI, UI state
 tools/i18n-scan.py --check      # every string a person sees has its English
 ```
 
@@ -343,12 +342,12 @@ They run in CI on every push.
 | macOS 14.4, Apple Silicon | deployment target; no real-device verification |
 | Intel Macs | expected to work; Homebrew prefix is `/usr/local`, which the helper checks for ownership. Not verified |
 
-Tried OpenConnect for Mac with your gateway? [Tell whether it worked](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml) — one short report
+Tried OpenConnect for Mac with your gateway? [Tell whether it worked](https://github.com/ValeraGin/openconnect-for-mac/issues/new?template=gateway_report.yml) — one short report
 per gateway and sign-in method fills the compatibility table.
 
 No telemetry, crash reporting or analytics. OpenConnect for Mac talks to your gateway and
 identity provider; configured resource checks contact the resource you choose.
-Logs stay under `~/Library/Logs/ocbar`. Installing and updating downloads code
+Logs stay under `~/Library/Logs/ocmac`. Installing and updating downloads code
 from GitHub and Homebrew; the app has no automatic update check.
 
 ## Limitations
@@ -371,14 +370,14 @@ MIT — see [LICENSE](LICENSE). Author: Valery Ignatkovich
 
 ### Profile workflow API
 
-`ocbar import --json <file> [name]` returns `{"profiles":["actual-id",…]}` on stdout;
+`ocmac import --json <file> [name]` returns `{"profiles":["actual-id",…]}` on stdout;
 import notices go to stderr. Cisco XML may create several profiles. Applications
 must use these IDs rather than the input filename.
 
-`ocbar csd-status [profile]` returns `required`, `ready` and the system script
+`ocmac csd-status [profile]` returns `required`, `ready` and the system script
 `name` as JSON without installing or executing CSD. Missing or changed system
-copies block connection before sign-in. Run `sudo ocbar install` and check again.
+copies block connection before sign-in. Run `sudo ocmac install` and check again.
 External wrappers use content-based names; an older basename is accepted only
-when its contents match. `ocbar check-access [profile] [URL]` checks a work resource
+when its contents match. `ocmac check-access [profile] [URL]` checks a work resource
 once and returns `{"reachable":true|false|null}` without changing the connection
 or the supervisor’s state. An optional URL is used only for that check.

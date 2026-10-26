@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "ocbar-auth",
+    name: "ocmac-auth",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "ocbar-auth",
-            path: "Sources/ocbar-auth",
+            name: "ocmac-auth",
+            path: "Sources/ocmac-auth",
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("WebKit"),

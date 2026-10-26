@@ -1,4 +1,4 @@
-/* Интерфейс ocbar по-английски. Ключ — русский текст из кода: без перевода
+/* Интерфейс ocmac по-английски. Ключ — русский текст из кода: без перевода
    строка покажется по-русски, а не пустым местом.
    Пропуски и лишнее: tools/i18n-scan.py --check */
 
@@ -135,7 +135,7 @@
 "имя сервиса в Keychain" = "keychain service name";
 "Форма входа" = "Sign-in form";
 "Имя файла" = "File name";
-"имя.ocbar в ~/.config/ocbar/profiles" = "name.ocbar in ~/.config/ocbar/profiles";
+"имя.ocmac в ~/.config/ocmac/profiles" = "name.ocmac in ~/.config/ocmac/profiles";
 "если шлюз просит проверку соответствия" = "if the gateway asks for a posture check";
 "Сервис в связке ключей" = "Keychain service";
 "Хосты провайдера входа" = "Identity provider hosts";
@@ -178,7 +178,7 @@
 "Рабочий" = "Work";
 "необязательно" = "optional";
 "Импортировать файл…" = "Import a file…";
-"Профиль OpenConnect for Mac (.ocbar) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)." = "An OpenConnect for Mac profile (.ocbar) — your own or from a colleague — or a Cisco AnyConnect profile (.xml).";
+"Профиль OpenConnect for Mac (.ocmac) — свой или от коллеги — или профиль Cisco AnyConnect (.xml)." = "An OpenConnect for Mac profile (.ocmac) — your own or from a colleague — or a Cisco AnyConnect profile (.xml).";
 "Позже" = "Later";
 
 /* Трафик */
@@ -204,7 +204,7 @@
 "Адреса, домены и логины в отчёте заменены метками. Перед отправкой посмотрите файл." = "Addresses, domains and logins in the report are masked. Look through the file before sending it.";
 "отчёт не сохранился: " = "the report was not saved: ";
 "системный SOCKS без живого прокси. Системный DNS не трогает — OpenConnect for Mac его не ставит. " = "a system-wide SOCKS with no live proxy. System DNS is left alone — OpenConnect for Mac never sets it. ";
-"Живой туннель и чужой openconnect не трогает. То же, что `ocbar cleanup`." = "A live tunnel and someone else's openconnect are left alone. Same as `ocbar cleanup`.";
+"Живой туннель и чужой openconnect не трогает. То же, что `ocmac cleanup`." = "A live tunnel and someone else's openconnect are left alone. Same as `ocmac cleanup`.";
 "Значок появится в строке меню сам; туннель при этом не поднимается." = "The icon appears in the menu bar by itself; the tunnel is not brought up.";
 "Всегда: %@" = "Always: %@";
 "Сеть определяется по маршрутизатору, без геолокации. Если сессия истекла, автоподключение остановится и меню покажет «Нужен вход»." = "The network is recognised by its router, with no location access. If the session expires, auto-connect stops and the menu says “Sign-in needed”.";
@@ -230,7 +230,7 @@
 "Сети и DNS временно сняты, сессия жива — возобновление без входа." = "Networks and DNS are removed for now, the session is alive — resuming needs no sign-in.";
 "Сессия истекла, автоматически войти не удалось. Автоподключение ждёт вас." = "The session expired and signing in automatically failed. Auto-connect is waiting for you.";
 "Это подключение OpenConnect for Mac не управляет и не трогает." = "OpenConnect for Mac does not manage or touch this connection.";
-"Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCBAR_BIN." = "Looked in /opt/homebrew/bin, /usr/local/bin and next to the app. The path can be set with OCBAR_BIN.";
+"Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCMAC_BIN." = "Looked in /opt/homebrew/bin, /usr/local/bin and next to the app. The path can be set with OCMAC_BIN.";
 "Сессия истекла, молча войти не удалось" = "The session expired and signing in silently failed";
 "Проблемы со связью и доступом" = "Connection and access problems";
 "Связь потеряна, доступ не проходит, SOCKS не включён" = "Connection lost, access fails, SOCKS not set";
@@ -242,7 +242,7 @@
 "Файл профиля изменился на диске" = "The profile file changed on disk";
 "Профиль «%@» уже есть" = "Profile “%@” already exists";
 "Сохранить их, прежде чем открыть другой профиль?" = "Save them before opening another profile?";
-"Пока профиль был открыт, файл записали снаружи — разметка формы, «Запомнить, как я вхожу» или ocbar rules. «Перечитать» покажет файл с диска, правки здесь пропадут; «Перезаписать» запишет форму, и пропадёт то, что записали снаружи." = "While the profile was open the file was written from outside — the form learn step, “learn my sign-in”, or ocbar rules. “Reload” shows the file from disk and drops the edits here; “Overwrite” writes this form and drops what was written outside.";
+"Пока профиль был открыт, файл записали снаружи — разметка формы, «Запомнить, как я вхожу» или ocmac rules. «Перечитать» покажет файл с диска, правки здесь пропадут; «Перезаписать» запишет форму, и пропадёт то, что записали снаружи." = "While the profile was open the file was written from outside — the form learn step, “learn my sign-in”, or ocmac rules. “Reload” shows the file from disk and drops the edits here; “Overwrite” writes this form and drops what was written outside.";
 "Файл %@ уже существует. Перезаписать его содержимым этой формы? Прошлая версия останется рядом с суффиксом .bak." = "The file %@ already exists. Overwrite it with this form? The previous version stays next to it with a .bak suffix.";
 "адрес не задан" = "no address set";
 "Сначала сохраните профиль" = "Save the profile first";
@@ -328,7 +328,7 @@
 "Добавьте профиль" = "Add a profile";
 "Профиль сохранён" = "Profile saved";
 "Адрес — как в штатном клиенте: хост и группа. Сети и DNS можно добавить позже." = "The address is as in the vendor client: host and group. Networks and DNS can be added later.";
-"Файл %@.ocbar. Изменить его можно в «Настройках → Профили»." = "File %@.ocbar. You can change it in Settings → Profiles.";
+"Файл %@.ocmac. Изменить его можно в «Настройках → Профили»." = "File %@.ocmac. You can change it in Settings → Profiles.";
 "Пароль OpenConnect for Mac подставит из связки ключей, код из SMS спросит окном." = "OpenConnect for Mac fills in the password from the keychain and asks for the SMS code in a window.";
 "Пароль и источник кода OpenConnect for Mac предложит сохранить после первого входа." = "OpenConnect for Mac will offer to save the password and the source of the code after the first sign-in.";
 "Дальше OpenConnect for Mac подключается автоматически; если понадобится вход, он скажет в меню." = "From now on OpenConnect for Mac connects by itself; if a sign-in is needed it says so in the menu.";
@@ -337,7 +337,7 @@
 "Сохранить и продолжить" = "Save and continue";
 "Готово" = "Done";
 "профиль не сохранился: " = "the profile was not saved: ";
-"Файл профиля .ocbar или профиль Cisco AnyConnect (.xml)" = "An .ocbar profile file or a Cisco AnyConnect profile (.xml)";
+"Файл профиля .ocmac или профиль Cisco AnyConnect (.xml)" = "An .ocmac profile file or a Cisco AnyConnect profile (.xml)";
 "не получилось:" = "did not work:";
 
 /* Единицы: время, объём, скорость, разделитель дробной части */
@@ -399,13 +399,13 @@
 "журнал пуст" = "the log is empty";
 "ни одной строки с «%@»" = "no lines with “%@”";
 "журналы пусты" = "the logs are empty";
-"Переменная OCBAR_BIN указывает на %@ — там нет исполняемого файла." = "OCBAR_BIN points to %@ — there is no executable there.";
-"ocbar status вернул %@" = "ocbar status returned %@";
-"ocbar status --json вернул не JSON" = "ocbar status --json did not return JSON";
+"Переменная OCMAC_BIN указывает на %@ — там нет исполняемого файла." = "OCMAC_BIN points to %@ — there is no executable there.";
+"ocmac status вернул %@" = "ocmac status returned %@";
+"ocmac status --json вернул не JSON" = "ocmac status --json did not return JSON";
 "профиль" = "profile";
 "клиент не принял профиль (код %@)" = "the client rejected the profile (code %@)";
 "код возврата %@" = "exit code %@";
-"ocbar doctor ничего не напечатал (код %@)" = "ocbar doctor printed nothing (code %@)";
+"ocmac doctor ничего не напечатал (код %@)" = "ocmac doctor printed nothing (code %@)";
 "имя файла «%@»: буквы, цифры, точка, дефис и подчёркивание, начинается с буквы или цифры" = "file name “%@”: letters, digits, dot, hyphen and underscore, starting with a letter or digit";
 "не задан Url — без него профиль не подключится" = "Url is not set — the profile cannot connect without it";
 "в Url есть пробел: %@" = "Url contains a space: %@";
@@ -448,8 +448,8 @@
 "нет такой программы: %@" = "no such program: %@";
 "отменено" = "cancelled";
 "команда не ответила за %@ с" = "the command did not answer in %@ s";
-"Хелпер не установлен: действия из меню не сработают — sudo ocbar install" = "The helper is not installed: menu actions will not work — sudo ocbar install";
-"Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — sudo ocbar install" = "The helper has no NOPASSWD: sudo would ask for a password, and the menu has no terminal — sudo ocbar install";
+"Хелпер не установлен: действия из меню не сработают — sudo ocmac install" = "The helper is not installed: menu actions will not work — sudo ocmac install";
+"Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — sudo ocmac install" = "The helper has no NOPASSWD: sudo would ask for a password, and the menu has no terminal — sudo ocmac install";
 "Молча войти не удалось — нужен вход" = "Silent sign-in failed — sign-in needed";
 "«%@» отменено" = "“%@” cancelled";
 "не получилось" = "did not work";
@@ -536,14 +536,14 @@
 "Мастер настройки и проверка доступа…" = "Setup wizard and access check…";
 "Открыть профиль OpenConnect for Mac" = "Open an OpenConnect for Mac profile";
 "Подготовьте системную часть для этого профиля" = "Set up the system components for this profile";
-"Выберите полученный профиль .ocbar или Cisco .xml" = "Choose the .ocbar or Cisco .xml profile you received";
+"Выберите полученный профиль .ocmac или Cisco .xml" = "Choose the .ocmac or Cisco .xml profile you received";
 "Дождитесь завершения текущего действия и откройте файл ещё раз." = "Wait for the current action to finish, then open the file again.";
-"Откройте один файл профиля .ocbar или Cisco .xml." = "Open one .ocbar or Cisco .xml profile at a time.";
+"Откройте один файл профиля .ocmac или Cisco .xml." = "Open one .ocmac or Cisco .xml profile at a time.";
 "Не удалось открыть профиль: %@" = "Could not open the profile: %@";
 "Введите свой корпоративный логин." = "Enter your own work username.";
 "Профиль изменился. Откройте его заново, чтобы сохранить актуальные настройки." = "The profile changed. Open it again to keep the latest settings.";
-"В нестандартном окружении подготовьте системную часть вручную: sudo ocbar install" = "In a custom environment, set up the system components manually: sudo ocbar install";
-"Не удалось открыть Терминал. Выполните sudo ocbar install и повторите подключение." = "Could not open Terminal. Run sudo ocbar install and try connecting again.";
+"В нестандартном окружении подготовьте системную часть вручную: sudo ocmac install" = "In a custom environment, set up the system components manually: sudo ocmac install";
+"Не удалось открыть Терминал. Выполните sudo ocmac install и повторите подключение." = "Could not open Terminal. Run sudo ocmac install and try connecting again.";
 "Подготовка не завершена. Повторите подключение после установки системной части." = "Setup has not completed. Try connecting after the system components are installed.";
 "Открыть профиль…" = "Open profile…";
 "Сохранить профиль" = "Save profile";

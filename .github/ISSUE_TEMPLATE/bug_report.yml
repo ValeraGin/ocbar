@@ -5,14 +5,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        Attach `ocbar report` if you can (it masks hosts, addresses and logins
+        Attach `ocmac report` if you can (it masks hosts, addresses and logins
         — but read it before attaching). Never paste cookies, tokens or
         passwords. Русский тоже подходит.
   - type: input
     id: version
     attributes:
       label: OpenConnect for Mac version
-      description: Output of `ocbar version --all` (first lines are enough)
+      description: Output of `ocmac version --all` (first lines are enough)
     validations: {required: true}
   - type: input
     id: macos

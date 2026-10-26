@@ -1,15 +1,15 @@
 # Server compatibility lab
 
 The supported protocol is AnyConnect. OpenConnect supports other protocols,
-but ocbar currently selects `--protocol=anyconnect`; these tests make no claims
+but ocmac currently selects `--protocol=anyconnect`; these tests make no claims
 about GlobalProtect, Fortinet, Pulse, OpenVPN or WireGuard.
 
 ## Three independent layers
 
 | Suite | What runs | What it verifies |
 | --- | --- | --- |
-| `tools/gateway-matrix-test.py` | Real ocbar-auth + WebKit against synthetic HTTPS gateways | SSO, custom cookie names, opaque round-trip, nested certificate hash, GET/POST/final-reply redirects (including host changes), client-certificate fallback, protocol/server/TLS errors |
-| `tools/hostscan-sequence-test.py` | Real ocbar-auth + external wrapper against a synthetic HTTPS gateway | Report submission, waiting, original HostScan token, wrapper failures, paths with spaces, non-default port |
+| `tools/gateway-matrix-test.py` | Real ocmac-auth + WebKit against synthetic HTTPS gateways | SSO, custom cookie names, opaque round-trip, nested certificate hash, GET/POST/final-reply redirects (including host changes), client-certificate fallback, protocol/server/TLS errors |
+| `tools/hostscan-sequence-test.py` | Real ocmac-auth + external wrapper against a synthetic HTTPS gateway | Report submission, waiting, original HostScan token, wrapper failures, paths with spaces, non-default port |
 | `tools/ocserv-integration-test.py` | Production password driver + real OpenConnect + real ocserv | Stored/manual password, wrong password then cancellation, initial cancellation, untrusted server certificate, groups, password + TOTP, client certificate, isolated CSTP and DTLS tunnels with HTTP and DNS |
 
 The first two are protocol fixtures, **not certified emulations of Cisco
@@ -23,7 +23,7 @@ pass the DTLS case. Helper routing tests remain in
 `tools/helper-selftest.sh`.
 
 The ocserv runner supplies `--cafile` directly to OpenConnect and exercises
-`ocbar-pwauth.py`, not the complete profile-to-tunnel workflow. The current
+`ocmac-pwauth.py`, not the complete profile-to-tunnel workflow. The current
 profile/CLI does not expose a CA file, `--authgroup` or a client certificate.
 Those configurations are therefore not declared supported through profiles by
 this suite. Groups are tested both with explicit selection and with the expected
@@ -52,7 +52,7 @@ python3 tools/hostscan-sequence-test.py
 To reproduce one case or test an older binary:
 
 ```sh
-python3 tools/gateway-matrix-test.py --case reply-redirect --client /path/to/ocbar-auth
+python3 tools/gateway-matrix-test.py --case reply-redirect --client /path/to/ocmac-auth
 ```
 
 A redirect on the final auth reply must change `post_url` to the endpoint that
@@ -63,11 +63,11 @@ The fixture also requires POST and its authentication body to reach that node.
 ## Real ocserv (macOS or Linux with Docker and OpenConnect)
 
 ```sh
-docker build -t ocbar-test-ocserv:bookworm tools/server-lab
-python3 tools/ocserv-integration-test.py --image ocbar-test-ocserv:bookworm
+docker build -t ocmac-test-ocserv:bookworm tools/server-lab
+python3 tools/ocserv-integration-test.py --image ocmac-test-ocserv:bookworm
 
-docker build --build-arg BASE=debian:trixie-slim -t ocbar-test-ocserv:trixie tools/server-lab
-python3 tools/ocserv-integration-test.py --image ocbar-test-ocserv:trixie
+docker build --build-arg BASE=debian:trixie-slim -t ocmac-test-ocserv:trixie tools/server-lab
+python3 tools/ocserv-integration-test.py --image ocmac-test-ocserv:trixie
 ```
 
 Use `--openconnect /absolute/path/to/openconnect` if it is not on PATH.
@@ -128,7 +128,7 @@ python3 tools/macos-vpn-test.py --live --mode proxy de1.ocservvpn.com fr1.ocserv
 ```
 
 Unlike the container suites, tunnel mode changes live host routes and split
-DNS. It requires ocbar to be disconnected, the installed NOPASSWD helper,
+DNS. It requires ocmac to be disconnected, the installed NOPASSWD helper,
 and an unused `/etc/resolver/example.com`. It temporarily stops the supervisor,
 uses disposable profiles/config/user-state, adds only two host routes and one
 resolver, then verifies removal and restores the supervisor. Personal profiles

@@ -5,11 +5,11 @@
 <meta name="theme-color" content="#eef0ea">
 <title>OpenConnect for Mac — рабочий VPN на Mac</title><meta name="description" content="Рабочий VPN на Mac: вход через SSO, нужные сети и корпоративный DNS, восстановление после сна. Открытый клиент на основе OpenConnect.">
 <meta property="og:title" content="OpenConnect for Mac — рабочий VPN на Mac"><meta property="og:description" content="Рабочий VPN на Mac: вход через SSO, нужные сети и корпоративный DNS, восстановление после сна. Открытый клиент на основе OpenConnect.">
-<meta property="og:type" content="website"><meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card-ru.jpg">
+<meta property="og:type" content="website"><meta property="og:image" content="../assets/social-card-ru.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="../assets/icon.svg">
 <link rel="stylesheet" href="../landing.css?v=20261022-3">
-<script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
+<script>(function(){var k="ocmac-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
 if(a)try{localStorage.setItem(k,a.lang)}catch(e){}});
@@ -17,24 +17,19 @@ if(d.lang!=="en")return;
 var w=c;if(!w){var l=navigator.languages||[navigator.language||""];
 for(var i=0;i<l.length;i++){var p=String(l[i]).toLowerCase().split("-")[0];if(p==="ru"||p==="en"){w=p;break}}}
 if(w==="ru")location.replace("../ru/"+location.hash)})()</script>
-<link rel="canonical" href="https://valeragin.github.io/ocbar/ru/">
-<meta property="og:url" content="https://valeragin.github.io/ocbar/ru/">
-<link rel="alternate" hreflang="en" href="https://valeragin.github.io/ocbar/">
-<link rel="alternate" hreflang="ru" href="https://valeragin.github.io/ocbar/ru/">
-<link rel="alternate" hreflang="x-default" href="https://valeragin.github.io/ocbar/">
 </head>
 <body>
 <a class="skip" href="#content">Перейти к содержимому</a>
 <header class="top wrap">
   <a class="brand" href="./"><img src="../assets/icon.svg" width="28" height="28" alt="">OpenConnect for Mac</a>
-  <nav><a href="https://github.com/ValeraGin/ocbar">GitHub</a><span class="languages" aria-label="Язык"><a href=".././" lang="en" >EN</a> / <a href="../ru/" lang="ru" aria-current="page">RU</a></span></nav>
+  <nav><a href="https://github.com/ValeraGin/openconnect-for-mac">GitHub</a><span class="languages" aria-label="Язык"><a href=".././" lang="en" >EN</a> / <a href="../ru/" lang="ru" aria-current="page">RU</a></span></nav>
 </header>
 <main id="content" class="wrap">
   <section class="hero">
     <div>
       <h1>Рабочий VPN на Mac</h1>
       <p class="lead">SSO, нужные сети и восстановление после сна. Нативное меню macOS, открытый код на основе OpenConnect.</p>
-      <p class="actions"><a class="button" href="#install">Установить</a><a class="link" href="https://github.com/ValeraGin/ocbar">Исходники на GitHub ↗</a></p>
+      <p class="actions"><a class="button" href="#install">Установить</a><a class="link" href="https://github.com/ValeraGin/openconnect-for-mac">Исходники на GitHub ↗</a></p>
       <p><a class="link" href="guide/#profile">У меня есть готовый профиль от коллеги →</a></p>
     </div>
     <figure><img src="../assets/demo-ru.gif" width="373" height="595" alt="Меню OpenConnect for Mac: подключение, выключение сети, пауза"><figcaption>Настоящее меню на демо-профиле.</figcaption></figure>
@@ -51,12 +46,12 @@ if(w==="ru")location.replace("../ru/"+location.hash)})()</script>
     <p>Реальное подключение: AnyConnect-совместимый шлюз с Keycloak, macOS 26 на Apple Silicon. Автор использует этот сценарий ежедневно.</p>
     <p>Автоматические проверки: ocserv и тестовые SSO-шлюзы. Это не подтверждение совместимости с реальными Okta или Microsoft Entra ID.</p>
     <p class="muted">Минимальная версия — macOS 14.4. На Intel и macOS 14.4–15 нет проверки на реальном устройстве. Чистая установка и первый вход на другом Mac пока не проверены.</p>
-    <p><a class="link" href="https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml">Проверили свой шлюз? Расскажите, как прошло →</a></p>
+    <p><a class="link" href="https://github.com/ValeraGin/openconnect-for-mac/issues/new?template=gateway_report.yml">Проверили свой шлюз? Расскажите, как прошло →</a></p>
     <p class="muted">Короткий отчёт поможет уточнить совместимость. Название компании, адрес шлюза и данные входа не нужны.</p>
   </section>
   <section class="install" id="install">
     <h2>Установка</h2>
-    <div class="code"><pre id="commands">/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot;</pre><button type="button" data-copy="commands" data-done="Скопировано">Копировать</button></div>
+    <div class="code"><pre id="commands">/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)&quot;</pre><button type="button" data-copy="commands" data-done="Скопировано">Копировать</button></div>
     <p>Команда загрузит установщик с GitHub. Он предложит поставить недостающие инструменты Apple и Homebrew, установит OpenConnect for Mac и запустит приложение. Для системного помощника понадобится пароль администратора Mac.</p>
     <p class="muted">macOS 14.4+ · доступ к AnyConnect-совместимому шлюзу</p>
     <p><a class="link" href="guide/#profile">У меня есть готовый профиль от коллеги →</a></p>
@@ -64,8 +59,8 @@ if(w==="ru")location.replace("../ru/"+location.hash)})()</script>
   </section>
 </main>
 <footer class="wrap">
-  <a href="https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.md">Если не работает</a>
-  <a href="https://github.com/ValeraGin/ocbar">GitHub</a>
+  <a href="https://github.com/ValeraGin/openconnect-for-mac/blob/main/TROUBLESHOOTING.md">Если не работает</a>
+  <a href="https://github.com/ValeraGin/openconnect-for-mac">GitHub</a>
   <span>MIT · без телеметрии</span>
   <span>Независимый проект, не официальный продукт OpenConnect. Не связан с проектом OpenConnect или Cisco. AnyConnect обозначает совместимость протокола.</span>
 </footer>

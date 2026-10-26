@@ -1,14 +1,14 @@
 #!/bin/bash
 #
-# helper-selftest.sh — самопроверка libexec/ocbar-helper целиком на --dry-run.
+# helper-selftest.sh — самопроверка libexec/ocmac-helper целиком на --dry-run.
 #
 # Ничего не меняет в системе и не требует root. Хелпер копируется во
 # временный каталог, и в копии подменяются три строки: PATH (впереди —
 # заглушки networksetup, route, nc, id, ifconfig…), PREFIX и RESOLVER_DIR.
-# Состояние — в OCBAR_STATE_DIR там же. Настоящий
-# /usr/local/libexec/ocbar-helper не вызывается никогда, sudo — тоже.
+# Состояние — в OCMAC_STATE_DIR там же. Настоящий
+# /usr/local/libexec/ocmac-helper не вызывается никогда, sudo — тоже.
 #
-#   tools/helper-selftest.sh [хелпер]    по умолчанию libexec/ocbar-helper рядом
+#   tools/helper-selftest.sh [хелпер]    по умолчанию libexec/ocmac-helper рядом
 #
 # Проверки с номером пункта ловят конкретный дефект хелпера (1–13 — найденные
 # до 0.8.0, 14 — лишние сессии openconnect, 0.17.1; 15 — обрыв посреди
@@ -23,14 +23,14 @@ PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 umask 022
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SRC="${1:-$HERE/../libexec/ocbar-helper}"
+SRC="${1:-$HERE/../libexec/ocmac-helper}"
 [ "$(id -u)" != 0 ] || { echo "helper-selftest: запускайте без sudo" >&2; exit 2; }
 [ -f "$SRC" ] || { echo "helper-selftest: нет $SRC" >&2; exit 2; }
 case "$(cd "$(dirname "$SRC")" && pwd -P)/$(basename "$SRC")" in
-    /usr/local/libexec/ocbar-helper) echo "helper-selftest: установленный хелпер не трогаю — дайте путь к копии" >&2; exit 2 ;;
+    /usr/local/libexec/ocmac-helper) echo "helper-selftest: установленный хелпер не трогаю — дайте путь к копии" >&2; exit 2 ;;
 esac
 
-T=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-hst.XXXXXX") || exit 2
+T=$(mktemp -d "${TMPDIR:-/tmp}/ocmac-hst.XXXXXX") || exit 2
 chmod 700 "$T"
 BG=""
 finish() {
@@ -40,7 +40,7 @@ finish() {
 trap finish EXIT
 
 STUB="$T/stub"; SD="$T/stubdata"; PFX="$T/prefix"; RES="$T/resolver"; ST="$T/st"
-mkdir -p "$STUB" "$SD" "$PFX/libexec/ocbar/csd" "$PFX/etc/ocbar" "$PFX/var" "$RES"
+mkdir -p "$STUB" "$SD" "$PFX/libexec/ocmac/csd" "$PFX/etc/ocmac" "$PFX/var" "$RES"
 
 # ------------------------------------------------------------- заглушки ----
 # Всё, что меняет систему, при --dry-run печатается, а не выполняется. Если
@@ -78,24 +78,24 @@ for c in ifconfig dscacheutil killall; do
 done
 # Порт 53 «молчит»: старый cleanup в этом случае стирал DNS сервиса.
 printf '#!/bin/bash\nexit 1\n' > "$STUB/nc"
-# id: OCBAR_TEST_UID подменяет только «id -u» — так проверяется отказ под root.
+# id: OCMAC_TEST_UID подменяет только «id -u» — так проверяется отказ под root.
 cat > "$STUB/id" <<'EOF'
 #!/bin/bash
-if [ -n "${OCBAR_TEST_UID:-}" ] && [ "$#" = 1 ] && [ "$1" = -u ]; then echo "$OCBAR_TEST_UID"; exit 0; fi
+if [ -n "${OCMAC_TEST_UID:-}" ] && [ "$#" = 1 ] && [ "$1" = -u ]; then echo "$OCMAC_TEST_UID"; exit 0; fi
 exec /usr/bin/id "$@"
 EOF
 chmod 755 "$STUB"/*
 
 # Установка-муляж: копия openconnect, манифесты доверия (новый и старый
 # путь), csd-wrapper, штатный vpnc-script старого режима full.
-printf '#!/bin/sh\nexit 0\n' > "$PFX/libexec/ocbar/openconnect"
-printf '#!/bin/sh\nexit 0\n' > "$PFX/libexec/ocbar/csd/wrap"
-printf '#!/bin/sh\nexit 0\n' > "$PFX/libexec/ocbar/vpnc-script-full"
-chmod 755 "$PFX/libexec/ocbar/openconnect" "$PFX/libexec/ocbar/csd/wrap" "$PFX/libexec/ocbar/vpnc-script-full"
-: > "$PFX/libexec/ocbar/trust.sha256"; : > "$PFX/etc/ocbar/trust.sha256"
+printf '#!/bin/sh\nexit 0\n' > "$PFX/libexec/ocmac/openconnect"
+printf '#!/bin/sh\nexit 0\n' > "$PFX/libexec/ocmac/csd/wrap"
+printf '#!/bin/sh\nexit 0\n' > "$PFX/libexec/ocmac/vpnc-script-full"
+chmod 755 "$PFX/libexec/ocmac/openconnect" "$PFX/libexec/ocmac/csd/wrap" "$PFX/libexec/ocmac/vpnc-script-full"
+: > "$PFX/libexec/ocmac/trust.sha256"; : > "$PFX/etc/ocmac/trust.sha256"
 
 # ------------------------------------------------------------ копия хелпера ----
-H="$T/ocbar-helper"
+H="$T/ocmac-helper"
 sed -e "s|^PATH=\"/usr/bin:/bin:/usr/sbin:/sbin\"\$|PATH=\"$STUB:/usr/bin:/bin:/usr/sbin:/sbin\"|" \
     -e "s|^PREFIX=\"/usr/local\"\$|PREFIX=\"$PFX\"|" \
     -e "s|^RESOLVER_DIR=\"/etc/resolver\"\$|RESOLVER_DIR=\"$RES\"|" "$SRC" > "$H"
@@ -120,13 +120,13 @@ fresh() {
     : > "$SD/services"
 }
 # Запуск копии: вывод (stdout и stderr) — в OUT, код — в RC.
-H_()  { OUT=$(OCBAR_STATE_DIR="${STDIR:-$ST}" "$H" --dry-run "$@" 2>&1 </dev/null); RC=$?; }
-Hin() { local in="$1"; shift; OUT=$(printf '%s' "$in" | OCBAR_STATE_DIR="$ST" "$H" --dry-run "$@" 2>&1); RC=$?; }
-Henv() { OUT=$(env OCBAR_STATE_DIR="$ST" "$@" 2>&1 </dev/null); RC=$?; }
+H_()  { OUT=$(OCMAC_STATE_DIR="${STDIR:-$ST}" "$H" --dry-run "$@" 2>&1 </dev/null); RC=$?; }
+Hin() { local in="$1"; shift; OUT=$(printf '%s' "$in" | OCMAC_STATE_DIR="$ST" "$H" --dry-run "$@" 2>&1); RC=$?; }
+Henv() { OUT=$(env OCMAC_STATE_DIR="$ST" "$@" 2>&1 </dev/null); RC=$?; }
 # Без --dry-run: нужно там, где проверяется реакция на код возврата команды
 # (в холостом прогоне команда не запускается). Безопасно: каталог состояния
 # временный, PATH копии ведёт на заглушки, RESOLVER_DIR подменён.
-Hreal() { OUT=$(OCBAR_STATE_DIR="$ST" "$H" "$@" 2>&1 </dev/null); RC=$?; }
+Hreal() { OUT=$(OCMAC_STATE_DIR="$ST" "$H" "$@" 2>&1 </dev/null); RC=$?; }
 has()    { printf '%s' "$OUT" | grep -Fq -- "$1"; }
 hasnt()  { ! has "$1"; }
 rc0()    { [ "$RC" = 0 ]; }
@@ -152,7 +152,7 @@ check() { # номер, описание, условие…
 }
 all() { local c; for c in "$@"; do eval "$c" || return 1; done; return 0; }
 
-echo "ocbar-helper selftest: $SRC"
+echo "ocmac-helper selftest: $SRC"
 echo "  версия: $("$H" version 2>/dev/null)"
 
 # ------------------------------------------------------------------ 1 ----
@@ -166,9 +166,9 @@ check 1 "предок каталога состояния пишется все�
 ln -s "$T/open/st" "$T/stlink"
 STDIR="$T/stlink" H_ dns-clear
 check 1 "каталог состояния — симлинк в доступное всем место — отказ" all rcbad 'has отказ'
-chmod 777 "$PFX/libexec/ocbar"
+chmod 777 "$PFX/libexec/ocmac"
 H_ dns-clear
-chmod 755 "$PFX/libexec/ocbar"
+chmod 755 "$PFX/libexec/ocmac"
 check 1 "LIBDIR пишется всеми — отказ" all rcbad 'has отказ'
 fresh
 Hin $'cookie=x\nzone ALL ALL=(ALL) NOPASSWD: ALL\nzone ok.test vpn\nzone bad.test vpn 53 extra\nnet 10.1.0.0/16\n' \
@@ -176,14 +176,14 @@ Hin $'cookie=x\nzone ALL ALL=(ALL) NOPASSWD: ALL\nzone ok.test vpn\nzone bad.tes
 check 1 "строки zone из stdin проверяются до записи" \
     all 'fnocontains "$ST/zones.wanted" NOPASSWD' 'fnocontains "$ST/zones.wanted" bad.test' 'fline "$ST/zones.wanted" "ok.test vpn 53"'
 fresh
-mkdir -p "$PFX/var/ocbar"
-echo "STATE=connected" > "$PFX/var/ocbar/tunnel.env"
-ln -s "$T/elsewhere" "$PFX/var/ocbar/zones.state"
-echo x > "$T/hard"; ln "$T/hard" "$PFX/var/ocbar/routes.state"
+mkdir -p "$PFX/var/ocmac"
+echo "STATE=connected" > "$PFX/var/ocmac/tunnel.env"
+ln -s "$T/elsewhere" "$PFX/var/ocmac/zones.state"
+echo x > "$T/hard"; ln "$T/hard" "$PFX/var/ocmac/routes.state"
 H_ migrate-state
 check 1 "migrate-state: обычный файл переносится, симлинк и жёсткая ссылка — нет" \
-    all rc0 'has "mv $PFX/var/ocbar/tunnel.env $ST/tunnel.env"' 'hasnt "mv $PFX/var/ocbar/zones.state"' 'hasnt "mv $PFX/var/ocbar/routes.state"'
-rm -rf "$PFX/var/ocbar" "$T/hard"
+    all rc0 'has "mv $PFX/var/ocmac/tunnel.env $ST/tunnel.env"' 'hasnt "mv $PFX/var/ocmac/zones.state"' 'hasnt "mv $PFX/var/ocmac/routes.state"'
+rm -rf "$PFX/var/ocmac" "$T/hard"
 
 # ------------------------------------------------------------------ 2 ----
 fresh
@@ -192,12 +192,12 @@ check 2 "--csd-user — локальный пользователь, а не л�
     all rc0 'has "--csd-user $ME "' 'hasnt "--csd-user vpn.login@corp"'
 
 # Имя встроенного скрипта должно проходить реальную проверку хелпера.
-printf '[Connection]\nCsdScriptBase64 = %s\n' "$(printf '#!/bin/bash\nexit 0\n' | base64 | tr -d '\n')" > "$T/inline.ocbar"
-INLINE_CSD=$(/usr/bin/python3 "$HERE/../libexec/ocbar-csd.py" materialize "$T/inline.ocbar" "$PFX/libexec/ocbar/csd" 755) || exit 2
+printf '[Connection]\nCsdScriptBase64 = %s\n' "$(printf '#!/bin/bash\nexit 0\n' | base64 | tr -d '\n')" > "$T/inline.ocmac"
+INLINE_CSD=$(/usr/bin/python3 "$HERE/../libexec/ocmac-csd.py" materialize "$T/inline.ocmac" "$PFX/libexec/ocmac/csd" 755) || exit 2
 fresh
 Hin $'cookie=x\n' tunnel-start vpn.example.com "$HASH" split user "" "$(basename "$INLINE_CSD")"
 check 2 "встроенный CSD: имя и скрипт приняты хелпером" \
-    all rc0 'has "--csd-wrapper $PFX/libexec/ocbar/csd/$(basename "$INLINE_CSD")"' 'has "--csd-user $ME "'
+    all rc0 'has "--csd-wrapper $PFX/libexec/ocmac/csd/$(basename "$INLINE_CSD")"' 'has "--csd-user $ME "'
 
 # ------------------------------------------------------------------ 3 ----
 /bin/sleep 300 & SPID=$!; BG="$BG $SPID"
@@ -347,7 +347,7 @@ H_ cleanup
 check 7 "cleanup не стирает DNS сервиса со списком 127.0.0.1 и 8.8.8.8" hasnt "setdnsservers"
 fresh; printf 'Wi-Fi\n' > "$SD/services"; printf '127.0.0.1\n' > "$SD/dns-Wi-Fi"
 H_ cleanup
-check 7 "cleanup не трогает DNS сервиса вовсе (ocbar его не ставит)" hasnt "setdnsservers"
+check 7 "cleanup не трогает DNS сервиса вовсе (ocmac его не ставит)" hasnt "setdnsservers"
 
 # ------------------------------------------------------------------ 8 ----
 fresh; printf 'nameserver 10.0.0.1\n' > "$RES/corp.test"
@@ -396,7 +396,7 @@ check 11 "cleanup без живого openconnect не гасит utun из за
 
 # ----------------------------------------------------------------- 12 ----
 fresh
-OUT=$(OCBAR_TEST_UID=0 OCBAR_STATE_DIR="$ST" "$H" --dry-run dns-clear 2>&1 </dev/null); RC=$?
+OUT=$(OCMAC_TEST_UID=0 OCMAC_STATE_DIR="$ST" "$H" --dry-run dns-clear 2>&1 </dev/null); RC=$?
 check 12 "--dry-run под root — отказ" all rcbad 'has "под root"'
 
 # ----------------------------------------------------------------- 13 ----
@@ -415,7 +415,7 @@ fake_oc() { # pidfile → номер процесса
 }
 stamp() { printf '%s %s\n' "$1" "$(ps -p "$1" -o lstart= | tr -s ' ')" > "$ST/openconnect.started"; }
 as_oc() { # команда bash — выполняется процессом с именем openconnect
-    OUT=$(env OCBAR_STATE_DIR="$ST" H="$H" ST="$ST" reason="$reason" TUNDEV="$TUNDEV" \
+    OUT=$(env OCMAC_STATE_DIR="$ST" H="$H" ST="$ST" reason="$reason" TUNDEV="$TUNDEV" \
           /usr/bin/perl -e 'exec { "/bin/bash" } "openconnect", "-c", $ARGV[0]' "$1; exit \$?" 2>&1 </dev/null); RC=$?
 }
 fresh; A=$(fake_oc "$ST/openconnect.pid"); B=$(fake_oc "$ST/openconnect.pid"); C=$(fake_oc "$T/other.pid")
@@ -463,18 +463,18 @@ check контроль "vpnc disconnect от текущей сессии уби�
 kill $A $B $C 2>/dev/null
 
 # ----------------------------------------------------------------- 15 ----
-# Обрыв сразу после изменения системы (OCBAR_TEST_CRASH, только --dry-run):
+# Обрыв сразу после изменения системы (OCMAC_TEST_CRASH, только --dry-run):
 # запись «это наше» должна быть сделана раньше, иначе маршрут или зона
 # остаются в системе, а уборка о них не знает.
 fresh; printf 'STATE=connected\nTUNDEV=utun9\n' > "$ST/tunnel.env"
-Henv OCBAR_TEST_CRASH=route-added "$H" --dry-run route-add 10.15.0.0/16
+Henv OCMAC_TEST_CRASH=route-added "$H" --dry-run route-add 10.15.0.0/16
 check 15 "обрыв после route add: маршрут уже записан как наш" \
     all 'has "обрыв для проверки"' 'fline "$ST/routes.state" "10.15.0.0/16 utun9"'
 rm -f "$ST/tunnel.env"; route_fixture 10.15.0.0/16 utun9 10.15.0.0 255.255.0.0
 H_ cleanup
 check 15 "после обрыва cleanup снимает этот маршрут" has "route -n delete -net 10.15.0.0/16 -interface utun9"
 fresh
-OUT=$(printf 'new.test 10.0.0.1\n' | OCBAR_TEST_CRASH=zone-written OCBAR_STATE_DIR="$ST" "$H" --dry-run dns-apply 2>&1); RC=$?
+OUT=$(printf 'new.test 10.0.0.1\n' | OCMAC_TEST_CRASH=zone-written OCMAC_STATE_DIR="$ST" "$H" --dry-run dns-apply 2>&1); RC=$?
 check 15 "обрыв после записи зоны: зона уже в манифесте" \
     all 'has "обрыв для проверки"' 'fline "$ST/zones.state" new.test'
 printf 'nameserver 10.0.0.1\n' > "$RES/new.test"   # файл, который успел записаться
@@ -484,11 +484,11 @@ check 15 "после обрыва cleanup снимает эту зону как 
 # ----------------------------------------------------------------- 16 ----
 # Меняющие команды — по одной: замок STATE_DIR/lock.
 fresh; /bin/sleep 60 & LP=$!; BG="$BG $LP"; mkdir "$ST/lock"; echo "$LP" > "$ST/lock/pid"
-Henv OCBAR_LOCK_WAIT=1 "$H" --dry-run zone-add a.test vpn
+Henv OCMAC_LOCK_WAIT=1 "$H" --dry-run zone-add a.test vpn
 check 16 "замок держит живой процесс — команда ждёт и отказывает" \
     all rcbad 'has "занят другой операцией"' 'fnoline "$ST/zones.wanted" "a.test vpn 53"'
 check контроль "чужой живой замок не снят" fline "$ST/lock/pid" "$LP"
-Henv OCBAR_LOCK_WAIT=1 reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 "$H" --dry-run vpnc
+Henv OCMAC_LOCK_WAIT=1 reason=connect TUNDEV=utun9 INTERNAL_IP4_ADDRESS=10.9.0.2 "$H" --dry-run vpnc
 check 16 "vpnc при занятом замке не отказывает — без него туннель не поднять" \
     all rc0 'has "продолжаю без неё"' 'fline "$ST/tunnel.env" STATE=connected'
 kill "$LP" 2>/dev/null; wait "$LP" 2>/dev/null

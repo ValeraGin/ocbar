@@ -7,14 +7,14 @@
 #   tools/screenshots.sh --windows  только окна, без съёмки меню
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-app="$root/app/.build/ocbar.app/Contents/MacOS/ocbar-app"
+app="$root/app/.build/ocmac.app/Contents/MacOS/ocmac-app"
 [ -x "$app" ] || { echo "screenshots: соберите app/make-app.sh" >&2; exit 1; }
 mkdir -p "$root/assets/ru"
 for lang in en ru; do
     dir="$root/assets"; [ "$lang" = ru ] && dir="$root/assets/ru"
     if [ "${1:-}" != --windows ]; then
         # Меню и оно же, открытое с ⌥ (сведения о соединении), рядом.
-        shots=$(mktemp -d /private/tmp/ocbar-shots.XXXXXX)
+        shots=$(mktemp -d /private/tmp/ocmac-shots.XXXXXX)
         "$root/tools/menu-capture.sh" "$lang" dark "$shots" connected connected:option
         bg="#1E1F1C"
         magick "$shots/connected.png" \( -size 24x1 xc:"$bg" \) "$shots/connected-option.png" \

@@ -10,11 +10,11 @@ import threading
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
-CLIENT = ROOT / 'auth/.build/release/ocbar-auth'
+CLIENT = ROOT / 'auth/.build/release/ocmac-auth'
 
 
 def check(mode="success"):
-    with tempfile.TemporaryDirectory(prefix='ocbar-hostscan-') as tmp:
+    with tempfile.TemporaryDirectory(prefix='ocmac-hostscan-') as tmp:
         tmp = Path(tmp)
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(tmp / 'key.pem'), '-out', str(tmp / 'cert.pem'),

@@ -13,13 +13,13 @@ is kept small on purpose. Small, well-tested changes are welcome.
 ## Build and test
 
 ```bash
-swift build -c release --package-path auth     # login window (ocbar-auth)
+swift build -c release --package-path auth     # login window (ocmac-auth)
 app/make-app.sh                                # menu bar app bundle
-bin/ocbar selftest                             # CLI: parsing, limits, cleanup
+bin/ocmac selftest                             # CLI: parsing, limits, cleanup
 tools/helper-selftest.sh                       # privileged helper, dry-run with stubs
-auth/.build/release/ocbar-auth --selftest      # TOTP, fill scope, autofill limits
-auth/.build/release/ocbar-auth --learn-selftest
-app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
+auth/.build/release/ocmac-auth --selftest      # TOTP, fill scope, autofill limits
+auth/.build/release/ocmac-auth --learn-selftest
+app/.build/ocmac.app/Contents/MacOS/ocmac-app --selftest
 python3 tools/gateway-matrix-test.py           # local TLS gateways + real WebKit
 python3 tools/upstream-proxy-test.py            # HTTP CONNECT/SOCKS5 login + no direct fallback
 python3 tools/hostscan-sequence-test.py        # external CSD wrapper handshake
@@ -45,13 +45,13 @@ host route and one resolver temporarily and is also a manual opt-in test.
 directly and through an authorized SSH host with the same native helper, plus a
 local-forward control. It restores the temporary routes, DNS and TCP listeners.
 
-The CLI and `ocbar-auth` self-tests also run inside the sandbox `brew test`
+The CLI and `ocmac-auth` self-tests also run inside the sandbox `brew test`
 uses (`tools/brew-sandbox.sb`: no screen, camera or system services, writes
 only to temporary directories), so a check that quietly relies on this
 machine's permissions fails before release, not after:
 
 ```bash
-TMPDIR=$(mktemp -d /private/tmp/ocbar-brewsb.XXXXXX) sandbox-exec -f tools/brew-sandbox.sb bin/ocbar selftest
+TMPDIR=$(mktemp -d /private/tmp/ocmac-brewsb.XXXXXX) sandbox-exec -f tools/brew-sandbox.sb bin/ocmac selftest
 ```
 
 All of these run in CI on every push and must stay green. Unit self-tests use
@@ -60,11 +60,11 @@ temporary directory, the helper is replaced by a stub. Integration suites use
 local TLS and disposable servers with synthetic accounts, never personal VPNs.
 
 What a person would do is replaced by stand-ins, so the checks run
-unattended: `OCBAR_SELFTEST_SECURITY` (the keychain — a script that records
-what reached it), `OCBAR_SELFTEST_SCREENCAPTURE` (drawing a frame around a QR
-code on screen — a ready-made image), `OCBAR_SELFTEST_CAMERA_FRAMES` (the
-camera — PNG frames, no window), `OCBAR_SELFTEST_SCREEN_ACCESS` (the Screen
-Recording permission). `ocbar-auth --qr-png FILE` turns a string into the QR
+unattended: `OCMAC_SELFTEST_SECURITY` (the keychain — a script that records
+what reached it), `OCMAC_SELFTEST_SCREENCAPTURE` (drawing a frame around a QR
+code on screen — a ready-made image), `OCMAC_SELFTEST_CAMERA_FRAMES` (the
+camera — PNG frames, no window), `OCMAC_SELFTEST_SCREEN_ACCESS` (the Screen
+Recording permission). `ocmac-auth --qr-png FILE` turns a string into the QR
 image these checks show. A new step that waits for a human needs its own
 stand-in, not a line in "not verified".
 
@@ -76,13 +76,13 @@ breaks. Prove it: temporarily revert your fix and show the check failing.
 
 | Part | What it is | Contract not to break silently |
 |---|---|---|
-| `bin/ocbar` | CLI, bash, runs as the user | `ocbar status --json` is the machine-readable state the app reads; `--short` is `key=value` lines for scripts and SwiftBar; exit codes: 5 — a human must log in, 6 — network/gateway, other non-zero — failure |
-| `libexec/ocbar-*.py`, `ocbar-selftest.sh` | helpers the CLI runs: state as JSON, merged logs, report redaction, password-group login, the CLI self-test | found next to `ocbar` or in the Homebrew `libexec`; they are code, not strings inside the shell script |
-| `libexec/ocbar-helper` | everything that needs root | fixed subcommands, every argument validated, state only under `/var/db/ocbar`, touches only what it created and records it before making the change; changing subcommands run one at a time (`/var/db/ocbar/lock`); any change bumps its `VERSION` (`tools/helper-version-check.sh`, run by `release.sh`), or an outdated installed copy looks current |
-| `auth/` | `ocbar-auth`: login window, autofill, TOTP | fills only over HTTPS on hosts of the login chain; password twice, code once per login |
-| `app/` | SwiftUI menu bar app, no privileges | reads `status --json`, acts by calling `ocbar`; profile parsing must match the CLI (checked in `ocbar-app --selftest`) |
+| `bin/ocmac` | CLI, bash, runs as the user | `ocmac status --json` is the machine-readable state the app reads; `--short` is `key=value` lines for scripts and SwiftBar; exit codes: 5 — a human must log in, 6 — network/gateway, other non-zero — failure |
+| `libexec/ocmac-*.py`, `ocmac-selftest.sh` | helpers the CLI runs: state as JSON, merged logs, report redaction, password-group login, the CLI self-test | found next to `ocmac` or in the Homebrew `libexec`; they are code, not strings inside the shell script |
+| `libexec/ocmac-helper` | everything that needs root | fixed subcommands, every argument validated, state only under `/var/db/ocmac`, touches only what it created and records it before making the change; changing subcommands run one at a time (`/var/db/ocmac/lock`); any change bumps its `VERSION` (`tools/helper-version-check.sh`, run by `release.sh`), or an outdated installed copy looks current |
+| `auth/` | `ocmac-auth`: login window, autofill, TOTP | fills only over HTTPS on hosts of the login chain; password twice, code once per login |
+| `app/` | SwiftUI menu bar app, no privileges | reads `status --json`, acts by calling `ocmac`; profile parsing must match the CLI (checked in `ocmac-app --selftest`) |
 
-Profile format: one `.ocbar` file per connection, sections `[Connection]`,
+Profile format: one `.ocmac` file per connection, sections `[Connection]`,
 `[Routes]`, `[DNS]`, `[Auth]`, `[Proxy]`, `[Health]`, `[Autofill]`. Adding a
 key means: CLI parser, app parser, validation in both, example file, docs.
 
@@ -94,12 +94,12 @@ string literal in the app outside `L("…")` as a mistake, except log lines
 (`AppLog.write`, `print`), comparisons with the client's output
 (`contains`, `hasPrefix`…) and lines marked `// i18n: не интерфейс`. The
 app's `--selftest` always runs in Russian: its checks compare Russian text.
-The sign-in windows (`auth/`) use the same `L("…")`; `ocbar-auth` has no bundle, so its English lives in
-`auth/Sources/ocbar-auth/Translations.swift`, checked by the same scan. Log
+The sign-in windows (`auth/`) use the same `L("…")`; `ocmac-auth` has no bundle, so its English lives in
+`auth/Sources/ocmac-auth/Translations.swift`, checked by the same scan. Log
 lines and messages the CLI parses stay in Russian.
 
 The CLI translates at output time: `ok`/`warn`/`bad`/`skip`/`info`/`die` and
-notifications look the finished message up in `libexec/ocbar-en.tsv`
+notifications look the finished message up in `libexec/ocmac-en.tsv`
 (Russian template, tab, English; `{}` stands for `$var`, `${…}` or `$(…)`,
 `{1}`, `{2}`… when the order changes). Write messages as before; the scan
 lists new ones without a translation. Do not build a message in a variable
@@ -109,20 +109,20 @@ must not depend on the language: use exit codes or `--json`. Strings that are co
 against output of the CLI, or written into files, are not UI text and stay
 unwrapped.
 
-Runtime state lives in small files under `~/Library/Application Support/ocbar`,
+Runtime state lives in small files under `~/Library/Application Support/ocmac`,
 one value each: `desired` (profile that should be up), `autoconnect`,
 `access`, `connecting`, `needs-login`, `link-lost`, `routes.disabled`,
 `zones.disabled`, `skip-networks`. They are declared as constants at the top
-of `bin/ocbar` — a new one belongs there, and `ocbar selftest` fails when a
+of `bin/ocmac` — a new one belongs there, and `ocmac selftest` fails when a
 path appears inline instead. They are written whole (`state_write`: temp file,
 then rename), so a reader never sees a half-written file, and no locking is
-needed because each value is independent. `ocbar state [--json]` prints the
+needed because each value is independent. `ocmac state [--json]` prints the
 whole picture at once.
 
 The CLI has the final word on whether a profile is valid: the editor asks
-`ocbar profile-check` before saving and refuses with the client's own words.
+`ocmac profile-check` before saving and refuses with the client's own words.
 The editor may be stricter than the client — its checks are hints while you
-type — but never more permissive. `ocbar-app --selftest` compares both
+type — but never more permissive. `ocmac-app --selftest` compares both
 verdicts on a set of profiles and fails when the editor would save something
 the client will not load.
 
@@ -143,7 +143,7 @@ external browser, iframe/shadow DOM traversal, HOTP, bottles or a cask
 
 ## Reporting a problem
 
-Use the issue templates. `ocbar report` produces a single file with versions,
+Use the issue templates. `ocmac report` produces a single file with versions,
 diagnostics and log tails with hosts, addresses and logins masked — attach it,
 but read it first: masking does not know your internal names.
 

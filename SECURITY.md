@@ -12,13 +12,13 @@ credentials. This is a single-maintainer project; reports are handled on a best-
 OpenConnect for Mac installs a root helper that the logged-in admin user may run without a
 password. That is the main attack surface, and it is kept narrow.
 
-**The helper** (`/usr/local/libexec/ocbar-helper`, `root:wheel 755`):
+**The helper** (`/usr/local/libexec/ocmac-helper`, `root:wheel 755`):
 
-- is the only command in `/etc/sudoers.d/ocbar`, for the `admin` group;
+- is the only command in `/etc/sudoers.d/ocmac`, for the `admin` group;
 - accepts a fixed set of subcommands; every argument is validated as a whole
   value (no newlines or control characters);
-- keeps state in `/var/db/ocbar` and refuses to run if that directory, its
-  parents, `/usr/local/libexec/ocbar` or `/etc/resolver` are not root-owned
+- keeps state in `/var/db/ocmac` and refuses to run if that directory, its
+  parents, `/usr/local/libexec/ocmac` or `/etc/resolver` are not root-owned
   or are group/world-writable;
 - runs a root-owned copy of `openconnect` and checks the SHA-256 of it and of
   every linked library against a manifest written at install time;
@@ -27,14 +27,14 @@ password. That is the main attack surface, and it is kept narrow.
   (checked by name and recorded start time);
 - records a route or a zone as its own before adding it, so an interrupted
   run leaves nothing that cleanup does not know about; commands that change
-  its state run one at a time (`/var/db/ocbar/lock`, released when the owner
+  its state run one at a time (`/var/db/ocmac/lock`, released when the owner
   is gone);
 - refuses `--dry-run` as root; `--dry-run` never writes system state.
 
 **Known residual risk.** `openconnect`'s shared libraries stay in the
 Homebrew prefix, which is writable by the user. The hash check catches an
 accidental change after `brew upgrade openconnect` (run
-`sudo ocbar install --trust` then), not a local attacker who already runs code
+`sudo ocmac install --trust` then), not a local attacker who already runs code
 as that user and wins a race. Such an attacker can, however, already ask the
 user for their password.
 
@@ -48,11 +48,11 @@ again inside the page script, which runs in an isolated JavaScript world, and
 limits password fills to two and TOTP to one per login. The session cookie is
 accepted only from the exact gateway host.
 
-**The menu bar app** has no privileges. It accepts `ocbar://notify` URLs only
+**The menu bar app** has no privileges. It accepts `ocmac://notify` URLs only
 with a random per-launch token stored in a `0600` file.
 
 ## Self-tests
 
-`ocbar selftest`, `tools/helper-selftest.sh`, `ocbar-auth --selftest`,
-`ocbar-auth --learn-selftest` and `ocbar-app --selftest` cover these rules and
+`ocmac selftest`, `tools/helper-selftest.sh`, `ocmac-auth --selftest`,
+`ocmac-auth --learn-selftest` and `ocmac-app --selftest` cover these rules and
 run in CI.

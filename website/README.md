@@ -8,7 +8,7 @@ scripts are language detection and the copy button.
 ## Build and check
 
 ```sh
-python3 website/build.py --url https://valeragin.github.io/ocbar/
+python3 website/build.py --url https://valeragin.github.io/openconnect-for-mac/
 python3 website/check.py
 python3 -m http.server 8767 --bind 127.0.0.1 --directory website
 ```
@@ -23,14 +23,14 @@ background matches the animation background `#EEF0EA`. Generated HTML is tracked
 
 ## Publish
 
-Main site — GitHub Pages: [English](https://valeragin.github.io/ocbar/) ·
-[Русский](https://valeragin.github.io/ocbar/ru/). The **Website** workflow builds
+Main site — GitHub Pages: [English](https://valeragin.github.io/openconnect-for-mac/) ·
+[Русский](https://valeragin.github.io/openconnect-for-mac/ru/). The **Website** workflow builds
 and publishes it on every push to `main` that changes `website/`, and can be run
 by hand. `configure-pages` supplies the address, so canonical URLs follow it.
 
 GitHub Pages, not Cloudflare Pages: `*.pages.dev` does not resolve from Russian
 mobile networks without a VPN, while `github.io` does (both checked 2026-10-16).
-The former Cloudflare project `ocbar.pages.dev` was deleted on 2026-10-17.
+The former Cloudflare project `ocmac.pages.dev` was deleted on 2026-10-17.
 After a push, check both languages, installation links and the animation.
 
 Always build with the stable project URL. The build generates canonical URLs,

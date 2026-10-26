@@ -4,9 +4,9 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Установка и первое подключение — OpenConnect for Mac</title><meta name="description" content="Установите OpenConnect for Mac одной командой. Откройте профиль от коллеги, введите свой логин и подключитесь.">
 <meta property="og:title" content="Установка и первое подключение — OpenConnect for Mac"><meta property="og:type" content="website">
-<meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card.jpg"><meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="../../assets/social-card.jpg"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="../../assets/mark.svg"><link rel="stylesheet" href="../../style.css?v=20261022-2">
-<script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
+<script>(function(){var k="ocmac-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
 if(a)try{localStorage.setItem(k,a.lang)}catch(e){}});
@@ -14,28 +14,23 @@ if(d.lang!=="en")return;
 var w=c;if(!w){var l=navigator.languages||[navigator.language||""];
 for(var i=0;i<l.length;i++){var p=String(l[i]).toLowerCase().split("-")[0];if(p==="ru"||p==="en"){w=p;break}}}
 if(w==="ru")location.replace("../../ru/guide/"+location.hash)})()</script>
-<link rel="canonical" href="https://valeragin.github.io/ocbar/ru/guide/">
-<meta property="og:url" content="https://valeragin.github.io/ocbar/ru/guide/">
-<link rel="alternate" hreflang="en" href="https://valeragin.github.io/ocbar/guide/">
-<link rel="alternate" hreflang="ru" href="https://valeragin.github.io/ocbar/ru/guide/">
-<link rel="alternate" hreflang="x-default" href="https://valeragin.github.io/ocbar/guide/">
 </head><body class="guide-page">
 <a class="skip" href="#main">Перейти к содержимому</a>
 <header class="header wrap"><a class="brand" href="../"><img src="../../assets/mark.svg" width="34" height="34" alt="">OpenConnect for Mac<span class="brand-descriptor">/ macOS</span></a><div class="languages" aria-label="Язык"><a href="../../guide/" lang="en" >EN</a><span>/</span><a href="../../ru/guide/" lang="ru" aria-current="page">RU</a></div></header>
 <main id="main" class="guide wrap"><h1>Установите OpenConnect for Mac.<br>Подключитесь к рабочей сети.</h1>
 <p>OpenConnect for Mac подключает Mac к AnyConnect-совместимому VPN-шлюзу вашей организации. Для работы нужны macOS 14.4 или новее и доступ к этому шлюзу.</p>
-<p>Раньше приложение называлось ocbar. Команда и формула Homebrew остаются <code>ocbar</code>; профили <code>.ocbar</code>, настройки и автозапуск сохраняются. В лаунчере приложение называется <code>OpenConnect for Mac.app</code>; ссылка совместимости сохраняет старый путь.</p>
+<p>Команда — <code>ocmac</code>, профиль — <code>.ocmac</code>. Установщик переносит прежние профили и настройки, сохраняя исходные пользовательские файлы. Подготовка системной части остановит прежнюю VPN-сессию.</p>
 <p>Есть файл от коллеги? Перейдите к <a href="#profile">установке с готовым профилем</a>. Адрес шлюза, сети и DNS уже будут в нём.</p>
 <h2 id="install">Установка одной командой</h2>
 <p>Откройте Терминал и вставьте строку:</p>
-<div class="install-command"><pre id="install-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot;</code></pre><button type="button" data-copy="install-command" data-done="Скопировано">Копировать</button></div>
-<p>Команда загружает <a href="https://github.com/ValeraGin/ocbar/blob/main/install.sh">установщик с GitHub</a>. Он проверит Git и Swift, предложит недостающие инструменты Apple и Homebrew, соберёт OpenConnect for Mac, настроит системный помощник и автозапуск, затем откроет приложение.</p>
+<div class="install-command"><pre id="install-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)&quot;</code></pre><button type="button" data-copy="install-command" data-done="Скопировано">Копировать</button></div>
+<p>Команда загружает <a href="https://github.com/ValeraGin/openconnect-for-mac/blob/main/install.sh">установщик с GitHub</a>. Он проверит Git и Swift, предложит недостающие инструменты Apple и Homebrew, соберёт OpenConnect for Mac, настроит системный помощник и автозапуск, затем откроет приложение.</p>
 <p>Если появилось окно установки инструментов Apple, завершите установку в нём: скрипт дождётся продолжения. Для системного помощника понадобится пароль администратора Mac. Запускайте строку от обычного пользователя. Сборка может занять несколько минут.</p>
 <h2 id="profile">Есть профиль от коллеги?</h2>
 <p>После установки достаточно трёх действий: открыть файл, ввести свой логин и подключиться. Переименовывать файл и менять путь в команде не нужно.</p>
 <p>Если OpenConnect for Mac ещё не установлен, откройте Терминал и выполните одну команду:</p>
-<div class="install-command"><pre id="profile-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot; -- --language ru</code></pre><button type="button" data-copy="profile-command" data-done="Скопировано">Копировать</button></div>
-<ol><li><strong>Откройте полученный файл .ocbar двойным щелчком.</strong> Его можно сохранить в любую удобную папку. Либо нажмите «Открыть профиль…» в приложении или в разделе «Профили».</li><li><strong>Введите свой корпоративный логин.</strong> В коротком окне уже будут название и адрес VPN. Сети, DNS и встроенный CSD берутся из файла.</li><li><strong>Нажмите «Подключиться».</strong> Логин сохранится автоматически. Если системную часть нужно подготовить, приложение откроет Терминал: введите пароль администратора Mac и дождитесь завершения. Затем подключение продолжится.</li></ol>
+<div class="install-command"><pre id="profile-command"><code>/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)&quot; -- --language ru</code></pre><button type="button" data-copy="profile-command" data-done="Скопировано">Копировать</button></div>
+<ol><li><strong>Откройте полученный файл .ocmac двойным щелчком.</strong> Его можно сохранить в любую удобную папку. Либо нажмите «Открыть профиль…» в приложении или в разделе «Профили».</li><li><strong>Введите свой корпоративный логин.</strong> В коротком окне уже будут название и адрес VPN. Сети, DNS и встроенный CSD берутся из файла.</li><li><strong>Нажмите «Подключиться».</strong> Логин сохранится автоматически. Если системную часть нужно подготовить, приложение откроет Терминал: введите пароль администратора Mac и дождитесь завершения. Затем подключение продолжится.</li></ol>
 <p>Открытие профиля не запускает его скрипты и не подключает VPN. Если файл содержит CSD или пользовательские команды, подключайтесь только при доверии к отправителю.</p>
 <h2>Первое подключение</h2>
 <p>Пройдите обычный вход вашей организации: пароль и второй фактор. После подключения проверьте рабочий ресурс и обычный публичный сайт. Выбор сетей и пауза доступны через значок OpenConnect for Mac в строке меню.</p>
@@ -43,30 +38,30 @@ if(w==="ru")location.replace("../../ru/guide/"+location.hash)})()</script>
 <p>Для Cisco XML с несколькими серверами выберите нужный профиль в открывшемся окне. Полная ручная настройка и проверка рабочего ресурса доступны через «Настройки → Общие → Мастер настройки и проверка доступа…».</p>
 <p>Язык интерфейса: Настройки → Общие → Язык интерфейса. Доступны русский, English и язык системы.</p>
 <p class="notice">Автор проверил macOS 26 на Apple Silicon. Чистая установка и первый вход на другом Mac пока не проверены. Требования входа и проверки устройства зависят от вашей организации.</p>
-<p><a href="https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml">Расскажите, как OpenConnect for Mac работает с вашим шлюзом</a>: достаточно типа шлюза, способа входа и результата, без корпоративных адресов и данных входа.</p>
+<p><a href="https://github.com/ValeraGin/openconnect-for-mac/issues/new?template=gateway_report.yml">Расскажите, как OpenConnect for Mac работает с вашим шлюзом</a>: достаточно типа шлюза, способа входа и результата, без корпоративных адресов и данных входа.</p>
 <h2>Если подключиться не удалось</h2>
-<pre><code>ocbar doctor
-ocbar status</code></pre>
-<p>В приложении также есть окно диагностики и журналов. Начните с неуспешных проверок; уточните у администратора шлюз, группу и требования входа. Типовые проблемы описаны в <a href="https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.md">инструкции по диагностике</a>. Перед публикацией журналов в issue удалите из них адреса рабочих шлюзов, имена учётных записей, cookies и токены.</p>
+<pre><code>ocmac doctor
+ocmac status</code></pre>
+<p>В приложении также есть окно диагностики и журналов. Начните с неуспешных проверок; уточните у администратора шлюз, группу и требования входа. Типовые проблемы описаны в <a href="https://github.com/ValeraGin/openconnect-for-mac/blob/main/TROUBLESHOOTING.md">инструкции по диагностике</a>. Перед публикацией журналов в issue удалите из них адреса рабочих шлюзов, имена учётных записей, cookies и токены.</p>
 <h2>Обновление</h2>
-<pre><code>brew upgrade ocbar
-ocbar app stop
-ocbar app start
-ocbar doctor</code></pre>
-<p>Если история выпуска или диагностика сообщает об устаревшем помощнике, повторите <code>sudo ocbar install</code>. Автоматически обновления не устанавливаются.</p>
+<pre><code>brew upgrade openconnect-for-mac
+ocmac app stop
+ocmac app start
+ocmac doctor</code></pre>
+<p>Если история выпуска или диагностика сообщает об устаревшем помощнике, повторите <code>sudo ocmac install</code>. Автоматически обновления не устанавливаются.</p>
 <h2 id="share">Передайте готовый профиль коллеге</h2>
-<p>Один файл .ocbar объединяет шлюз, сети, зоны DNS и правила заполнения формы SSO. Это помогает новым коллегам начать с уже проверенных настроек.</p>
-<pre><code>ocbar export main team.ocbar</code></pre>
+<p>Один файл .ocmac объединяет шлюз, сети, зоны DNS и правила заполнения формы SSO. Это помогает новым коллегам начать с уже проверенных настроек.</p>
+<pre><code>ocmac export main team.ocmac</code></pre>
 <p>Здесь main — имя вашего настроенного профиля. Перед отправкой откройте файл: замените личный User, проверьте пути к KeePassXC и CSD wrapper, а также пользовательские команды. Пароли и секреты TOTP из хранилища экспорт не извлекает; содержимое ваших команд и правил нужно проверить самостоятельно. Передавайте рабочие настройки внутри своей команды.</p>
 <p>Если нужен CSD, перед экспортом в редакторе профиля откройте дополнительные настройки и нажмите «Встроить CSD-скрипт…». Экспорт сохранит скрипт внутри файла.</p>
-<p>Отправьте коллеге <code>team.ocbar</code> и <a href="#profile">ссылку на установку с готовым профилем</a>. После установки он откроет файл двойным щелчком, укажет свой логин и нажмёт «Подключиться».</p>
+<p>Отправьте коллеге <code>team.ocmac</code> и <a href="#profile">ссылку на установку с готовым профилем</a>. После установки он откроет файл двойным щелчком, укажет свой логин и нажмёт «Подключиться».</p>
 
 <h2 id="remove">Удаление приложения и помощника</h2>
 <p><strong>Соблюдайте порядок:</strong> OpenConnect for Mac должен оставаться установленным, пока удаляются его системные компоненты.</p>
-<pre><code>sudo ocbar uninstall
-brew uninstall ocbar</code></pre>
+<pre><code>sudo ocmac uninstall
+brew uninstall openconnect-for-mac</code></pre>
 <p>Первая команда отключает OpenConnect for Mac, снимает его маршруты и DNS, останавливает агенты, удаляет помощник и правило sudoers. Вторая удаляет пакет Homebrew.</p>
-<p>Профили, локальные журналы и состояние, данные входа WebKit и записи Связки ключей сохраняются. Это не полное удаление личных данных. Перед очисткой остатков прочитайте <a href="https://github.com/ValeraGin/ocbar/blob/main/INSTALL.md#8-удаление">полную инструкцию удаления</a>. Записи KeePassXC управляются отдельно.</p>
+<p>Профили, локальные журналы и состояние, данные входа WebKit и записи Связки ключей сохраняются. Это не полное удаление личных данных. Перед очисткой остатков прочитайте <a href="https://github.com/ValeraGin/openconnect-for-mac/blob/main/INSTALL.md#8-удаление">полную инструкцию удаления</a>. Записи KeePassXC управляются отдельно.</p>
 </main>
 <script src="../../copy.js"></script>
 </body></html>

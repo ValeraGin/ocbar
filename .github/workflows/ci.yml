@@ -22,13 +22,13 @@ jobs:
       - uses: actions/checkout@v5
       - name: Shell syntax
         run: |
-          for f in install.sh bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh tools/server-lab/*.sh; do
+          for f in install.sh bin/ocmac libexec/ocmac-helper libexec/ocmac-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocmac.5s.sh app/make-app.sh tools/server-lab/*.sh; do
             bash -n "$f"
           done
       - name: ShellCheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck >/dev/null
-          shellcheck -S error install.sh bin/ocbar libexec/ocbar-helper libexec/ocbar-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocbar.5s.sh app/make-app.sh
+          shellcheck -S error install.sh bin/ocmac libexec/ocmac-helper libexec/ocmac-selftest.sh tools/helper-selftest.sh tools/release.sh tools/helper-version-check.sh swiftbar/ocmac.5s.sh app/make-app.sh
           shellcheck -S error tools/server-lab/*.sh
           python3 -m compileall -q libexec/*.py tools/*test.py tools/server-lab/*.py
       - name: Перевод интерфейса
@@ -37,11 +37,12 @@ jobs:
         run: |
           python3 tools/macos-vpn-test-selftest.py
           python3 tools/macos-path-test-selftest.py
+          python3 tools/migration-selftest.py
           python3 tools/installer-selftest.py
           python3 tools/embedded-csd-selftest.py
           python3 tools/profile-workflow-selftest.py
       - name: Formula syntax
-        run: ruby -c Formula/ocbar.rb
+        run: ruby -c Formula/openconnect-for-mac.rb
       - name: Markdown links
         run: python3 tools/check-links.py
 
@@ -58,9 +59,9 @@ jobs:
       - name: Install real OpenConnect client
         run: sudo apt-get update -qq && sudo apt-get install -y openconnect
       - name: Build isolated ocserv
-        run: docker build --build-arg BASE=debian:${{ matrix.debian }}-slim -t ocbar-test-ocserv:${{ matrix.debian }} tools/server-lab
+        run: docker build --build-arg BASE=debian:${{ matrix.debian }}-slim -t ocmac-test-ocserv:${{ matrix.debian }} tools/server-lab
       - name: Authentication and isolated tunnel against real ocserv
-        run: python3 tools/ocserv-integration-test.py --image ocbar-test-ocserv:${{ matrix.debian }}
+        run: python3 tools/ocserv-integration-test.py --image ocmac-test-ocserv:${{ matrix.debian }}
 
   test:
     needs: lint
@@ -73,11 +74,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build ocbar-auth
+      - name: Build ocmac-auth
         run: swift build -c release --package-path auth
 
-      - name: ocbar-auth self-test
-        run: auth/.build/release/ocbar-auth --selftest
+      - name: ocmac-auth self-test
+        run: auth/.build/release/ocmac-auth --selftest
 
       - name: HostScan wrapper sequence (local HTTPS gateway)
         run: python3 tools/hostscan-sequence-test.py
@@ -87,27 +88,27 @@ jobs:
       - name: Explicit upstream proxy (URLSession and WebKit)
         run: python3 tools/upstream-proxy-test.py
 
-      - name: ocbar-auth learn self-test (WebKit, offscreen)
-        run: auth/.build/release/ocbar-auth --learn-selftest
+      - name: ocmac-auth learn self-test (WebKit, offscreen)
+        run: auth/.build/release/ocmac-auth --learn-selftest
 
       - name: Helper self-test (dry-run, stubs)
         run: tools/helper-selftest.sh
 
       - name: CLI self-test
         env:
-          OCBAR_AUTH: ${{ github.workspace }}/auth/.build/release/ocbar-auth
-        run: bin/ocbar selftest
+          OCMAC_AUTH: ${{ github.workspace }}/auth/.build/release/ocmac-auth
+        run: bin/ocmac selftest
 
       - name: CLI and auth self-tests in the brew test sandbox
         env:
-          OCBAR_AUTH: ${{ github.workspace }}/auth/.build/release/ocbar-auth
+          OCMAC_AUTH: ${{ github.workspace }}/auth/.build/release/ocmac-auth
         run: |
-          t=$(mktemp -d /private/tmp/ocbar-brewsb.XXXXXX)
-          TMPDIR="$t" sandbox-exec -f tools/brew-sandbox.sb bin/ocbar selftest
-          TMPDIR="$t" sandbox-exec -f tools/brew-sandbox.sb auth/.build/release/ocbar-auth --selftest
+          t=$(mktemp -d /private/tmp/ocmac-brewsb.XXXXXX)
+          TMPDIR="$t" sandbox-exec -f tools/brew-sandbox.sb bin/ocmac selftest
+          TMPDIR="$t" sandbox-exec -f tools/brew-sandbox.sb auth/.build/release/ocmac-auth --selftest
 
       - name: Build app bundle
         run: app/make-app.sh
 
       - name: App self-test
-        run: app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest
+        run: app/.build/ocmac.app/Contents/MacOS/ocmac-app --selftest

@@ -12,10 +12,10 @@ from pathlib import Path
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('transport', choices=('cstp', 'dtls'), nargs='?', default='cstp')
 transport = parser.parse_args().transport
-env = dict(os.environ, OCBAR_PASSWORD='lab-password', OCBAR_USERNAME='lab-user',
-           OCBAR_PROMPT_CMD='exit 3', OCBAR_PROMPT_TTY='0', OCBAR_PW_TIMEOUT='20')
+env = dict(os.environ, OCMAC_PASSWORD='lab-password', OCMAC_USERNAME='lab-user',
+           OCMAC_PROMPT_CMD='exit 3', OCMAC_PROMPT_TTY='0', OCMAC_PW_TIMEOUT='20')
 url = 'https://gateway:443'
-auth = subprocess.run(['python3', '/test/ocbar-pwauth.py', 'openconnect',
+auth = subprocess.run(['python3', '/test/ocmac-pwauth.py', 'openconnect',
                        '--authenticate', '--protocol=anyconnect', '--user=lab-user',
                        '--cafile=/lab/cert.pem', '--no-proxy', url],
                       env=env, capture_output=True, text=True, timeout=30)
@@ -49,7 +49,7 @@ with open('/tmp/openconnect.log', 'w+') as log:
         assert 'labtun' in route, route
         # Ignore any inherited proxy: the request must traverse the VPN.
         http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        assert http.open('http://192.0.2.1:8080/proof.txt', timeout=5).read() == b'ocbar-tunnel-proof\n'
+        assert http.open('http://192.0.2.1:8080/proof.txt', timeout=5).read() == b'ocmac-tunnel-proof\n'
         # Query the DNS address supplied by ocserv, inside the VPN.
         dns = Path('/tmp/tunnel-dns').read_text().strip()
         assert dns == '192.0.2.1', dns

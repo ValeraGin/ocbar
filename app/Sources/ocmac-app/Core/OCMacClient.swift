@@ -1,0 +1,318 @@
+import Foundation
+
+// Единственная связь с системой: запуск `ocmac` и чтение счётчиков.
+// Ничего привилегированного здесь нет — всё, что требует root, живёт
+// в libexec/ocmac-helper и вызывается самим ocmac.
+final class OCMacClient: @unchecked Sendable {
+    static let shared = OCMacClient()
+
+    let binary: String?
+    /// Где искали клиента — чтобы сообщение «не найден» говорило по делу,
+    /// а не общими словами.
+    private(set) var lookupNote = ""
+
+    private let versionsLock = NSLock()
+    private var versionsCache: [String: String]?
+    private var versionsStamp = Date.distantPast
+
+    // Где искать ocmac. Приложение может лежать и в дереве проекта, и в
+    // Homebrew, поэтому кандидатов несколько; путь можно задать явно
+    // переменной OCMAC_BIN.
+    init() {
+        let exe = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+            .resolvingSymlinksInPath().deletingLastPathComponent()
+        // Заданный явно путь — главнее всех: если человек указал OCMAC_BIN,
+        // молча взять другой ocmac значит скрыть его ошибку.
+        if let explicit = ProcessInfo.processInfo.environment["OCMAC_BIN"], !explicit.isEmpty {
+            binary = Shell.firstExecutable([explicit])
+            lookupNote = binary == nil
+                ? L("Переменная OCMAC_BIN указывает на %@ — там нет исполняемого файла.", explicit)
+                : ""
+            return
+        }
+        var candidates: [String] = []
+        // Идём вверх от самого себя и ищем bin/ocmac: раскладок несколько —
+        // дерево проекта, бандл внутри дерева (app/.build/ocmac.app) и
+        // бандл в каталоге Homebrew (prefix/ocmac.app рядом с prefix/bin).
+        // Считать «сколько точек вверх» руками уже приводило к тому, что
+        // бандл из репозитория молча звал ocmac из tap — то есть чужой,
+        // отстающий код.
+        var dir = exe
+        for _ in 0..<6 {
+            candidates.append(dir.appendingPathComponent("bin/ocmac").standardizedFileURL.path)
+            dir = dir.deletingLastPathComponent()
+        }
+        candidates += ["/opt/homebrew/bin/ocmac", "/usr/local/bin/ocmac"]
+        binary = Shell.firstExecutable(candidates)
+        if binary == nil {
+            lookupNote = L("Искал в /opt/homebrew/bin, /usr/local/bin и рядом с приложением. Путь можно задать переменной OCMAC_BIN.")
+        }
+    }
+
+    var configDir: String {
+        ProcessInfo.processInfo.environment["OCMAC_CONFIG_DIR"]
+            ?? NSString(string: "~/.config/ocmac").expandingTildeInPath
+    }
+    var profileDir: String { configDir + "/profiles" }
+    var supervisorLog: String {
+        NSString(string: "~/Library/Logs/ocmac/supervisor.log").expandingTildeInPath
+    }
+    // Журнал openconnect пишет хелпер в своём каталоге состояния. Точный путь
+    // даёт `ocmac version --all` (openconnect_log); это — запасной, когда
+    // клиент не ответил: новый каталог хелпера, если он уже есть, иначе
+    // прежний.
+    var openconnectLog: String {
+        let current = "/var/db/ocmac/openconnect.log"
+        return FileManager.default.fileExists(atPath: current) ? current : "/usr/local/var/ocmac/openconnect.log"
+    }
+    var proxyLog: String {
+        NSString(string: "~/Library/Logs/ocmac/openconnect-proxy.log").expandingTildeInPath
+    }
+
+    // --- состояние -------------------------------------------------------
+
+    func status() -> Status {
+        guard let binary else {
+            var s = Status()
+            s.available = false
+            s.error = nil
+            return s
+        }
+        let r = Shell.run(binary, ["status", "--json"], timeout: 10)
+        guard r.code == 0 else {
+            var s = Status()
+            s.error = r.err.isEmpty ? L("ocmac status вернул %@", r.code) : r.err.trimmed
+            return s
+        }
+        guard var s = Status.parse(json: r.out) else {
+            var bad = Status()
+            bad.error = L("ocmac status --json вернул не JSON")
+            return bad
+        }
+        // MTU в `status --short` нет, а показать его хочется: берём из той
+        // же строки netstat, что и счётчики, лишнего процесса не заводим.
+        if let t = Traffic.read(tundev: s.tundev) { s.mtu = t.mtu }
+        return s
+    }
+
+    // --- секреты профиля -------------------------------------------------
+
+    /// Сохранить пароль в связке ключей. Пароль идёт на стандартный вход
+    /// клиента, в аргументах его нет. nil — сохранено, иначе причина.
+    func savePassword(profile: String, password: String) -> String? {
+        guard let binary else { return L("OpenConnect for Mac не найден") }
+        let r = Shell.run(binary, ["secret", "set-password", profile, "--stdin"], stdin: password + "\n", timeout: 20)
+        return r.code == 0 ? nil : (r.err.isEmpty ? r.out : r.err).trimmed
+    }
+
+    enum TOTPSource: String { case screen = "--screen", camera = "--camera", text = "--stdin" }
+    enum TOTPAdded { case success(String), failure(String) }
+
+    /// Добавить код второго фактора: QR с экрана, с камеры или ссылкой.
+    /// Ответ — текущий код (для сверки) или причина отказа.
+    func addTOTP(profile: String, from source: TOTPSource, text: String? = nil) -> TOTPAdded {
+        guard let binary else { return .failure(L("OpenConnect for Mac не найден")) }
+        // Рамку на экране и камеру человек может держать долго.
+        let r = Shell.run(binary, ["secret", "add-totp", profile, source.rawValue],
+                          stdin: text.map { $0 + "\n" }, timeout: 300)
+        guard r.code == 0 else { return .failure((r.err.isEmpty ? r.out : r.err).trimmed) }
+        return .success(totpCode(profile: profile) ?? "")
+    }
+
+    /// Текущий одноразовый код профиля (из его источника) или nil.
+    func totpCode(profile: String) -> String? {
+        guard let binary else { return nil }
+        let r = Shell.run(binary, ["secret", "code", profile], timeout: 15)
+        let c = r.out.trimmed
+        return r.code == 0 && !c.isEmpty ? c : nil
+    }
+
+    /// Примет ли клиент такой профиль. Редактор показывает свои подсказки по
+    /// ходу правки, но сохранять то, что клиент отвергнет, нельзя: файл потом
+    /// не подключится. nil — принимает, иначе причина отказа словами клиента.
+    func profileRejection(_ text: String, name: String) -> String? {
+        guard let binary else { return nil }
+        let dir = NSTemporaryDirectory() + "ocmac-check-\(getpid())"
+        let path = dir + "/" + (name.isEmpty ? L("профиль") : name) + ".ocmac"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        guard (try? text.write(toFile: path, atomically: true, encoding: .utf8)) != nil else { return nil }
+        let r = Shell.run(binary, ["profile-check", path], timeout: 15)
+        guard r.code != 0 else { return nil }
+        let why = (r.err.isEmpty ? r.out : r.err).trimmed
+        return why.isEmpty ? L("клиент не принял профиль (код %@)", r.code) : why
+    }
+
+    // --- действия --------------------------------------------------------
+
+    enum ActionResult {
+        case ok(String)
+        case needsLogin          // код 5: решает человек, это не ошибка
+        case failed(Int32, String)
+        case cancelled           // человек сам отменил действие
+    }
+
+    func action(_ args: [String], timeout: TimeInterval = 60, cancel: CancelToken? = nil) -> ActionResult {
+        guard let binary else { return .failed(127, L("OpenConnect for Mac не найден")) }
+        let r = Shell.run(binary, args, timeout: timeout, cancel: cancel)
+        if r.code == Shell.cancelledCode { return .cancelled }
+        if r.code == 0 { return .ok(r.out.trimmed) }
+        if r.code == 5 { return .needsLogin }
+        let message = r.err.trimmed.isEmpty ? r.out.trimmed : r.err.trimmed
+        return .failed(r.code, message.isEmpty ? L("код возврата %@", r.code) : message)
+    }
+
+    // Вход может занять минуты, и приложение не должно обрывать его раньше
+    // времени: по сроку гасится ocmac вместе с окном, где человек как раз
+    // выбирает, что сохранить. Обычное подключение — 660 с: вход до 300,
+    // окно «Запомнить для следующего входа?» до 180, подъём туннеля до 40 и
+    // запас. С запоминанием (--teach) — 900 с, разметка — 1800 с.
+    // --show: окно входа сразу, а не после пробы молчаливого прохода —
+    // когда человек сам нажал «Войти», ждать две секунды незачем.
+    // teach: войти руками, а ocmac запомнит форму и после входа предложит
+    // сохранить правила, пароль и источник кода (ocmac connect --teach).
+    func connect(profile: String?, show: Bool = false, teach: Bool = false, cancel: CancelToken? = nil) -> ActionResult {
+        action(["connect"] + (profile.map { [$0] } ?? []) + (show ? ["--show"] : []) + (teach ? ["--teach"] : []),
+               timeout: Self.connectTimeout(teach: teach), cancel: cancel)
+    }
+    static func connectTimeout(teach: Bool) -> TimeInterval { teach ? 900 : 660 }
+    static let learnTimeout: TimeInterval = 1800
+    // Разметка формы: окно ocmac-auth живёт, пока человек не нажмёт «Готово».
+    func learn(profile: String, cancel: CancelToken? = nil) -> ActionResult {
+        action(["learn", profile], timeout: Self.learnTimeout, cancel: cancel)
+    }
+    func disconnect(cancel: CancelToken? = nil) -> ActionResult { action(["disconnect"], timeout: 40, cancel: cancel) }
+    func pause() -> ActionResult { action(["pause"], timeout: 40) }
+    func resume() -> ActionResult { action(["resume"], timeout: 60) }
+    func toggleRoute(_ cidr: String) -> ActionResult { action(["routes", "toggle", cidr], timeout: 30) }
+    func toggleZone(_ zone: String) -> ActionResult { action(["dns", "toggle", zone], timeout: 30) }
+    func cleanup() -> ActionResult { action(["cleanup"], timeout: 60) }
+    func logout() -> ActionResult { action(["logout"], timeout: 90) }
+    /// Кто поднимает туннель: "manual", "resume" или "always <профиль>".
+    func autoconnect() -> String {
+        guard let binary else { return "resume" }
+        let v = Shell.run(binary, ["autoconnect"], timeout: 10).out.trimmed
+        return v.isEmpty ? "resume" : v
+    }
+    func setAutoconnect(_ value: [String]) -> ActionResult { action(["autoconnect"] + value, timeout: 30) }
+    /// Подключаемся ли автоматически в сети, где мы сейчас.
+    func skipHere() -> Bool {
+        guard let binary else { return false }
+        return Shell.run(binary, ["autoconnect", "here"], timeout: 10).out.trimmed == "skip"
+    }
+
+    /// Автозапуск приложения при входе в систему (LaunchAgent ставит CLI).
+    func autostart() -> Bool {
+        guard let binary else { return false }
+        return Shell.run(binary, ["app", "autostart", "status"], timeout: 10).out.trimmed == "on"
+    }
+    func setAutostart(_ on: Bool) -> ActionResult { action(["app", "autostart", on ? "on" : "off"], timeout: 30) }
+
+    /// Отчёт для разбора: возвращает путь к файлу или причину отказа.
+    func report(to path: String) -> ActionResult { action(["report", path], timeout: 120) }
+
+    // Диагностика: doctor ничего не меняет, поэтому вывод целиком, как есть.
+    /// `ocmac secret status <профиль> --short`: откуда пароль и код и есть ли
+    /// секрет в связке. Без KeePassXC и команд — окно профиля зовёт это при
+    /// каждом открытии.
+    func secretStatus(profile: String) -> [String: String] {
+        guard let binary else { return [:] }
+        let r = Shell.run(binary, ["secret", "status", profile, "--short"], timeout: 10)
+        var out: [String: String] = [:]
+        for line in r.out.split(separator: "\n") {
+            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
+            if parts.count == 2 { out[parts[0]] = parts[1] }
+        }
+        return out
+    }
+
+    func doctor() -> String {
+        guard let binary else { return L("OpenConnect for Mac не найден") }
+        let r = Shell.run(binary, ["doctor"], timeout: 60)
+        let text = (r.out + (r.err.isEmpty ? "" : "\n" + r.err)).trimmed
+        return text.isEmpty ? L("ocmac doctor ничего не напечатал (код %@)", r.code) : text
+    }
+
+    // --- версии для окна «о программе» -----------------------------------
+
+    func version(_ path: String, _ args: [String]) -> String {
+        let r = Shell.run(path, args, timeout: 8)
+        let text = (r.out + " " + r.err).trimmed
+        return text.isEmpty ? "—" : text.split(separator: "\n").first.map(String.init) ?? "—"
+    }
+}
+
+// Счётчики интерфейса. Разбирать с конца строки: колонки адреса у utun
+// нет, и позиционный разбор смещается — принято $(NF-4), отправлено $(NF-1).
+struct Traffic {
+    let rx: UInt64
+    let tx: UInt64
+    let mtu: String
+    let at: Date
+
+    static func read(tundev: String) -> Traffic? {
+        guard !tundev.isEmpty else { return nil }
+        let r = Shell.run("/usr/sbin/netstat", ["-ib", "-I", tundev], timeout: 5)
+        guard r.code == 0 else { return nil }
+        let lines = r.out.split(separator: "\n")
+        guard lines.count >= 2 else { return nil }
+        let f = lines[1].split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard f.count >= 5,
+              let rx = UInt64(f[f.count - 5]),
+              let tx = UInt64(f[f.count - 2]) else { return nil }
+        return Traffic(rx: rx, tx: tx, mtu: f.count > 1 ? f[1] : "", at: Date())
+    }
+}
+
+extension String {
+    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+}
+
+extension StringProtocol {
+    var trimmed: String { String(self).trimmingCharacters(in: .whitespacesAndNewlines) }
+}
+
+extension OCMacClient {
+    // Задержка до шлюза. Считается только когда открыты подробности: лишний
+    // ping раз в две секунды в фоне никому не нужен.
+    func latency(host: String) -> String? {
+        guard !host.isEmpty else { return nil }
+        let r = Shell.run("/sbin/ping", ["-c", "1", "-W", "900", host], timeout: 3)
+        guard r.code == 0 else { return nil }
+        guard let range = r.out.range(of: "time=") else { return nil }
+        let tail = r.out[range.upperBound...]
+        let number = tail.prefix { $0.isNumber || $0 == "." }
+        guard let ms = Double(number) else { return nil }
+        return "\(Int(ms.rounded())) " + L("мс")
+    }
+}
+
+// Версии и пути всех частей: `ocmac version --all`. Поиск бинарников живёт
+// в CLI, приложение его не повторяет — иначе они разойдутся.
+extension OCMacClient {
+    func versions(maxAge: TimeInterval = 60) -> [String: String] {
+        versionsLock.lock()
+        if let cached = versionsCache, Date().timeIntervalSince(versionsStamp) < maxAge {
+            versionsLock.unlock()
+            return cached
+        }
+        versionsLock.unlock()
+        var map: [String: String] = [:]
+        if let binary {
+            let r = Shell.run(binary, ["version", "--all"], timeout: 15)
+            for line in r.out.split(separator: "\n") {
+                guard let eq = line.firstIndex(of: "=") else { continue }
+                map[String(line[line.startIndex..<eq])] = String(line[line.index(after: eq)...])
+            }
+        }
+        versionsLock.lock()
+        versionsCache = map
+        versionsStamp = Date()
+        versionsLock.unlock()
+        return map
+    }
+
+    func preloadVersions() {
+        DispatchQueue.global(qos: .utility).async { _ = self.versions() }
+    }
+}

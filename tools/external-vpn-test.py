@@ -22,7 +22,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('hosts', nargs='+', help='Authorized VPN gateway hostnames')
-parser.add_argument('--image', default='ocbar-test-ocserv:trixie')
+parser.add_argument('--image', default='ocmac-test-ocserv:trixie')
 parser.add_argument('--openconnect', default=shutil.which('openconnect'))
 parser.add_argument('--credentials-stdin', action='store_true', help='Read username/password JSON from stdin instead of prompting')
 parser.add_argument('--container', action='store_true', help=argparse.SUPPRESS)
@@ -33,10 +33,10 @@ if not args.container and not args.openconnect:
     parser.error('openconnect is required')
 
 def auth(host, credentials, container=False):
-    env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
-    env.update(OCBAR_USERNAME=credentials['username'], OCBAR_PASSWORD=credentials['password'],
-               OCBAR_PROMPT_CMD='exit 3', OCBAR_PROMPT_TTY='0', OCBAR_PW_TIMEOUT='25')
-    driver = '/test/ocbar-pwauth.py' if container else str(ROOT / 'libexec/ocbar-pwauth.py')
+    env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_')}
+    env.update(OCMAC_USERNAME=credentials['username'], OCMAC_PASSWORD=credentials['password'],
+               OCMAC_PROMPT_CMD='exit 3', OCMAC_PROMPT_TTY='0', OCMAC_PW_TIMEOUT='25')
+    driver = '/test/ocmac-pwauth.py' if container else str(ROOT / 'libexec/ocmac-pwauth.py')
     client = 'openconnect' if container else args.openconnect
     r = subprocess.run(['python3', driver, client, '--authenticate', '--protocol=anyconnect',
                         '--os=mac-intel', '--user=' + credentials['username'], '--no-proxy',
@@ -46,7 +46,7 @@ def auth(host, credentials, container=False):
         raise RuntimeError('auth exit %d: %s' % (r.returncode, message[-1200:]))
     cookie, pin, url = r.stdout.strip().rsplit(' ', 2)
     assert cookie and pin.startswith(('sha256:', 'pin-sha256:'))
-    print(host + ': authentication OK (trusted TLS, ocbar password driver)', flush=True)
+    print(host + ': authentication OK (trusted TLS, ocmac password driver)', flush=True)
     return cookie, pin, url
 
 def client(host, credentials):
@@ -69,7 +69,7 @@ if os.environ['reason'] == 'connect':
     script.chmod(0o700)
     with open('/tmp/openconnect.log', 'w+') as log:
         proc = subprocess.Popen(['openconnect', '--protocol=anyconnect', '--cookie-on-stdin',
-                                 '--servercert', pin, '--no-proxy', '--interface=ocbartest',
+                                 '--servercert', pin, '--no-proxy', '--interface=ocmactest',
                                  '--script=' + str(script), url],
                                 stdin=subprocess.PIPE, stdout=log, stderr=log, text=True)
         proc.stdin.write(cookie + '\n')
@@ -83,7 +83,7 @@ if os.environ['reason'] == 'connect':
             state = json.loads(Path('/tmp/tunnel-state').read_text())
             print(host + ': tunnel ready; MTU=' + str(state['mtu']), flush=True)
             route = json.loads(subprocess.check_output(['ip','-j','route','get','1.1.1.1'],text=True))
-            assert route[0]['dev'] == 'ocbartest'
+            assert route[0]['dev'] == 'ocmactest'
             http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             with http.open('https://1.1.1.1/cdn-cgi/trace', timeout=15) as response:
                 payload = response.read(4096).decode()
@@ -131,12 +131,12 @@ else:
     for host in args.hosts:
         try:
             auth(host, credentials)
-            name = 'ocbar-external-' + os.urandom(6).hex()
+            name = 'ocmac-external-' + os.urandom(6).hex()
             try:
                 r = subprocess.run(['docker','run','--rm','-i','--name',name,
                                     '--cap-add=NET_ADMIN','--device=/dev/net/tun',
                                     '--entrypoint=python3','-v',str(Path(__file__).resolve())+':/test/probe.py:ro',
-                                    '-v',str(ROOT/'libexec/ocbar-pwauth.py')+':/test/ocbar-pwauth.py:ro',
+                                    '-v',str(ROOT/'libexec/ocmac-pwauth.py')+':/test/ocmac-pwauth.py:ro',
                                     args.image,'/test/probe.py','--container',host],
                                    input=json.dumps(credentials),capture_output=True,text=True,timeout=90)
                 print(r.stdout, end='', flush=True)

@@ -102,22 +102,22 @@ def main():
     helper('version')
     baseline = {ip: live.route(ip) for ip in ['default', ADDRESS, '127.0.0.1', '1.1.1.1'] + args.preserve_route}
     assert baseline[ADDRESS] == baseline['default'], 'test resource already has a specific route'
-    label = 'gui/%d/ru.ocbar.supervisor' % os.getuid()
+    label = 'gui/%d/ru.ocmac.supervisor' % os.getuid()
     loaded = subprocess.run(['launchctl', 'print', label], capture_output=True).returncode == 0
     stopped = False
     started = False
     env = live.test_environment(os.environ)
-    env.update(OCBAR_USERNAME='lab-user', OCBAR_PASSWORD='lab-password',
-               OCBAR_PROMPT_CMD='exit 3', OCBAR_PROMPT_TTY='0', OCBAR_PW_TIMEOUT='25')
+    env.update(OCMAC_USERNAME='lab-user', OCMAC_PASSWORD='lab-password',
+               OCMAC_PROMPT_CMD='exit 3', OCMAC_PROMPT_TTY='0', OCMAC_PW_TIMEOUT='25')
     original_config = lab.CONFIG
     try:
         if loaded:
             run([live.CLI, 'supervisor', 'stop'])
             stopped = True
         assert live.status()['state'] == 'down', 'VPN state changed during setup'
-        for image in args.image or ['ocbar-test-ocserv:bookworm', 'ocbar-test-ocserv:trixie']:
+        for image in args.image or ['ocmac-test-ocserv:bookworm', 'ocmac-test-ocserv:trixie']:
             for compression in args.compression or ['none', 'lzs']:
-                with tempfile.TemporaryDirectory(prefix='ocbar-native-lab-') as directory:
+                with tempfile.TemporaryDirectory(prefix='ocmac-native-lab-') as directory:
                     tmp = Path(directory)
                     run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                          '-keyout', str(tmp / 'key.pem'), '-out', str(tmp / 'cert.pem'),
@@ -142,7 +142,7 @@ server.serve_forever()
                         run(['docker', 'exec', name, 'cp', '/lab/payload.bin', '/tmp/web/payload.bin'])
                         run(['docker', 'exec', '-d', '-w', '/lab', name, 'python3', '/lab/https.py'])
                         url = 'https://127.0.0.1:%d' % port
-                        auth = run(['python3', str(ROOT / 'libexec/ocbar-pwauth.py'), shutil.which('openconnect'),
+                        auth = run(['python3', str(ROOT / 'libexec/ocmac-pwauth.py'), shutil.which('openconnect'),
                                     '--authenticate', '--protocol=anyconnect', '--no-proxy', '--os=mac-intel',
                                     '--user=lab-user', '--cafile', str(tmp / 'cert.pem'), url], env=env)
                         cookie, pin, endpoint = auth.stdout.strip().rsplit(' ', 2)

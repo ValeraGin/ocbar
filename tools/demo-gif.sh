@@ -6,14 +6,14 @@
 #   tools/demo-gif.sh            нужны app/make-app.sh, ffmpeg и ImageMagick
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-app="$root/app/.build/ocbar.app/Contents/MacOS/ocbar-app"
+app="$root/app/.build/ocmac.app/Contents/MacOS/ocmac-app"
 [ -x "$app" ] || { echo "demo-gif: соберите app/make-app.sh" >&2; exit 1; }
 command -v ffmpeg >/dev/null && command -v magick >/dev/null \
     || { echo "demo-gif: нужны ffmpeg и magick (brew install ffmpeg imagemagick)" >&2; exit 1; }
 # Сценарий: кадр и сколько секунд он на экране.
 frames=(down:1.4 connecting:1.0 connected:2.2 network-busy:0.7 network-off:1.6 pausing:0.7 paused:2.2)
 bg="#EEF0EA"   # фон сайта, чтобы анимация не выглядела вырезанной
-tmp=$(mktemp -d /private/tmp/ocbar-demo.XXXXXX)
+tmp=$(mktemp -d /private/tmp/ocmac-demo.XXXXXX)
 trap 'rm -rf "$tmp"' EXIT
 for lang in en ru; do
     out="$root/assets/demo.gif"; [ "$lang" = ru ] && out="$root/assets/ru/demo.gif"

@@ -2,7 +2,7 @@
 
 # OpenConnect for Mac
 
-[Сайт](https://valeragin.github.io/ocbar/ru/)
+[Сайт](https://valeragin.github.io/openconnect-for-mac/ru/)
 
 [English](README.md) · **Русский**
 
@@ -29,33 +29,31 @@ AnyConnect с провайдером входа Keycloak. Установка с�
 поддерживают русский и английский; язык выбирается в настройках. История версий —
 [CHANGELOG.md](CHANGELOG.md), как поставить — [INSTALL.md](INSTALL.md).
 
-Попробовали со своим шлюзом? [Расскажите, получилось ли](https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml): короткий отчёт
+Попробовали со своим шлюзом? [Расскажите, получилось ли](https://github.com/ValeraGin/openconnect-for-mac/issues/new?template=gateway_report.yml): короткий отчёт
 о шлюзе и способе входа пополняет таблицу совместимости.
 
 > Независимый проект, не официальный продукт OpenConnect. Не связан с проектом
 > OpenConnect или Cisco. AnyConnect обозначает совместимость протокола.
 
-Раньше приложение называлось **ocbar**. Команда и формула Homebrew остаются
-`ocbar`, бандл в Homebrew — `ocbar.app`. Копия в лаунчере называется
-`OpenConnect for Mac.app`; скрытая ссылка сохраняет старый путь для автозапуска.
-Профили `.ocbar` и настройки сохраняются.
-Адреса репозитория и сайта прежние.
+Команда — `ocmac`, профиль — `.ocmac`. Для перехода с прежней установки:
+`ocmac migrate`, затем `sudo ocmac install`. Исходные пользовательские файлы
+сохраняются. Подготовка системной части остановит прежнюю VPN-сессию.
 
 ## Установка одной командой
 
 В Терминале:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)"
 ```
 
 [Скрипт в репозитории](install.sh) предложит установить недостающие инструменты
 Apple и Homebrew, поставит OpenConnect for Mac, системный помощник и запустит приложение.
 Пароль администратора понадобится для системной части.
 [Параметры и установка готового профиля](INSTALL.md#быстрая-установка-одной-командой).
-Коллеге достаточно передать один `.ocbar` и
-[ссылку на установку с готовым профилем](https://valeragin.github.io/ocbar/ru/guide/#profile).
-После установки откройте полученный `.ocbar` двойным щелчком, введите свой логин
+Коллеге достаточно передать один `.ocmac` и
+[ссылку на установку с готовым профилем](https://valeragin.github.io/openconnect-for-mac/ru/guide/#profile).
+После установки откройте полученный `.ocmac` двойным щелчком, введите свой логин
 и нажмите **Подключиться**. В новом окне не нужно заполнять сети и DNS.
 Язык выбирается в **Настройки → Общие → Язык интерфейса**.
 
@@ -63,21 +61,21 @@ Apple и Homebrew, поставит OpenConnect for Mac, системный по
 ## Как это устроено
 
 ```
-ocbar connect
+ocmac connect
   │
-  ├─ ocbar-auth (Swift, WKWebView)        от пользователя
+  ├─ ocmac-auth (Swift, WKWebView)        от пользователя
   │    init → окно SAML → cookie → auth-reply → session-token + server-cert-hash
   │
-  └─ sudo -n ocbar-helper tunnel-start    root, NOPASSWD только на него
-       ├─ openconnect --cookie-on-stdin --script "ocbar-helper vpnc" -b
+  └─ sudo -n ocmac-helper tunnel-start    root, NOPASSWD только на него
+       ├─ openconnect --cookie-on-stdin --script "ocmac-helper vpnc" -b
        └─ vpnc: ifconfig utunN, наши маршруты, наши зоны /etc/resolver — и ничего больше
 
-ocbar supervise (LaunchAgent)             от пользователя, раз в 5 с
+ocmac supervise (LaunchAgent)             от пользователя, раз в 5 с
        pid туннеля · kern.waketime · PrimaryInterface · маршруты на месте
 ```
 
 Три слоя: аутентификатор, супервизор, UI. Привилегированный код — один файл
-[libexec/ocbar-helper](libexec/ocbar-helper) с фиксированными подкомандами и
+[libexec/ocmac-helper](libexec/ocmac-helper) с фиксированными подкомандами и
 валидацией каждого аргумента, без постоянно работающего root-демона; модель
 угроз — [SECURITY.md](SECURITY.md).
 
@@ -86,31 +84,31 @@ ocbar supervise (LaunchAgent)             от пользователя, раз 
 Коротко (подробно и с объяснениями — [INSTALL.md](INSTALL.md)):
 
 ```bash
-brew tap ValeraGin/ocbar
-brew trust ValeraGin/ocbar            # tap не из homebrew-core: без этого brew откажется грузить формулу
-brew install ocbar                    # собирает из исходников у вас; --HEAD — с main
-sudo ocbar install                    # один раз: хелпер, sudoers, агент
+brew tap ValeraGin/openconnect-for-mac
+brew trust ValeraGin/openconnect-for-mac            # tap не из homebrew-core: без этого brew откажется грузить формулу
+brew install openconnect-for-mac                    # собирает из исходников у вас; --HEAD — с main
+sudo ocmac install                    # один раз: хелпер, sudoers, агент
 
-mkdir -p ~/.config/ocbar/profiles     # без профиля нечего подключать
-cp "$(brew --prefix ocbar)"/share/ocbar/examples/example.ocbar ~/.config/ocbar/profiles/main.ocbar
-$EDITOR ~/.config/ocbar/profiles/main.ocbar
+mkdir -p ~/.config/ocmac/profiles     # без профиля нечего подключать
+cp "$(brew --prefix openconnect-for-mac)"/share/openconnect-for-mac/examples/example.ocmac ~/.config/ocmac/profiles/main.ocmac
+$EDITOR ~/.config/ocmac/profiles/main.ocmac
 
-ocbar secret set-password
-ocbar connect --show
+ocmac secret set-password
+ocmac connect --show
 ```
 
 Из репозитория, без Homebrew:
 
 ```bash
 brew install openconnect
-git clone https://github.com/ValeraGin/ocbar.git ~/Projects/ocbar && cd ~/Projects/ocbar
+git clone https://github.com/ValeraGin/openconnect-for-mac.git ~/Projects/openconnect-for-mac && cd ~/Projects/openconnect-for-mac
 (cd auth && swift build -c release)   # Swift идёт с Command Line Tools
-mkdir -p ~/.config/ocbar/profiles && cp etc/example.ocbar ~/.config/ocbar/profiles/main.ocbar
-sudo ./bin/ocbar install
+mkdir -p ~/.config/ocmac/profiles && cp etc/example.ocmac ~/.config/ocmac/profiles/main.ocmac
+sudo ./bin/ocmac install
 ```
 
-Обновление — `brew upgrade ocbar`; если в выпуске изменился хелпер, после
-него ещё раз `sudo ocbar install` (`ocbar doctor` скажет, что хелпер
+Обновление — `brew upgrade openconnect-for-mac`; если в выпуске изменился хелпер, после
+него ещё раз `sudo ocmac install` (`ocmac doctor` скажет, что хелпер
 отстал). Почему формула, а не
 готовый бинарь: без Apple Developer ID собранное локально не получает
 карантина, и Gatekeeper не мешает.
@@ -122,8 +120,8 @@ sudo ./bin/ocbar install
 ![Окно профиля](assets/ru/profile.png)
 
 По образцу конфигов WireGuard: один файл — одно подключение, целиком.
-Кладётся в `~/.config/ocbar/profiles/<имя>.ocbar`, образец —
-[etc/example.ocbar](etc/example.ocbar).
+Кладётся в `~/.config/ocmac/profiles/<имя>.ocmac`, образец —
+[etc/example.ocmac](etc/example.ocmac).
 
 ```ini
 [Connection]
@@ -154,8 +152,8 @@ click button[type=submit]
 
 Секретов в файле нет и быть не должно — только ссылки на хранилище, поэтому
 такой профиль можно переслать коллеге — вместе с правилами заполнения формы
-входа его портала (секция `[Autofill]`, пишется разметкой мышью: `ocbar
-learn` или «Разметить…» в окне профиля; `ocbar rules show` покажет,
+входа его портала (секция `[Autofill]`, пишется разметкой мышью: `ocmac
+learn` или «Разметить…» в окне профиля; `ocmac rules show` покажет,
 какие действуют). Форма в несколько окон — сначала пароль, потом код —
 размечается по шагам: отметьте первое окно и нажмите «Пройти шаг →», OpenConnect for Mac
 заполнит его вашими данными и перейдёт к следующему. Надёжно узнаваемое —
@@ -165,8 +163,8 @@ learn` или «Разметить…» в окне профиля; `ocbar rules
 одна кнопка не нажимается, пока на странице видно пустое поле из правил:
 
 ```bash
-ocbar import ~/Downloads/office.ocbar        # добавить
-ocbar export main office.ocbar               # выгрузить
+ocmac import ~/Downloads/office.ocmac        # добавить
+ocmac export main office.ocmac               # выгрузить
 ```
 
 Экспорт работает и как перевод со старого формата: он соберёт профиль вместе
@@ -175,7 +173,7 @@ ocbar export main office.ocbar               # выгрузить
 ### Переезд с Cisco Secure Client
 
 ```bash
-ocbar import ~/Downloads/profile.xml      # список серверов из профиля AnyConnect
+ocmac import ~/Downloads/profile.xml      # список серверов из профиля AnyConnect
 ```
 
 Переносятся только адреса серверов и группы: сети, зоны DNS и источники
@@ -188,7 +186,7 @@ ocbar import ~/Downloads/profile.xml      # список серверов из �
 «Запомнить, как я вхожу» в окне входа:
 
 ```bash
-ocbar connect --teach           # или в меню: «Подключить и запомнить вход…»
+ocmac connect --teach           # или в меню: «Подключить и запомнить вход…»
 ```
 
 Вы вводите логин, пароль и код руками, OpenConnect for Mac запоминает, как устроена форма.
@@ -216,7 +214,7 @@ SystemProxy = off     # on — включить SOCKS всей системе ч
 
 ```bash
 brew install ocproxy                                   # не зависимость формулы: нужен только этому режиму
-ocbar connect                                          # → SOCKS 127.0.0.1:11080
+ocmac connect                                          # → SOCKS 127.0.0.1:11080
 curl --socks5-hostname 127.0.0.1:11080 https://wiki.example.com
 ALL_PROXY=socks5h://127.0.0.1:11080 git fetch
 ```
@@ -237,8 +235,8 @@ ALL_PROXY=socks5h://127.0.0.1:11080 git fetch
 CsdWrapper = ~/vpn/csd-post.sh
 ```
 
-Заготовка ставится вместе с ocbar:
-`cp "$(brew --prefix ocbar)"/share/ocbar/examples/csd-wrapper.sh ~/vpn/csd-post.sh`.
+Заготовка ставится вместе с ocmac:
+`cp "$(brew --prefix openconnect-for-mac)"/share/openconnect-for-mac/examples/csd-wrapper.sh ~/vpn/csd-post.sh`.
 Разрешите исполнение: `chmod u+x "$HOME/vpn/csd-post.sh"`. Пробелы в пути
 поддерживаются; кавычки вокруг значения в профиле не нужны. Скрипт запускается
 от пользователя до SSO с аргументами OpenConnect и переменными окружения
@@ -250,30 +248,30 @@ CsdWrapper = ~/vpn/csd-post.sh
 
 ### CSD внутри профиля
 
-Чтобы передать коллеге один `.ocbar`, в редакторе профиля раскройте
+Чтобы передать коллеге один `.ocmac`, в редакторе профиля раскройте
 дополнительные настройки и нажмите **Встроить CSD-скрипт…**. Выбранный файл
-сохранится в `[Connection] CsdScriptBase64`. Редактор и `ocbar export`
+сохранится в `[Connection] CsdScriptBase64`. Редактор и `ocmac export`
 сохраняют его внутри профиля, без пути к файлу на вашей машине.
 
 `CsdScriptBase64` содержит Base64 в одну строку. Поддерживаются скрипты UTF-8
 до 256 КиБ с первой строкой `#!`; одновременно задавать `CsdWrapper` нельзя.
-При импорте OpenConnect for Mac извлечёт скрипт в `~/.config/ocbar/csd/`, а `sudo ocbar install`
+При импорте OpenConnect for Mac извлечёт скрипт в `~/.config/ocmac/csd/`, а `sudo ocmac install`
 подготовит его копию для туннеля. Установщик делает оба шага сам:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)" -- --profile ~/Downloads/office.ocbar
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)" -- --profile ~/Downloads/office.ocmac
 ```
 
 Параметр `--csd` для такого профиля не нужен. Чтение, проверка и импорт профиля
 не запускают скрипт: он вызывается при подключении. После изменения встроенного
-скрипта повторите `sudo ocbar install`, чтобы обновить системную копию.
+скрипта повторите `sudo ocmac install`, чтобы обновить системную копию.
 
 ### Старый формат
 
 Прежняя раскладка продолжает работать: общий `profiles.conf` плюс отдельные
 `networks.conf` и `zones.conf`.
 
-Конфиги в `~/.config/ocbar/`, образцы в [etc/](etc/):
+Конфиги в `~/.config/ocmac/`, образцы в [etc/](etc/):
 
 | Файл | Что |
 |---|---|
@@ -293,11 +291,11 @@ CsdWrapper = ~/vpn/csd-post.sh
 То же из терминала:
 
 ```bash
-ocbar secret set-password       # спросит security, не ocbar
-ocbar secret add-totp <профиль> --screen    # QR с экрана: выделить рамкой
-ocbar secret add-totp <профиль> --camera    # QR камерой
-echo 'otpauth://totp/…' | ocbar secret add-totp <профиль> --stdin
-ocbar secret status             # что есть в связке и включён ли автоввод
+ocmac secret set-password       # спросит security, не ocmac
+ocmac secret add-totp <профиль> --screen    # QR с экрана: выделить рамкой
+ocmac secret add-totp <профиль> --camera    # QR камерой
+echo 'otpauth://totp/…' | ocmac secret add-totp <профиль> --stdin
+ocmac secret status             # что есть в связке и включён ли автоввод
 ```
 
 Секрет TOTP удобнее занести из QR-кода — понимается и обычный `otpauth://`,
@@ -305,8 +303,8 @@ ocbar secret status             # что есть в связке и включ�
 попадает:
 
 ```bash
-ocbar secret import-qr ~/Downloads/qr.png --list          # что внутри
-ocbar secret import-qr ~/Downloads/qr.png --select <часть-имени>   # занести нужное
+ocmac secret import-qr ~/Downloads/qr.png --list          # что внутри
+ocmac secret import-qr ~/Downloads/qr.png --select <часть-имени>   # занести нужное
 ```
 
 Экспорт почти всегда содержит несколько записей, поэтому без `--select`
@@ -355,7 +353,7 @@ password_command = op item get VPN --fields password
 Microsoft). У других компаний форма своя — покажите её программе мышью:
 
 ```bash
-ocbar learn                 # откроется форма входа вашего портала
+ocmac learn                 # откроется форма входа вашего портала
 ```
 
 Щёлкайте по полю логина, полю пароля, полю кода и по кнопке отправки: вид
@@ -365,22 +363,22 @@ ocbar learn                 # откроется форма входа ваше�
 или просто печатайте — отмеченное поле получает фокус сразу.
 
 По кнопке «Готово» правила ложатся в сам профиль — секцию `[Autofill]`
-файла `~/.config/ocbar/profiles/<имя>.ocbar`, а прошлая версия профиля
+файла `~/.config/ocmac/profiles/<имя>.ocmac`, а прошлая версия профиля
 остаётся рядом с суффиксом `.bak`. В общий файл
-`~/.config/ocbar/autofill.rules` (или в файл из ключа `Rules`) они пишутся,
+`~/.config/ocmac/autofill.rules` (или в файл из ключа `Rules`) они пишутся,
 только если профиль указывает на файл ключом `Rules`, если профиль старого
-формата (`profiles.conf`) или если задан `ocbar learn --out <файл>`. Закрытое
+формата (`profiles.conf`) или если задан `ocmac learn --out <файл>`. Закрытое
 окно без «Готово» ничего не пишет. То же самое есть в приложении:
 «Настройки → Профили → Подключение → Разметить…».
 
 ```bash
-ocbar rules show <профиль>              # какие правила действуют и откуда
-ocbar rules import <файл> <профиль>     # положить файл правил в [Autofill]
-ocbar rules clear <профиль>             # убрать секцию — снова встроенные или общий файл
+ocmac rules show <профиль>              # какие правила действуют и откуда
+ocmac rules import <файл> <профиль>     # положить файл правил в [Autofill]
+ocmac rules clear <профиль>             # убрать секцию — снова встроенные или общий файл
 ```
 
 Формат правил простой и правится руками — один и тот же в секции
-`[Autofill]` ([etc/example.ocbar](etc/example.ocbar)) и в файле
+`[Autofill]` ([etc/example.ocmac](etc/example.ocmac)) и в файле
 ([etc/autofill.rules.example](etc/autofill.rules.example)).
 
 ### Автоподключение и вход
@@ -388,7 +386,7 @@ ocbar rules clear <профиль>             # убрать секцию — �
 Супервизор поднимает туннель **молча**: окно входа не появляется поверх
 работы. Если сохранённой сессии хватило, подключение проходит само. Если
 нет, приходит уведомление, автопопытки останавливаются, и решение за вами —
-`ocbar connect`.
+`ocmac connect`.
 
 ### Подключение через внешний прокси
 
@@ -400,7 +398,7 @@ SSO и VPN-туннель используют один прокси. Работ
 
 Поддерживаются HTTP CONNECT и SOCKS5 без авторизации, с обязательным портом
 1–65535 и DNS-именем либо IPv4-адресом. Пароли, пути и IPv6-литералы в этом
-поле не принимаются. Нужен helper 0.8.3 или новее (`sudo ocbar install`);
+поле не принимаются. Нужен helper 0.8.3 или новее (`sudo ocmac install`);
 прокси действует для парольного входа, SSO и обучения.
 При заданном прокси DTLS принудительно выключен: транспорт идёт по TCP.
 При отказе прокси прямого переподключения к внешнему шлюзу нет.
@@ -416,43 +414,43 @@ CSD-обёртка получает `http_proxy`, `https_proxy`, `all_proxy` и 
 ## Команды
 
 ```
-ocbar connect [профиль] [--show] [--teach] [-v]
+ocmac connect [профиль] [--show] [--teach] [-v]
                                       SSO и туннель; окно покажется, если за 2 с не прошло молча;
                                       --teach — войти руками и запомнить форму, пароль, код
-ocbar disconnect
-ocbar logout                          выйти совсем: отключиться и забыть сессии входа (проверки)
-ocbar status [--short|--json]                --short — машинный вид для меню
-ocbar profiles | import <файл> | export <профиль> [файл]
-ocbar profiles order [имя…]           порядок профилей в меню; без имён — текущий
-ocbar routes on|off|toggle <CIDR>     сети на живом туннеле; apply | clear | status
-ocbar dns on|off|toggle <зона>        зоны /etc/resolver; apply | clear | status
-ocbar autoconnect [manual|resume|always <профиль>]   кто поднимает туннель
-ocbar report [файл] [--raw]           отчёт для разбора: адреса и логины скрыты
-ocbar logs [-f] [-n N] [источник…]    все журналы одной лентой по времени; -f — следить
-ocbar profile-check <файл>            примет ли клиент такой профиль (этим редактор проверяет форму)
-ocbar state [--json]                  рабочее состояние одним снимком: профиль, автоподключение, доступ, флаги
-ocbar pause | resume | toggle         «как будто выключен»: маршруты и зоны сняты,
+ocmac disconnect
+ocmac logout                          выйти совсем: отключиться и забыть сессии входа (проверки)
+ocmac status [--short|--json]                --short — машинный вид для меню
+ocmac profiles | import <файл> | export <профиль> [файл]
+ocmac profiles order [имя…]           порядок профилей в меню; без имён — текущий
+ocmac routes on|off|toggle <CIDR>     сети на живом туннеле; apply | clear | status
+ocmac dns on|off|toggle <зона>        зоны /etc/resolver; apply | clear | status
+ocmac autoconnect [manual|resume|always <профиль>]   кто поднимает туннель
+ocmac report [файл] [--raw]           отчёт для разбора: адреса и логины скрыты
+ocmac logs [-f] [-n N] [источник…]    все журналы одной лентой по времени; -f — следить
+ocmac profile-check <файл>            примет ли клиент такой профиль (этим редактор проверяет форму)
+ocmac state [--json]                  рабочее состояние одним снимком: профиль, автоподключение, доступ, флаги
+ocmac pause | resume | toggle         «как будто выключен»: маршруты и зоны сняты,
                                       туннель и вход живы, возврат мгновенный
-ocbar secret set-password|set-totp|status|code [профиль]
-ocbar secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
-ocbar learn [профиль] [--probe] [--out <файл>]   разметить форму входа
-ocbar rules show|import <файл>|clear [профиль]  правила в [Autofill] профиля
-ocbar app start|stop|status           приложение меню-бара; autostart on|off; devmode on|off
-ocbar supervisor status|start|stop|restart       агент супервизора
-ocbar version [--all]                 версия; --all — версии и пути всех частей
-ocbar doctor                          диагностика, ничего не меняет
-ocbar selftest                        самопроверка на подставленных конфигах
-ocbar cleanup                         мусор после падения: наши зоны, маршруты, SOCKS
-sudo ocbar install [--trust] | uninstall
+ocmac secret set-password|set-totp|status|code [профиль]
+ocmac secret import-qr <файл> [--list] [--select ИМЯ] [профиль]
+ocmac learn [профиль] [--probe] [--out <файл>]   разметить форму входа
+ocmac rules show|import <файл>|clear [профиль]  правила в [Autofill] профиля
+ocmac app start|stop|status           приложение меню-бара; autostart on|off; devmode on|off
+ocmac supervisor status|start|stop|restart       агент супервизора
+ocmac version [--all]                 версия; --all — версии и пути всех частей
+ocmac doctor                          диагностика, ничего не меняет
+ocmac selftest                        самопроверка на подставленных конфигах
+ocmac cleanup                         мусор после падения: наши зоны, маршруты, SOCKS
+sudo ocmac install [--trust] | uninstall
 --dry-run                             печатать привилегированные команды вместо выполнения
 ```
 
 Аутентификатор отдельно — удобно для диагностики шлюза без учётных данных:
 
 ```bash
-auth/.build/release/ocbar-auth --probe --url vpn.example.com/group
-auth/.build/release/ocbar-auth --selftest        # TOTP по RFC 6238, разбор XML
-auth/.build/release/ocbar-auth --dump-script     # JS автозаполнения по правилам
+auth/.build/release/ocmac-auth --probe --url vpn.example.com/group
+auth/.build/release/ocmac-auth --selftest        # TOTP по RFC 6238, разбор XML
+auth/.build/release/ocmac-auth --dump-script     # JS автозаполнения по правилам
 ```
 
 ## Самопроверки
@@ -461,17 +459,17 @@ auth/.build/release/ocbar-auth --dump-script     # JS автозаполнени
 состояние и журнал уводятся во временный каталог, вместо хелпера — заглушка. Каждая печатает итог с числом проверок.
 
 ```bash
-ocbar selftest                      # разбор профиля, сети и зоны, отказы, уборка только своего, уведомления
-ocbar-app --selftest                # разбор и запись профиля (сверка с ocbar export), проверки, опрос, токен
-ocbar-auth --selftest               # TOTP по RFC 6238, разбор XML, где заполнять форму, лимиты, cookie
-ocbar-auth --learn-selftest         # разметка и запись входа на странице-образце
+ocmac selftest                      # разбор профиля, сети и зоны, отказы, уборка только своего, уведомления
+ocmac-app --selftest                # разбор и запись профиля (сверка с ocmac export), проверки, опрос, токен
+ocmac-auth --selftest               # TOTP по RFC 6238, разбор XML, где заполнять форму, лимиты, cookie
+ocmac-auth --learn-selftest         # разметка и запись входа на странице-образце
 tools/helper-selftest.sh            # хелпер целиком на --dry-run с заглушками (только из репозитория)
 ```
 
 Отдельно, уже на живом подключении (меняет состояние и возвращает обратно):
 
 ```bash
-ocbar-app --selftest --live-actions  # сеть, зона, пауза и возобновление
+ocmac-app --selftest --live-actions  # сеть, зона, пауза и возобновление
 ```
 
 ## Песочница интерфейса
@@ -481,8 +479,8 @@ ocbar-app --selftest --live-actions  # сеть, зона, пауза и воз�
 живой.
 
 ```bash
-ocbar ui-lab            # на данных-образце
-ocbar ui-lab --live     # подложить снимок реального состояния
+ocmac ui-lab            # на данных-образце
+ocmac ui-lab --live     # подложить снимок реального состояния
 ```
 
 Снимок кладётся рядом со страницей и в репозиторий не попадает: в нём
@@ -492,12 +490,12 @@ ocbar ui-lab --live     # подложить снимок реального с�
 ## Меню-бар
 
 Приложение [app/](app/) — SwiftUI, меню `NSHostingMenu`, macOS 14.4+. Читает
-`ocbar status --json`, действия делает вызовами `ocbar`; собственных
+`ocmac status --json`, действия делает вызовами `ocmac`; собственных
 привилегий у него нет.
 
 ```bash
-ocbar app start                 # запустить
-ocbar app autostart on          # запускать при входе в систему
+ocmac app start                 # запустить
+ocmac app autostart on          # запускать при входе в систему
 (cd app && ./make-app.sh)       # собрать бандл из репозитория
 ```
 
@@ -519,8 +517,8 @@ VPN». Ниже профили; у подключённого — состоян
 («Настроить OpenConnect for Mac…» в меню, пока профилей нет).
 
 Отдельными окнами — настройки в стиле Системных настроек (разделы слева; у профиля части «Подключение / Режим / Сети и DNS») и
-диагностика (`ocbar doctor` с кнопкой «повторить», уборкой и журналами).
-Порядок профилей — перетаскиванием в списке окна профиля (или `ocbar
+диагностика (`ocmac doctor` с кнопкой «повторить», уборкой и журналами).
+Порядок профилей — перетаскиванием в списке окна профиля (или `ocmac
 profiles order`); тот же порядок в меню. В окне профиля наверху то, что нужно для входа: название, адрес,
 пользователь, откуда пароль и код и есть ли они в связке ключей; форма
 входа — итогом («2 окна: логин+пароль → код») и кнопкой «Разметить…»;
@@ -532,11 +530,11 @@ profiles order`); тот же порядок в меню. В окне профи
 найден. Посмотреть их все разом, не рвя связь:
 
 ```bash
-app/.build/ocbar.app/Contents/MacOS/ocbar-app --stage         # витрина состояний
-app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest      # разбор, запись профиля, правила
+app/.build/ocmac.app/Contents/MacOS/ocmac-app --stage         # витрина состояний
+app/.build/ocmac.app/Contents/MacOS/ocmac-app --selftest      # разбор, запись профиля, правила
 ```
 
-[swiftbar/ocbar.5s.sh](swiftbar/ocbar.5s.sh) — плагин [SwiftBar](https://github.com/swiftbar/SwiftBar):
+[swiftbar/ocmac.5s.sh](swiftbar/ocmac.5s.sh) — плагин [SwiftBar](https://github.com/swiftbar/SwiftBar):
 статус, профили, тоглы маршрутов и зон, предупреждение «мак просыпался после
 подключения». Остаётся запасным вариантом и проверяется без SwiftBar — это
 просто stdout.
@@ -548,10 +546,10 @@ app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest      # разбор, з
 - **чужой openconnect не трогается** — `cleanup` и `disconnect` гасят только
   свои сессии (запущенные хелпером, с его `--pid-file`), а `disconnect` не
   погасит чужой `utun`. Своя лишняя сессия — та, что не записана в pidfile, —
-  видна в `ocbar status` и `ocbar doctor` и гасится `ocbar cleanup`; её
+  видна в `ocmac status` и `ocmac doctor` и гасится `ocmac cleanup`; её
   vpnc-script состояние текущей сессии не трогает;
 - **root исполняет копию из своего каталога**: `openconnect` копируется в
-  `/usr/local/libexec/ocbar/` и сверяется по sha256 вместе с библиотеками,
+  `/usr/local/libexec/ocmac/` и сверяется по sha256 вместе с библиотеками,
   csd-wrapper берётся только по имени из root-каталога, vpnc-script — сам
   хелпер. Оговорка: библиотеки остаются в каталоге Homebrew, доступном
   пользователю на запись, поэтому проверка ловит случайное расхождение после
@@ -565,8 +563,8 @@ app/.build/ocbar.app/Contents/MacOS/ocbar-app --selftest      # разбор, з
 в домашнюю сеть, не гонять трафик через корпоративный канал — есть пауза:
 
 ```bash
-ocbar pause     # маршруты и зоны сняты, туннель и SSO-сессия живы
-ocbar resume    # вернуть, мгновенно и без входа
+ocmac pause     # маршруты и зоны сняты, туннель и SSO-сессия живы
+ocmac resume    # вернуть, мгновенно и без входа
 ```
 
 Пауза переживает обрыв связи: если туннель переподнимется сам, маршруты не
@@ -575,7 +573,7 @@ ocbar resume    # вернуть, мгновенно и без входа
 
 ## Ограничения
 
-- парольные группы (логин + OTP из SMS, `auth = password`): пароль `ocbar`
+- парольные группы (логин + OTP из SMS, `auth = password`): пароль `ocmac`
   подставит сам, код из SMS вводит человек в окне «Код из SMS», поэтому молча
   переподключиться такой профиль не может — автоподключение скажет «нужен вход»;
 - «всё в туннель» настраивается сетями `0.0.0.0/1` и `128.0.0.0/1` в конфиге, но шлюз при этом может не выпускать в интернет — проверено;

@@ -105,9 +105,9 @@ def check(client, context, scheme, stage):
         def deny():
             return stage == 'http-failure' or (stage == 'web-failure' and any(k == 'init' for k, _ in events))
         with relay(scheme, port, deny) as (proxy, relayed, requests, proxy_errors):
-            env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_') and not k.lower().endswith('_proxy')}
+            env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_') and not k.lower().endswith('_proxy')}
             # Explicit profile proxy must win even over NO_PROXY=*.
-            env.update(OCBAR_LANG='ru', NO_PROXY='*', no_proxy='*')
+            env.update(OCMAC_LANG='ru', NO_PROXY='*', no_proxy='*')
             result = subprocess.run([str(client), '--url', f'https://upstream-gateway.invalid:{port}/group',
                                      '--upstream-proxy', proxy, '--insecure', '--no-autofill', '--no-window',
                                      '--timeout', '8', '--show-after', '30'],
@@ -131,9 +131,9 @@ def check(client, context, scheme, stage):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--client', type=Path, default=ROOT / 'auth/.build/release/ocbar-auth')
+    parser.add_argument('--client', type=Path, default=ROOT / 'auth/.build/release/ocmac-auth')
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix='ocbar-upstream-') as directory:
+    with tempfile.TemporaryDirectory(prefix='ocmac-upstream-') as directory:
         tmp = Path(directory)
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(tmp/'key.pem'), '-out', str(tmp/'cert.pem'),

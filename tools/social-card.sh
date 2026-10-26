@@ -6,9 +6,9 @@
 #   tools/social-card.sh         нужны app/make-app.sh и ImageMagick
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-app="$root/app/.build/ocbar.app/Contents/MacOS/ocbar-app"
+app="$root/app/.build/ocmac.app/Contents/MacOS/ocmac-app"
 [ -x "$app" ] || { echo "social-card: соберите app/make-app.sh" >&2; exit 1; }
-tmp=$(mktemp -d /private/tmp/ocbar-card.XXXXXX)
+tmp=$(mktemp -d /private/tmp/ocmac-card.XXXXXX)
 trap 'rm -rf "$tmp"' EXIT
 assets="$root/website/dist/assets"
 cd "$root"

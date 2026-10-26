@@ -3,10 +3,18 @@
 All notable changes. Versions are git tags; the Homebrew formula pins each
 release to its tag and commit.
 
+## 0.25.0 — 2026-10-27
+
+- Репозиторий и пакет Homebrew теперь называются `openconnect-for-mac`, команда — `ocmac`, профили — `.ocmac`.
+- Обновлены имена приложения, системного помощника, настроек, журналов и ссылки на сайт.
+- `ocmac migrate` переносит профили, настройки и пароли со старой установки. Исходные данные сохраняются; конфликтующие новые файлы не перезаписываются.
+- `sudo ocmac install` завершает старое VPN-подключение, заменяет системную часть и восстанавливает прежний автозапуск. Системные файлы прежней установки сохраняются в `/var/db/ocmac/migration-backup`.
+- Старые файлы профилей по-прежнему можно открыть и импортировать.
+
 ## 0.24.0 — 2026-10-27
 
 - Приложение и сайт теперь называются OpenConnect for Mac. Это независимый
-  проект, не официальный продукт OpenConnect. Команды `ocbar`, `.ocbar`-профили,
+  проект, не официальный продукт OpenConnect. Команды `ocmac`, `.ocmac`-профили,
   пути настроек, идентификаторы macOS и адреса проекта сохранены.
 - Копия в лаунчере называется `OpenConnect for Mac.app`. Скрытая ссылка
   сохраняет старый путь для уже настроенного автозапуска.
@@ -22,7 +30,7 @@ release to its tag and commit.
 
 ## 0.23.0 — 2026-10-25
 
-- Open .ocbar files directly from Finder or the visible Open profile button in
+- Open .ocmac files directly from Finder or the visible Open profile button in
   Profiles. A short window asks for the user's own login and connects, preserving
   the supplied routes, DNS, scripts and advanced settings. Fresh imports never
   prefill the sender's username or overwrite an existing profile.
@@ -76,9 +84,9 @@ release to its tag and commit.
   only needs `--profile`, without a separate CSD download.
 - Choose System default, Russian or English in Settings → General. The menu
   and open views update immediately; new sign-in windows and CLI messages use
-  the same preference. `OCBAR_LANG` remains an explicit override.
+  the same preference. `OCMAC_LANG` remains an explicit override.
 - `install.sh` provides a one-command macOS setup: offers missing Apple tools
-  and Homebrew, installs ocbar and its helper, enables the menu app at login,
+  and Homebrew, installs ocmac and its helper, enables the menu app at login,
   and optionally imports a supplied profile with its CSD script.
 - Helper setup now copies CSD scripts from single-file profiles in the installing
   user’s home, with shell-quoted paths; legacy profiles still work.
@@ -94,7 +102,7 @@ Needs macOS 14.4 or newer.
   zones are checkmark submenus.
 - Connection progress is visible: the menu shows the current step under the
   profile ("Signing in · 2/4", "Waiting for you in the sign-in window"), and
-  the menu bar icon fills step by step while connecting. `ocbar status`
+  the menu bar icon fills step by step while connecting. `ocmac status`
   reports the step as `connect_stage`.
 - The download speed moved to the connection details (hold ⌥ while opening
   the menu); the profile row keeps the state and session time.
@@ -127,7 +135,7 @@ Needs macOS 14.4 or newer.
 
 ## 0.18.0 — 2026-10-16
 
-Needs `sudo ocbar install` once: the privileged helper is now 0.8.3.
+Needs `sudo ocmac install` once: the privileged helper is now 0.8.3.
 
 - A new graphite-and-lime switch icon ties the macOS app and website together.
   Menu actions, links and charts use contrast-aware accents in both appearances.
@@ -146,14 +154,14 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.3.
 - HostScan wrappers receive the gateway's non-default port in `-url`. Local
   HTTPS checks cover the report submission, paths with spaces, wrapper
   failures, and groups that do not request HostScan.
-- For sign-in groups that request a device check, ocbar-auth now runs the
+- For sign-in groups that request a device check, ocmac-auth now runs the
   executable `CsdWrapper` configured in the profile before SSO. The wrapper
-  supplies the report; ocbar waits for the gateway to finish processing it,
+  supplies the report; ocmac waits for the gateway to finish processing it,
   then refreshes the sign-in request. Groups without this request are unchanged.
 - The client checks the wrapper sequence against a local HTTPS gateway during
   release validation.
 - A sample `CsdWrapper` script is installed with the other examples in
-  `share/ocbar/examples/csd-wrapper.sh`.
+  `share/ocmac/examples/csd-wrapper.sh`.
 
 ## 0.17.8 — 2026-09-24
 
@@ -161,7 +169,7 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.3.
   reason is shown in its own words. A refusal at the top of the reply
   (for example "Cisco Secure Desktop not installed on the client" for groups
   that require a device check) used to surface as "no session-token in the
-  reply". ocbar does not perform Cisco Secure Desktop checks; such groups
+  reply". ocmac does not perform Cisco Secure Desktop checks; such groups
   need Cisco Secure Client.
 
 ## 0.17.7 — 2026-09-24
@@ -188,7 +196,7 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.3.
   interface language.
 - The menu row "Networks and DNS" no longer cuts off its title: the summary
   is shorter ("3/3 · DNS 6/6").
-- `ocbar --help` lists `status --json`, `state`, `logs` and `profile-check`;
+- `ocmac --help` lists `status --json`, `state`, `logs` and `profile-check`;
   the self-test now checks that every command is in the help, in both
   languages.
 - Docs: the interface language, updating when a release changes the helper,
@@ -197,7 +205,7 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.3.
 
 ## 0.17.5 — 2026-09-23
 
-Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
+Needs `sudo ocmac install` once: the privileged helper is now 0.8.2.
 
 - The helper records a route or a DNS zone as its own before it adds it,
   not after. If it was interrupted in between, the route or the
@@ -215,7 +223,7 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
   openconnect has been starting for more than 90 seconds without bringing
   the tunnel up, the supervisor stops it and tries again with its usual
   back-off. Before, it did nothing in that state.
-- `ocbar doctor` checks that every enabled network is routed through the
+- `ocmac doctor` checks that every enabled network is routed through the
   tunnel's own interface and names the ones that are not. On 2026-09-21
   the routes went through a stray session's interface and nothing said so.
 - The supervisor no longer writes "routes missing" every five seconds while
@@ -223,11 +231,11 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
   changes or after five minutes.
 - Releases refuse to go out when the privileged helper changed but its
   version did not (`tools/helper-version-check.sh`): the version is how
-  `ocbar version` and `doctor` tell that the installed copy is outdated.
+  `ocmac version` and `doctor` tell that the installed copy is outdated.
 
 ## 0.17.3 — 2026-09-23
 
-- `ocbar doctor` in English no longer shows one line in Russian: the label
+- `ocmac doctor` in English no longer shows one line in Russian: the label
   of the openconnect copy directory. The translation check now also fails
   on a message passed as a bare variable, which it cannot see.
 - Compiled Python caches are no longer part of the repository.
@@ -237,7 +245,7 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
 - Stopping a stray session no longer takes the current one down with it.
   openconnect deletes its pid file when it exits, and all of the helper's
   sessions share one: a stray that exited (closed by the gateway or stopped
-  by `ocbar cleanup`) erased the current session's pid. The next stray's
+  by `ocmac cleanup`) erased the current session's pid. The next stray's
   disconnect then removed the current routes and DNS zones, and the
   supervisor, seeing no tunnel, signed in again. The helper and the command
   line now recognise the current session by its recorded start time as
@@ -255,23 +263,23 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
   or connected again, and the cycle repeated.
 - A disconnect or reconnect from an openconnect that is not the current one
   no longer touches routes, zones or the tunnel state.
-- `ocbar cleanup`, `disconnect` and a new connection stop stray sessions —
+- `ocmac cleanup`, `disconnect` and a new connection stop stray sessions —
   the helper's own openconnect processes that are not in its pidfile.
   Someone else's openconnect is still left alone.
-- `ocbar status` and `ocbar doctor` name stray sessions (pid and start
+- `ocmac status` and `ocmac doctor` name stray sessions (pid and start
   time); `status --short`/`--json` list them as `strays`, and the menu no
   longer calls them "someone else's tunnel".
-- The new helper takes `sudo ocbar install`.
+- The new helper takes `sudo ocmac install`.
 
 ## 0.17.0 — 2026-09-21
 
 - The command line speaks English when the system does: every message,
-  notification and `ocbar help`. `OCBAR_LANG=ru|en` picks the language
+  notification and `ocmac help`. `OCMAC_LANG=ru|en` picks the language
   explicitly. The log and the machine-readable output (`--short`, `--json`,
   `key=value`) stay as they were.
 - Reasons for refusing a two-factor code (no QR code in the image, several
   accounts in one export) come in the same language.
-- The app recognises the client's hints ("sudo ocbar install", "brew install
+- The app recognises the client's hints ("sudo ocmac install", "brew install
   openconnect/ocproxy", "not installed") in both languages.
 - `tools/i18n-scan.py --check` now covers the command line: a message
   without a translation fails the build.
@@ -296,15 +304,15 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
 
 ## 0.15.5 — 2026-09-21
 
-- `ocbar app stop` returns only after the app has exited. Run right before
-  `ocbar app start`, it used to leave the old process alive for a moment, so
+- `ocmac app stop` returns only after the app has exited. Run right before
+  `ocmac app start`, it used to leave the old process alive for a moment, so
   `start` reported "already running" and the copy in `~/Applications` stayed
   on the previous version after an upgrade.
 
 ## 0.15.4 — 2026-09-21
 
-- `ocbar secret access` shows the Screen Recording and camera permissions as
-  the sign-in helper sees them, and `ocbar://debug-access` compares them with
+- `ocmac secret access` shows the Screen Recording and camera permissions as
+  the sign-in helper sees them, and `ocmac://debug-access` compares them with
   what the app itself has — if they differ, the permission hint would be
   wrong.
 - Releases and CI run the self-tests inside the same sandbox `brew test`
@@ -329,25 +337,25 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
   says so, instead of "no QR code found" on a capture that shows only the
   desktop.
 - Screen capture, the camera and the keychain are covered end to end
-  without a person: from the editor's buttons through `ocbar` and
-  `ocbar-auth` to what reaches the keychain. New `ocbar-auth --qr-png` and
+  without a person: from the editor's buttons through `ocmac` and
+  `ocmac-auth` to what reaches the keychain. New `ocmac-auth --qr-png` and
   `--screen-access` for such checks.
 
 ## 0.15.1 — 2026-09-21
 
 - Adding a code now says why it failed, in the authenticator's own words —
   for example that the QR holds several accounts — instead of a generic
-  "not recognised". `ocbar secret add-totp` takes `--select <part of name>`
+  "not recognised". `ocmac secret add-totp` takes `--select <part of name>`
   for such exports.
 - The result of saving a password or code stays with its profile: it no
   longer shows up under another profile, and a slow camera or screen capture
   no longer switches the editor back to the profile it started on. Password
   groups now show the result too.
 - Codes saved from a QR image, the camera or a link get the same keychain
-  label as `ocbar secret set-totp`.
+  label as `ocmac secret set-totp`.
 - Self-tests cover saving the password and code: what reaches the keychain,
   that neither shows up in process arguments, parameters written to the
-  profile, and the reason for a refusal. The new `ocbar-auth` flags are
+  profile, and the reason for a refusal. The new `ocmac-auth` flags are
   documented in `--help`.
 
 ## 0.15.0 — 2026-09-21
@@ -361,7 +369,7 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
   sign-in.
 - Password and code sources (KeePassXC, your own command) moved to Advanced;
   the keychain is the default.
-- CLI: `ocbar secret set-password <profile> --stdin` and `ocbar secret add-totp
+- CLI: `ocmac secret set-password <profile> --stdin` and `ocmac secret add-totp
   <profile> --screen|--camera|--stdin`.
 
 ## 0.14.1 — 2026-09-21
@@ -386,32 +394,32 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
 
 - State files are written whole (temp file, then rename), so a reader never
   catches a half-written value.
-- `ocbar state [--json]` shows the runtime state in one place: profile,
+- `ocmac state [--json]` shows the runtime state in one place: profile,
   auto-connect policy, access check, flags, disabled networks and zones.
 - The self-test fails if a state file is introduced inline instead of being
   declared with the others at the top of the CLI.
 
 ## 0.13.0 — 2026-09-20
 
-- The client has the final word on a profile: `ocbar profile-check <file>`
+- The client has the final word on a profile: `ocmac profile-check <file>`
   says whether it will load, and the editor (and the first-run wizard) refuse
   to save when it will not, quoting the client's own reason.
 - The editor no longer lets you save a profile with an out-of-range `Mtu` or a
   `Dtls` other than on/off — the client refuses to load those, so the profile
   would simply not connect.
-- `ocbar-app --selftest` compares the editor's verdict with the client's on a
+- `ocmac-app --selftest` compares the editor's verdict with the client's on a
   set of profiles, so the two rule sets cannot drift apart unnoticed.
 
 ## 0.12.1 — 2026-09-20
 
 - Internal: the CLI is 4431 → 3655 lines. The self-test and the Python parts
   (merged logs, report redaction, password-group login) moved out of
-  `bin/ocbar` into `libexec/`, where the linter and the tests can see them.
+  `bin/ocmac` into `libexec/`, where the linter and the tests can see them.
   Behaviour is unchanged.
 
 ## 0.12.0 — 2026-09-20
 
-- `ocbar status --json` prints the whole state as typed JSON: lists as lists,
+- `ocmac status --json` prints the whole state as typed JSON: lists as lists,
   numbers as numbers. The menu bar app reads that instead of parsing
   `key=value` lines, so a "|" in a profile name or a new field can no longer
   shift columns. `--short` stays for scripts and the SwiftBar plugin.
@@ -429,10 +437,10 @@ Needs `sudo ocbar install` once: the privileged helper is now 0.8.2.
 - The menu window now shrinks back. macOS grows the menu-bar window to fit the
   content but never shrinks it, so after the Networks and DNS page the window
   stayed tall and the content hung below the icon with empty space above.
-  ocbar measures its content and resizes the window itself, keeping the top
+  ocmac measures its content and resizes the window itself, keeping the top
   edge in place.
 - Checking this needs the real menu-bar window, so the app can now drive it:
-  `open "ocbar://debug-menu?token=<notify token>"` opens the menu, switches to
+  `open "ocmac://debug-menu?token=<notify token>"` opens the menu, switches to
   Networks and DNS and back, and writes the heights and a verdict to the app
   log.
 
@@ -511,7 +519,7 @@ Fixes from a design review of every screen:
 - The first-run wizard is a paged assistant: steps at the top (System
   component → Profile → First sign-in), one screen per step, and Back / Later /
   Continue at the bottom. The profile step asks how to sign in (SSO or password
-  and SMS code) and imports `.ocbar` and Cisco `.xml` profiles.
+  and SMS code) and imports `.ocmac` and Cisco `.xml` profiles.
 
 ## 0.8.1 — 2026-09-19
 
@@ -523,13 +531,13 @@ Fixes from a design review of every screen:
 
 ## 0.8.0 — 2026-09-19
 
-- `ocbar logs` and the new "All" tab in the Logs window show every log as one
+- `ocmac logs` and the new "All" tab in the Logs window show every log as one
   timeline, with the source on each line: supervisor, openconnect, proxy,
   sign-in and app. `-f` follows, `-n` sets the length, sources can be listed.
   The Logs window also gained a "Sign-in" tab for `auth.log`.
 - openconnect lines carry a timestamp (`--timestamp`), and so do the helper's
   own lines in the openconnect log. The tunnel log needs the updated helper:
-  run `sudo ocbar install` once.
+  run `sudo ocmac install` once.
 
 ## 0.7.1 — 2026-09-19
 
@@ -554,7 +562,7 @@ Fixes from a design review of every screen:
 ## 0.6.0 — 2026-09-19
 
 - Password groups (`Auth = password`: login, password and a code from SMS)
-  connect through ocbar: the password comes from the profile's source, the
+  connect through ocmac: the password comes from the profile's source, the
   SMS code is asked in a small "Code from SMS" window (or on the terminal),
   and the session is obtained with `openconnect --authenticate` as the user.
   Auto-connect still leaves them to a human.
@@ -565,7 +573,7 @@ Fixes from a design review of every screen:
 
 - The menu scrolls the profile list to the selected profile, so with many
   profiles the current one is visible right away.
-- `ocbar-app --stage --live` shows real profiles again (0.4.8 gave it the demo
+- `ocmac-app --stage --live` shows real profiles again (0.4.8 gave it the demo
   ones meant for screenshots).
 
 ## 0.5.0 — 2026-09-19
@@ -582,28 +590,28 @@ Fixes from a design review of every screen:
 - Builds with Command Line Tools 27 without Xcode: the macOS 27 SDK needs the
   SwiftUI macro plugin that only Xcode ships, so `make-app.sh` falls back to
   the previous SDK from the same Command Line Tools.
-- `ocbar-app --stage` renders windows with demo profiles instead of reading
-  `~/.config/ocbar`, so screenshots never show real servers or logins.
+- `ocmac-app --stage` renders windows with demo profiles instead of reading
+  `~/.config/ocmac`, so screenshots never show real servers or logins.
 
 ## 0.4.7 — 2026-09-17
 
 - "Do not connect on this network": the supervisor skips auto-connect in
   networks you mark (home, office). The network is recognised by the router
   MAC, so no location permission is needed. In Settings → General or
-  `ocbar autoconnect skip-here`.
+  `ocmac autoconnect skip-here`.
 
 ## 0.4.6 — 2026-09-17
 
-- `ocbar import profile.xml` reads the server list from a Cisco AnyConnect
+- `ocmac import profile.xml` reads the server list from a Cisco AnyConnect
   XML profile and creates a profile per server (addresses and groups only).
-- README: how to drive ocbar from Shortcuts and other automation.
+- README: how to drive ocmac from Shortcuts and other automation.
 
 ## 0.4.5 — 2026-09-17
 
 - The supervisor re-checks access every five minutes, not only right after
   connecting: the menu shows whether the resource from `[Health] Check` still
   answers, and says so when a live tunnel stops giving access.
-- Errors that need a command you have to run yourself (`sudo ocbar install`,
+- Errors that need a command you have to run yourself (`sudo ocmac install`,
   `brew install openconnect`) offer to copy it.
 
 ## 0.4.4 — 2026-09-17
@@ -617,18 +625,18 @@ Fixes from a design review of every screen:
 
 - First-run wizard in the app: system component, profile, first login, each
   step with the equivalent command. Opens from the menu when there are no
-  profiles yet ("Set up ocbar…").
+  profiles yet ("Set up ocmac…").
 - Menu rows are real buttons: keyboard and VoiceOver reach them.
 
 ## 0.4.2 — 2026-09-17
 
-- `ocbar report` (and "Save report…" in Diagnostics): one file with versions,
+- `ocmac report` (and "Save report…" in Diagnostics): one file with versions,
   diagnostics, profiles and log tails; hosts, addresses, logins, e-mail and
   cookies are replaced with placeholders, `--raw` keeps them.
-- `ocbar autoconnect manual | resume | always <profile>` and a picker in
+- `ocmac autoconnect manual | resume | always <profile>` and a picker in
   Settings → General: who brings the tunnel up. Default is unchanged.
 - Settings → General: start at login, developer mode. The menu now says
-  "Quit ocbar (tunnel stays up)".
+  "Quit ocmac (tunnel stays up)".
 
 ## 0.4.1 — 2026-09-17
 
@@ -659,9 +667,9 @@ Fixes found by a review of what the app still lacks:
 
 ## 0.3.9 — 2026-09-14
 
-- `ocbar logout`: disconnect and erase identity-provider sessions of the
+- `ocmac logout`: disconnect and erase identity-provider sessions of the
   login window, so the next login shows the full form. In the menu when
-  developer mode is on (`ocbar app devmode on`).
+  developer mode is on (`ocmac app devmode on`).
 
 ## 0.3.8 — 2026-09-14
 
@@ -671,7 +679,7 @@ Fixes found by a review of what the app still lacks:
 
 ## 0.3.7 — 2026-09-13
 
-- The supervisor no longer stops a tunnel that `ocbar connect` is still
+- The supervisor no longer stops a tunnel that `ocmac connect` is still
   bringing up, and does not start a second login in parallel.
 
 ## 0.3.6 — 2026-09-13
@@ -681,7 +689,7 @@ Fixes found by a review of what the app still lacks:
 - "Remember how I sign in" merges recorded steps into existing rules instead
   of replacing them.
 - "Insert password" and "Insert code" buttons in the login window.
-- Login window decisions are logged to `~/Library/Logs/ocbar/auth.log`.
+- Login window decisions are logged to `~/Library/Logs/ocmac/auth.log`.
 
 ## 0.3.5 — 2026-09-13
 
@@ -694,7 +702,7 @@ Fixes found by a review of what the app still lacks:
 
 ## 0.3.3 — 2026-09-11
 
-- Profile order: drag in the profile list or `ocbar profiles order`.
+- Profile order: drag in the profile list or `ocmac profiles order`.
 
 ## 0.3.2 — 2026-09-11
 
@@ -709,10 +717,10 @@ Fixes found by a review of what the app still lacks:
 
 Security and reliability fixes after a full review:
 
-- Helper 0.8.0: state moved to `/var/db/ocbar`, all state and trust paths
+- Helper 0.8.0: state moved to `/var/db/ocmac`, all state and trust paths
   must be root-owned; signals only to our `openconnect`; exact zone, route
   and SOCKS matching; stricter argument validation; `uninstall` tears the
-  session down. Run `sudo ocbar install` after upgrading.
+  session down. Run `sudo ocmac install` after upgrading.
 - Autofill only over HTTPS on hosts of the login chain; `--insecure` applies
   to the gateway only; cookies accepted from the exact gateway host; form
   recording ignores synthetic events.

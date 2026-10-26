@@ -4,10 +4,10 @@
 
 ## Checks
 
-- [ ] `bin/ocbar selftest`
+- [ ] `bin/ocmac selftest`
 - [ ] `tools/helper-selftest.sh`
-- [ ] `ocbar-auth --selftest` and `--learn-selftest`
-- [ ] `ocbar-app --selftest`
+- [ ] `ocmac-auth --selftest` and `--learn-selftest`
+- [ ] `ocmac-app --selftest`
 - [ ] A check that fails without this change (say which one, and that you saw it fail)
 
 ## Notes

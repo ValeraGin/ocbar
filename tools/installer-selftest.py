@@ -19,8 +19,8 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocbar='', command_string=False):
-    tmp = tempfile.TemporaryDirectory(prefix='ocbar installer test ')
+def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocmac='', command_string=False, migrated_profile=False, legacy_profile=False):
+    tmp = tempfile.TemporaryDirectory(prefix='ocmac installer test ')
     base = Path(tmp.name)
     fake = base / 'bin'
     fake.mkdir()
@@ -28,9 +28,9 @@ def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501
     (base / 'prefix/bin').mkdir(parents=True)
     log = base / 'calls'
     log.touch()
-    clean_env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_')}
     env = dict(clean_env, HOME=str(base / 'home'), PATH=f'{fake}:/usr/bin:/bin:/usr/sbin:/sbin',
-               TEST_BASE=str(base), TEST_LOG=str(log), TEST_OLD=old_ocbar)
+               TEST_BASE=str(base), TEST_LOG=str(log), TEST_OLD=old_ocmac, TEST_MIGRATED=str(int(migrated_profile)))
     # Only replace the fallback Homebrew locations so a real local brew cannot be used.
     script = (ROOT / 'install.sh').read_text().replace('/opt/homebrew/bin/brew', shlex.quote(str(fake / 'brew')))
     script = script.replace('/usr/local/bin/brew', shlex.quote(str(fake / 'brew')))
@@ -58,8 +58,8 @@ esac
     if brew:
         shutil.copy(base / 'brew-template', fake / 'brew')
     executable(fake / 'curl', '''for arg; do
-    if [ "$arg" = https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh ]; then
-        echo download-ocbar >> "$TEST_LOG"
+    if [ "$arg" = https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh ]; then
+        echo download-ocmac >> "$TEST_LOG"
         cat "$TEST_BASE/install.sh"
         exit 0
     fi
@@ -70,13 +70,18 @@ cat > "$2" <<'EOF'
 cp "$TEST_BASE/brew-template" "$TEST_BASE/bin/brew"
 EOF
 ''')
-    executable(base / 'prefix/bin/ocbar', '''echo "ocbar $*" >> "$TEST_LOG"
+    executable(base / 'prefix/bin/ocmac', '''echo "ocmac $*" >> "$TEST_LOG"
 if [ -n "$TEST_OLD" ] && [ ! -f "$TEST_BASE/inline-supported" ] && [ "$1" = profile-check ]; then exit 0; fi
 case "$1" in
-    profile-check|import) exec /bin/bash ''' + shlex.quote(str(ROOT / 'bin/ocbar')) + ''' "$@" ;;
+    migrate)
+        if [ "$TEST_MIGRATED" = 1 ]; then
+            mkdir -p "$HOME/.config/ocmac/profiles"
+            printf 'migrated profile\\n' > "$HOME/.config/ocmac/profiles/office.ocmac"
+        fi ;;
+    profile-check|import) exec /bin/bash ''' + shlex.quote(str(ROOT / 'bin/ocmac')) + ''' "$@" ;;
 esac
 ''')
-    profile = base / 'office.ocbar'
+    profile = base / ('office.ocbar' if legacy_profile else 'office.ocmac')
     profile.write_text('[Connection]\nName = Office\nUrl = vpn.example.test/employees\nCsdWrapper = /old/path\n\n[Routes]\n10.0.0.0/8\n\n[DNS]\nexample.test = vpn\n')
     if embedded:
         encoded = base64.b64encode(b'#!/bin/bash\nexit 0\n').decode()
@@ -88,7 +93,7 @@ esac
         pid, fd = pty.fork()
         if pid == 0:
             if command_string:
-                command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)" -- "$@"'
+                command = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)" -- "$@"'
                 argv = ['bash', '-c', command, '--', *options]
             else:
                 argv = ['bash', str(base / 'install.sh'), *options]
@@ -120,27 +125,27 @@ esac
 
 
 def check_csd_plan():
-    with tempfile.TemporaryDirectory(prefix='ocbar CSD plan ') as tmp:
+    with tempfile.TemporaryDirectory(prefix='ocmac CSD plan ') as tmp:
         base = Path(tmp)
         home = base / 'home'
-        profiles = home / '.config/ocbar/profiles'
+        profiles = home / '.config/ocmac/profiles'
         profiles.mkdir(parents=True)
         script = home / 'scripts $(touch marker); dir/csd.sh'
         script.parent.mkdir()
         script.write_text('#!/bin/bash\nexit 0\n')
         legacy = home / 'legacy.sh'
         legacy.write_text('#!/bin/bash\nexit 0\n')
-        (profiles / 'office.ocbar').write_text('[Connection]\nUrl = vpn.example.test\nCsdWrapper = ' + str(script) + '\n')
+        (profiles / 'office.ocmac').write_text('[Connection]\nUrl = vpn.example.test\nCsdWrapper = ' + str(script) + '\n')
         (profiles.parent / 'profiles.conf').write_text('[legacy]\ncsd_wrapper = ~/legacy.sh\n')
-        env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
-        env.update(OCBAR_CONFIG_DIR=str(base / 'wrong-config'), OCBAR_SELFTEST_HELPER='/dev/null')
-        result = subprocess.run([str(ROOT / 'bin/ocbar'), '_selftest-fn', 'install_csd_steps', str(home)],
+        env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_')}
+        env.update(OCMAC_CONFIG_DIR=str(base / 'wrong-config'), OCMAC_SELFTEST_HELPER='/dev/null')
+        result = subprocess.run([str(ROOT / 'bin/ocmac'), '_selftest-fn', 'install_csd_steps', str(home)],
                                 env=env, text=True, capture_output=True, check=True)
         commands = result.stdout.strip().splitlines()
         assert len(commands) == 2, result.stdout
         args = [shlex.split(command) for command in commands]
         assert {row[-2] for row in args} == {str(script), str(legacy)}, args
-        assert all(row[-1].startswith('/usr/local/libexec/ocbar/csd/external-') for row in args)
+        assert all(row[-1].startswith('/usr/local/libexec/ocmac/csd/external-') for row in args)
         fake = base / 'fake'
         fake.mkdir()
         executable(fake / 'install', "printf '%s\\n' \"$@\" >> \"$TEST_ARGS\"\n")
@@ -149,7 +154,7 @@ def check_csd_plan():
             subprocess.run(['/bin/bash', '-c', command], env=env, cwd=base, check=True)
         assert not (base / 'marker').exists(), 'CSD path executed as shell syntax'
         assert str(script) in (base / 'args').read_text().splitlines()
-    print('OK: helper CSD plan reads user .ocbar and legacy profiles; paths are shell-quoted')
+    print('OK: helper CSD plan reads user .ocmac and legacy profiles; paths are shell-quoted')
 
 
 def main():
@@ -175,29 +180,29 @@ def main():
         assert code == 0, output
         calls = (base / 'calls').read_text()
         assert 'apple-tools' in calls and 'download-homebrew' in calls
-        assert 'brew install ValeraGin/ocbar/ocbar' in calls
-        assert 'defaults write ru.ocbar.app InterfaceLanguage -string ru' in calls
-        dst = base / 'home/.config/ocbar/profiles/office.ocbar'
+        assert 'brew install ValeraGin/openconnect-for-mac/openconnect-for-mac' in calls
+        assert 'defaults write ru.ocmac.app InterfaceLanguage -string ru' in calls
+        dst = base / 'home/.config/ocmac/profiles/office.ocmac'
         content = dst.read_text()
-        target = base / 'home/.config/ocbar/csd/office.sh'
+        target = base / 'home/.config/ocmac/csd/office.sh'
         assert f'CsdWrapper = {target}' in content and '/old/path' not in content
         assert '10.0.0.0/8' in content and 'example.test = vpn' in content
         assert target.stat().st_mode & 0o777 == 0o700
         assert dst.stat().st_mode & 0o777 == 0o600
-        assert calls.index('ocbar import') < calls.index('sudo ')
+        assert calls.index('ocmac import') < calls.index('sudo ')
         dst.write_text(content + '# local edit\n')
         code, output = rerun()
         assert code == 0 and 'Keeping existing profile' in output, output
         assert dst.read_text().endswith('# local edit\n')
-        assert (base / 'calls').read_text().count('ocbar import') == 1
+        assert (base / 'calls').read_text().count('ocmac import') == 1
     print('OK: fresh install, dependency prompts, CSD, helper order and safe retry')
 
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', '--language', 'ru', embedded=True)
     with tmp:
         assert code == 0, output
-        profile = base / 'home/.config/ocbar/profiles/office.ocbar'
+        profile = base / 'home/.config/ocmac/profiles/office.ocmac'
         assert 'CsdScriptBase64 =' in profile.read_text() and 'CsdWrapper' not in profile.read_text()
-        extracted = list((base / 'home/.config/ocbar/csd').glob('inline-*.sh'))
+        extracted = list((base / 'home/.config/ocmac/csd').glob('inline-*.sh'))
         assert len(extracted) == 1 and extracted[0].read_bytes() == b'#!/bin/bash\nexit 0\n'
     print('OK: one-file profile installation needs no --csd argument')
 
@@ -206,38 +211,38 @@ def main():
     with tmp:
         assert code == 0, output
         calls = (base / 'calls').read_text()
-        assert 'download-ocbar' in calls and 'download-homebrew' in calls and 'apple-tools' in calls
-        assert 'defaults write ru.ocbar.app InterfaceLanguage -string ru' in calls
-        assert (base / 'home/.config/ocbar/profiles/office.ocbar').exists()
-        assert len(list((base / 'home/.config/ocbar/csd').glob('inline-*.sh'))) == 1
-        assert calls.index('ocbar import') < calls.index('sudo ')
+        assert 'download-ocmac' in calls and 'download-homebrew' in calls and 'apple-tools' in calls
+        assert 'defaults write ru.ocmac.app InterfaceLanguage -string ru' in calls
+        assert (base / 'home/.config/ocmac/profiles/office.ocmac').exists()
+        assert len(list((base / 'home/.config/ocmac/csd').glob('inline-*.sh'))) == 1
+        assert calls.index('ocmac import') < calls.index('sudo ')
     print('OK: GitHub-style one-line command forwards the profile path with spaces and prepares embedded CSD')
 
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', '--csd', 'CSD', embedded=True)
     with tmp:
         assert code == 0, output
-        profile = base / 'home/.config/ocbar/profiles/office.ocbar'
+        profile = base / 'home/.config/ocmac/profiles/office.ocmac'
         assert 'CsdWrapper =' in profile.read_text() and 'CsdScriptBase64' not in profile.read_text()
     print('OK: an explicit external script replaces the embedded source')
 
-    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', embedded=True, old_ocbar='upgradable')
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', embedded=True, old_ocmac='upgradable')
     with tmp:
         assert code == 0, output
-        assert 'brew upgrade ValeraGin/ocbar/ocbar' in (base / 'calls').read_text()
-        assert (base / 'home/.config/ocbar/profiles/office.ocbar').exists()
-    print('OK: older ocbar is upgraded before importing an embedded script')
+        assert 'brew upgrade ValeraGin/openconnect-for-mac/openconnect-for-mac' in (base / 'calls').read_text()
+        assert (base / 'home/.config/ocmac/profiles/office.ocmac').exists()
+    print('OK: older ocmac is upgraded before importing an embedded script')
 
-    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', embedded=True, old_ocbar='unavailable')
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', embedded=True, old_ocmac='unavailable')
     with tmp:
         assert code != 0 and 'cannot read CsdScriptBase64' in output, output
-        assert 'ocbar import' not in (base / 'calls').read_text()
+        assert 'ocmac import' not in (base / 'calls').read_text()
         assert 'sudo ' not in (base / 'calls').read_text()
     print('OK: unsupported releases cannot silently skip embedded CSD')
 
     tmp, base, code, output, _ = scenario('--no-start', '--no-autostart')
     with tmp:
         assert code == 0, output
-        assert 'ocbar app' not in (base / 'calls').read_text()
+        assert 'ocmac app' not in (base / 'calls').read_text()
     print('OK: optional app start and login launch')
 
     tmp, base, code, output, rerun = scenario('--head')
@@ -248,6 +253,19 @@ def main():
         assert code == 0, output
         assert 'brew reinstall --HEAD' in (base / 'calls').read_text()
     print('OK: explicit HEAD install and reinstall')
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', migrated_profile=True)
+    with tmp:
+        assert code == 0, output
+        assert (base / 'home/.config/ocmac/profiles/office.ocmac').read_text() == 'migrated profile\n'
+        assert 'ocmac import' not in (base / 'calls').read_text()
+    print('OK: migration cannot be overwritten by a same-name installer profile')
+
+    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', legacy_profile=True)
+    with tmp:
+        assert code == 0, output
+        assert (base / 'home/.config/ocmac/profiles/office.ocmac').is_file()
+        assert not (base / 'home/.config/ocmac/profiles/office.ocbar.ocmac').exists()
+    print('OK: legacy extension imports under the correct new filename')
     check_csd_plan()
 
 

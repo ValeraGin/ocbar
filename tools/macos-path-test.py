@@ -115,7 +115,7 @@ def relay(via, host):
 
 def authenticate(host, port, username, password, env):
     url = 'https://' + host + (':%d' % port if port else '')
-    command = ['python3', str(ROOT / 'libexec/ocbar-pwauth.py'), shutil.which('openconnect'),
+    command = ['python3', str(ROOT / 'libexec/ocmac-pwauth.py'), shutil.which('openconnect'),
                '--authenticate', '--protocol=anyconnect', '--no-proxy', '--os=mac-intel', '--user=' + username]
     if port:
         command += ['--resolve', host + ':127.0.0.1']
@@ -177,13 +177,13 @@ def main():
     native.helper('version')
     baseline = {target: live.route(target) for target in
                 ['default', '127.0.0.1', '1.1.1.1', '8.8.8.8'] + args.preserve_route}
-    label = 'gui/%d/ru.ocbar.supervisor' % os.getuid()
+    label = 'gui/%d/ru.ocmac.supervisor' % os.getuid()
     loaded = subprocess.run(['launchctl', 'print', label], capture_output=True).returncode == 0
     username = getpass.getpass('VPN username (hidden): ')
     password = getpass.getpass('VPN password (hidden): ')
     env = live.test_environment(os.environ)
-    env.update(OCBAR_USERNAME=username, OCBAR_PASSWORD=password, OCBAR_PROMPT_CMD='exit 3',
-               OCBAR_PROMPT_TTY='0', OCBAR_PW_TIMEOUT='25')
+    env.update(OCMAC_USERNAME=username, OCMAC_PASSWORD=password, OCMAC_PROMPT_CMD='exit 3',
+               OCMAC_PROMPT_TTY='0', OCMAC_PW_TIMEOUT='25')
     stopped = started = False
     results = []
     try:

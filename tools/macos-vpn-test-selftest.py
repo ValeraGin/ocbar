@@ -13,7 +13,7 @@ spec = importlib.util.spec_from_file_location('live', client)
 live = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(live)
 # A previous version may be loaded from a temporary directory for regression checks.
-live.CLI = str(Path(__file__).resolve().parent.parent / 'bin/ocbar')
+live.CLI = str(Path(__file__).resolve().parent.parent / 'bin/ocmac')
 
 
 class RunnerSetup(unittest.TestCase):
@@ -28,7 +28,7 @@ class RunnerSetup(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 1, '', '')
             if command[1:3] == ['connect', 'live-test']:
                 captured.update(env)
-                captured['profile_text'] = (Path(env['OCBAR_CONFIG_DIR']) / 'profiles/live-test.ocbar').read_text()
+                captured['profile_text'] = (Path(env['OCMAC_CONFIG_DIR']) / 'profiles/live-test.ocmac').read_text()
                 raise StopBeforeConnection()
             return subprocess.CompletedProcess(command, 0, '', '')
 
@@ -36,20 +36,20 @@ class RunnerSetup(unittest.TestCase):
                   'HTTPS_PROXY': 'http://localhost:9998', 'http_proxy': 'http://localhost:9997',
                   'HTTP_PROXY': 'http://localhost:9996', 'ALL_PROXY': 'socks5://localhost:9995',
                   'all_proxy': 'socks5://localhost:9994', 'NO_PROXY': '*', 'no_proxy': '*',
-                  'OCBAR_CONFIG_DIR': '/do-not-use-personal-config', 'OCBAR_TEST_PASSWORD': 'stale'}
+                  'OCMAC_CONFIG_DIR': '/do-not-use-personal-config', 'OCMAC_TEST_PASSWORD': 'stale'}
         with patch.dict(os.environ, source, clear=True), \
                 patch.object(sys, 'argv', ['live', '--live', '--mode', 'proxy', *extra, 'vpn.example.test']), \
                 patch.object(live, 'status', return_value={'state': 'down', 'foreign': False}), \
                 patch.object(live, 'route', return_value={'interface': 'test-interface'}), \
-                patch.object(live, 'ZONE', Path('/nonexistent-ocbar-selftest-resolver')), \
+                patch.object(live, 'ZONE', Path('/nonexistent-ocmac-selftest-resolver')), \
                 patch.object(live, 'run', side_effect=fake_run), \
                 patch.object(live.socket, 'socket') as fake_socket, \
                 patch.object(live.getpass, 'getpass', side_effect=['synthetic-user', 'synthetic-password']):
             fake_socket.return_value.__enter__.return_value.getsockname.return_value = ('127.0.0.1', 9990)
             with self.assertRaises(StopBeforeConnection):
                 live.main()
-        self.assertNotEqual(captured['OCBAR_CONFIG_DIR'], source['OCBAR_CONFIG_DIR'])
-        self.assertEqual(captured['OCBAR_TEST_PASSWORD'], 'synthetic-password')
+        self.assertNotEqual(captured['OCMAC_CONFIG_DIR'], source['OCMAC_CONFIG_DIR'])
+        self.assertEqual(captured['OCMAC_TEST_PASSWORD'], 'synthetic-password')
         self.assertEqual(captured['PATH'], source['PATH'])
         return captured, source
 

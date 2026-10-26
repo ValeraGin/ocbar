@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cisco Secure Desktop (HostScan) wrapper для ocbar — аналог csd-post.sh
+# Cisco Secure Desktop (HostScan) wrapper для ocmac — аналог csd-post.sh
 # из поставки openconnect, адаптированный для macOS.
 #
 # Вместо запуска hostscan-«трояна» Cisco скрипт отправляет шлюзу готовые
@@ -9,8 +9,8 @@
 # хватает большинству. Значения можно и стоит сделать правдивыми под свою
 # политику — правьте REPORT ниже.
 #
-# Контракт вызова — как у openconnect, чтобы скрипт работал и от ocbar-auth
-# (auth/Sources/ocbar-auth/CSD.swift), и от openconnect с --csd-wrapper:
+# Контракт вызова — как у openconnect, чтобы скрипт работал и от ocmac-auth
+# (auth/Sources/ocmac-auth/CSD.swift), и от openconnect с --csd-wrapper:
 #   argv: <stub> -ticket <ticket> -stub 0 -group <tunnel-group>
 #         -certhash <hash> -url https://<host>[:<port>]<host-scan-base-uri>
 #         -langselen en-US

@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# Собрать ocbar.app — бандл для меню-бара. SwiftPM даёт обычный исполняемый
+# Собрать ocmac.app — бандл для меню-бара. SwiftPM даёт обычный исполняемый
 # файл; меню-бару нужен бандл с Info.plist, где LSUIElement выключает Dock.
 #
-#   ./make-app.sh                 → app/.build/ocbar.app
-#   ./make-app.sh /Applications   → /Applications/ocbar.app
+#   ./make-app.sh                 → app/.build/ocmac.app
+#   ./make-app.sh /Applications   → /Applications/ocmac.app
 #
 # Подписи Developer ID нет и не предполагается: приложение собирается у себя,
 # карантин ему не ставится.
@@ -17,12 +17,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
 DEST="${1:-.build}"
-APP="$DEST/ocbar.app"
-# Версия одна — VERSION в bin/ocbar. Не прочиталась — это поломка
+APP="$DEST/ocmac.app"
+# Версия одна — VERSION в bin/ocmac. Не прочиталась — это поломка
 # сборки, а не повод выпустить бандл с чужой версией.
-VERSION=$(sed -n 's/^VERSION="\(.*\)"/\1/p' ../bin/ocbar | head -1)
+VERSION=$(sed -n 's/^VERSION="\(.*\)"/\1/p' ../bin/ocmac | head -1)
 if [ -z "$VERSION" ]; then
-    echo "make-app.sh: не прочитал VERSION из $HERE/../bin/ocbar — бандл не собираю" >&2
+    echo "make-app.sh: не прочитал VERSION из $HERE/../bin/ocmac — бандл не собираю" >&2
     exit 1
 fi
 
@@ -56,7 +56,7 @@ BIN=$(swift build -c release --show-bin-path)
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN/ocbar-app" "$APP/Contents/MacOS/ocbar-app"
+cp "$BIN/ocmac-app" "$APP/Contents/MacOS/ocmac-app"
 
 # Иконка рисуется кодом (make-icon.swift) и собирается в .icns. Интерпретатор
 # swift внутри песочницы brew может не собрать её (кэш модулей), поэтому
@@ -90,8 +90,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
     <key>CFBundleName</key><string>OpenConnect for Mac</string>
     <key>CFBundleDisplayName</key><string>OpenConnect for Mac</string>
-    <key>CFBundleIdentifier</key><string>ru.ocbar.app</string>
-    <key>CFBundleExecutable</key><string>ocbar-app</string>
+    <key>CFBundleIdentifier</key><string>ru.ocmac.app</string>
+    <key>CFBundleExecutable</key><string>ocmac-app</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
@@ -100,12 +100,21 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         <key>CFBundleTypeName</key><string>OpenConnect for Mac VPN profile</string>
         <key>CFBundleTypeRole</key><string>Viewer</string>
         <key>LSHandlerRank</key><string>Owner</string>
-        <key>LSItemContentTypes</key><array><string>ru.ocbar.profile</string></array>
+        <key>LSItemContentTypes</key><array><string>ru.ocmac.profile</string><string>ru.ocbar.profile</string></array>
     </dict></array>
     <key>UTExportedTypeDeclarations</key>
     <array><dict>
-        <key>UTTypeIdentifier</key><string>ru.ocbar.profile</string>
+        <key>UTTypeIdentifier</key><string>ru.ocmac.profile</string>
         <key>UTTypeDescription</key><string>OpenConnect for Mac VPN profile</string>
+        <key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
+        <key>UTTypeTagSpecification</key><dict>
+            <key>public.filename-extension</key><array><string>ocmac</string></array>
+        </dict>
+    </dict></array>
+    <key>UTImportedTypeDeclarations</key>
+    <array><dict>
+        <key>UTTypeIdentifier</key><string>ru.ocbar.profile</string>
+        <key>UTTypeDescription</key><string>Legacy VPN profile</string>
         <key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
         <key>UTTypeTagSpecification</key><dict>
             <key>public.filename-extension</key><array><string>ocbar</string></array>
@@ -116,8 +125,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSCameraUsageDescription</key><string>OpenConnect for Mac читает QR второго фактора с экрана телефона, чтобы сохранить секрет одноразового кода. Кадры никуда не сохраняются.</string>
     <key>CFBundleURLTypes</key>
     <array><dict>
-        <key>CFBundleURLName</key><string>ru.ocbar.app.notify</string>
-        <key>CFBundleURLSchemes</key><array><string>ocbar</string></array>
+        <key>CFBundleURLName</key><string>ru.ocmac.app.notify</string>
+        <key>CFBundleURLSchemes</key><array><string>ocmac</string></array>
     </dict></array>
 $([ "$ICON_OK" = 1 ] && printf '    <key>CFBundleIconFile</key><string>AppIcon</string>\n    <key>CFBundleIconName</key><string>AppIcon</string>')
     <key>CFBundleDevelopmentRegion</key><string>ru</string>

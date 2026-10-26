@@ -7,7 +7,7 @@ cp /lab/otp.db /tmp/otp.db
 chmod 600 /tmp/otp.db
 if [ "${LAB_TRAFFIC:-0}" = 1 ]; then
     mkdir -p /tmp/web
-    printf 'ocbar-tunnel-proof\n' > /tmp/web/proof.txt
+    printf 'ocmac-tunnel-proof\n' > /tmp/web/proof.txt
     python3 -m http.server 8080 --directory /tmp/web > /tmp/http.log 2>&1 &
     dnsmasq --keep-in-foreground --bind-dynamic --listen-address=192.0.2.1 \
         --no-resolv --no-hosts --address=/lab.test/192.0.2.1 > /tmp/dns.log 2>&1 &

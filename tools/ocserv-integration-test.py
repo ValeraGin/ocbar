@@ -45,7 +45,7 @@ def run(*args, **kw):
 
 @contextmanager
 def server(image, tmp, mode, debug=False):
-    name = 'ocbar-lab-' + uuid.uuid4().hex[:12]
+    name = 'ocmac-lab-' + uuid.uuid4().hex[:12]
     network = name + '-net'
     config = CONFIG
     if mode == 'groups':
@@ -83,10 +83,10 @@ def server(image, tmp, mode, debug=False):
 
 
 def auth_case(name, command, password='lab-password', answer='exit 3', expected=0, reason=None):
-    env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
-    env.update(OCBAR_PASSWORD=password, OCBAR_USERNAME='lab-user',
-               OCBAR_PROMPT_CMD=answer, OCBAR_PROMPT_TTY='0', OCBAR_PW_TIMEOUT='25')
-    result = subprocess.run(['python3', str(ROOT / 'libexec/ocbar-pwauth.py'), *command],
+    env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_')}
+    env.update(OCMAC_PASSWORD=password, OCMAC_USERNAME='lab-user',
+               OCMAC_PROMPT_CMD=answer, OCMAC_PROMPT_TTY='0', OCMAC_PW_TIMEOUT='25')
+    result = subprocess.run(['python3', str(ROOT / 'libexec/ocmac-pwauth.py'), *command],
                             env=env, capture_output=True, text=True, timeout=35)
     assert result.returncode == expected, f'{name}: exit {result.returncode}: {result.stderr}'
     assert 'lab-password' not in result.stderr, f'{name}: password in log'
@@ -102,13 +102,13 @@ def auth_case(name, command, password='lab-password', answer='exit 3', expected=
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--image', default='ocbar-test-ocserv:bookworm')
+    parser.add_argument('--image', default='ocmac-test-ocserv:bookworm')
     parser.add_argument('--openconnect', default=shutil.which('openconnect'))
     parser.add_argument('--mode', action='append', choices=['password', 'groups', 'otp', 'certificate'])
     args = parser.parse_args()
     if not args.openconnect:
         parser.error('openconnect is required')
-    with tempfile.TemporaryDirectory(prefix='ocbar-ocserv-') as directory:
+    with tempfile.TemporaryDirectory(prefix='ocmac-ocserv-') as directory:
         tmp = Path(directory)
         run('openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
             '-keyout', str(tmp / 'key.pem'), '-out', str(tmp / 'cert.pem'),
@@ -126,7 +126,7 @@ def main():
         (tmp / 'otp.py').write_text('''import hashlib,hmac,struct,time,os
 from pathlib import Path
 Path(__file__).with_suffix('.called').touch()
-assert os.environ['OCBAR_PROMPT_SECRET'] == '1'
+assert os.environ['OCMAC_PROMPT_SECRET'] == '1'
 b = hmac.new(b'12345678901234567890', struct.pack('!Q', int(time.time())//30), hashlib.sha1).digest()
 p = b[-1] & 15
 print('%06d' % ((struct.unpack('!I',b[p:p+4])[0] & 0x7fffffff) % 1000000))
@@ -152,7 +152,7 @@ print('%06d' % ((struct.unpack('!I',b[p:p+4])[0] & 0x7fffffff) % 1000000))
                             r = run('docker', 'run', '--rm', '--name', client, '--network', network,
                                     '--cap-add=NET_ADMIN', '--device=/dev/net/tun', '--entrypoint=python3',
                                     '-v', f'{tmp}:/lab:ro', '-v', f'{LAB}:/test-lab:ro',
-                                    '-v', f'{ROOT / "libexec/ocbar-pwauth.py"}:/test/ocbar-pwauth.py:ro',
+                                    '-v', f'{ROOT / "libexec/ocmac-pwauth.py"}:/test/ocmac-pwauth.py:ro',
                                     args.image, '/test-lab/tunnel-client.py', transport)
                             print(r.stdout.strip(), flush=True)
                         except subprocess.CalledProcessError as error:

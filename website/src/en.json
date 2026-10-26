@@ -29,7 +29,7 @@
   "requirements": "macOS 14.4+ · access to an AnyConnect-compatible gateway",
   "copied": "Copied",
   "troubleshooting": "If it does not work",
-  "troubleshooting_url": "https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.en.md",
+  "troubleshooting_url": "https://github.com/ValeraGin/openconnect-for-mac/blob/main/TROUBLESHOOTING.en.md",
   "license": "MIT · no telemetry",
   "profile_link": "I have a configured profile from a teammate",
   "compat_title": "Where it has been tested",

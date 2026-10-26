@@ -12,24 +12,24 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location('csd', ROOT / 'libexec/ocbar-csd.py')
+spec = importlib.util.spec_from_file_location('csd', ROOT / 'libexec/ocmac-csd.py')
 csd = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(csd)
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix='ocbar profile workflow ') as directory:
+    with tempfile.TemporaryDirectory(prefix='ocmac profile workflow ') as directory:
         base = Path(directory)
         home = base / 'home'
         home.mkdir()
-        config = home / '.config/ocbar'
+        config = home / '.config/ocmac'
         system = base / 'system'
-        env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
-        env.update(HOME=str(home), OCBAR_CONFIG_DIR=str(config), OCBAR_LANG='ru',
-                   OCBAR_SELFTEST_HELPER='/dev/null', OCBAR_NOTIFY='0')
+        env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_')}
+        env.update(HOME=str(home), OCMAC_CONFIG_DIR=str(config), OCMAC_LANG='ru',
+                   OCMAC_SELFTEST_HELPER='/dev/null', OCMAC_NOTIFY='0')
 
         def cli(*args):
-            result = subprocess.run([str(ROOT / 'bin/ocbar'), *map(str, args)], env=env,
+            result = subprocess.run([str(ROOT / 'bin/ocmac'), *map(str, args)], env=env,
                                     text=True, capture_output=True, check=True, timeout=25)
             return result.stdout
 
@@ -40,7 +40,7 @@ def main():
         ) + '</ServerList></AnyConnectProfile>')
         ids = json.loads(cli('import', '--json', xml))['profiles']
         assert ids == ['office-vpn', 'backup']
-        assert all((config / f'profiles/{name}.ocbar').is_file() for name in ids)
+        assert all((config / f'profiles/{name}.ocmac').is_file() for name in ids)
         assert json.loads(cli('csd-status', ids[0])) == {'required': False, 'ready': True, 'name': ''}
         assert json.loads(cli('check-access', ids[0])) == {'reachable': None}
         class Resource(BaseHTTPRequestHandler):
@@ -62,7 +62,7 @@ def main():
         print('OK: machine import returns actual ids for every XML server, not the filename')
 
         script = b'#!/bin/bash\nexit 0\n'
-        profile = base / 'team.ocbar'
+        profile = base / 'team.ocmac'
 
         def body(data):
             return '[Connection]\nUrl = vpn.example.test\nCsdScriptBase64 = ' + base64.b64encode(data).decode() + '\n'
@@ -78,18 +78,18 @@ def main():
         plan = cli('_selftest-fn', 'install_csd_steps', home)
         # Run only the embedded materialization command against a temporary system directory.
         command = next(line for line in plan.splitlines() if ' materialize ' in line)
-        subprocess.run(['/bin/bash', '-c', command.replace('/usr/local/libexec/ocbar/csd', shlex.quote(str(system)))],
+        subprocess.run(['/bin/bash', '-c', command.replace('/usr/local/libexec/ocmac/csd', shlex.quote(str(system)))],
                        env=env, check=True, capture_output=True)
         assert status('team')['ready']
         changed = script + b'# changed in editor\n'
-        (config / 'profiles/team.ocbar').write_text(body(changed))
+        (config / 'profiles/team.ocmac').write_text(body(changed))
         assert not status('team')['ready'], 'editing embedded data must invalidate the system copy'
-        csd.materialize(config / 'profiles/team.ocbar', system, 0o755)
+        csd.materialize(config / 'profiles/team.ocmac', system, 0o755)
         assert status('team')['ready']
         installed = system / status('team')['name']
         installed.write_bytes(b'#!/bin/bash\n# replaced on disk\n')
         assert status('team')['reason'] == 'changed'
-        csd.materialize(config / 'profiles/team.ocbar', system, 0o755)
+        csd.materialize(config / 'profiles/team.ocmac', system, 0o755)
         print('OK: import/edit needs setup; installing the exact new CSD enables connection')
 
         wrappers = []
@@ -99,7 +99,7 @@ def main():
             path.write_text('#!/bin/bash\n# ' + name + '\n')
             path.chmod(0o700)
             wrappers.append(path)
-            (config / f'profiles/{name}.ocbar').write_text('[Connection]\nUrl = vpn.example.test\nCsdWrapper = ' + str(path) + '\n')
+            (config / f'profiles/{name}.ocmac').write_text('[Connection]\nUrl = vpn.example.test\nCsdWrapper = ' + str(path) + '\n')
         plans = [shlex.split(line) for line in cli('_selftest-fn', 'install_csd_steps', home).splitlines() if line.startswith('install ')]
         assert len({row[-1] for row in plans}) == 2, 'equal basenames must not share a destination'
         assert all(len(Path(row[-1]).name) <= 64 for row in plans)

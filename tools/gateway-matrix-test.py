@@ -132,8 +132,8 @@ def gateway(case, context, connections=None, hostname="localhost"):
 
 def check(case, client, context):
     with gateway(case, context) as (port, events, errors):
-        env = {k: v for k, v in os.environ.items() if not k.startswith('OCBAR_')}
-        env['OCBAR_LANG'] = 'ru'
+        env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_')}
+        env['OCMAC_LANG'] = 'ru'
         command = [str(client), '--url', f'https://localhost:{port}/group',
                    '--no-autofill', '--no-window', '--timeout', '12', '--show-after', '30']
         if case != 'untrusted-tls':
@@ -165,10 +165,10 @@ def check(case, client, context):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--client', type=Path, default=ROOT / 'auth/.build/release/ocbar-auth')
+    parser.add_argument('--client', type=Path, default=ROOT / 'auth/.build/release/ocmac-auth')
     parser.add_argument('--case', action='append', choices=CASES)
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix='ocbar-gateways-') as directory:
+    with tempfile.TemporaryDirectory(prefix='ocmac-gateways-') as directory:
         tmp = Path(directory)
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(tmp / 'key.pem'), '-out', str(tmp / 'cert.pem'),

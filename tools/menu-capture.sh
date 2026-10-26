@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Снимки настоящего меню (NSHostingMenu) на демо-профилях. На каждый кадр —
 # своя демо-копия приложения со своим значком (--stage --demo-menu): она сразу
-# в нужном состоянии и сама открывает меню (OCBAR_DEMO_OPEN) там, где нет
+# в нужном состоянии и сама открывает меню (OCMAC_DEMO_OPEN) там, где нет
 # указателя; снимается только окно меню (screencapture -l), под ним — ровный
 # фон своего окна. Переключать кадры в открытом меню нельзя: при смене высоты
 # NSMenu на миг рисует пункты внахлёст.
@@ -10,17 +10,17 @@
 #   кадры: down connecting connected network-busy network-off pausing paused
 #          lost login proxy woke; «:option» — сведения о соединении, как с ⌥
 #
-# На экране на время съёмки: второй значок ocbar, светлый или тёмный
+# На экране на время съёмки: второй значок ocmac, светлый или тёмный
 # прямоугольник и открытое меню. Клавиши и щелчки в это время закрывают
 # меню — кадр тогда снимается заново.
 # Нужны: собранное приложение (app/make-app.sh) и Swift.
 set -euo pipefail
 root=${0:A:h:h}
-app="$root/app/.build/ocbar.app/Contents/MacOS/ocbar-app"
+app="$root/app/.build/ocmac.app/Contents/MacOS/ocmac-app"
 [ -x "$app" ] || { echo "menu-capture: соберите app/make-app.sh" >&2; exit 1; }
 lang=$1 theme=$2 out=$3; shift 3
 mkdir -p "$out"
-work=$(mktemp -d /private/tmp/ocbar-capture.XXXXXX)
+work=$(mktemp -d /private/tmp/ocmac-capture.XXXXXX)
 pid=""
 trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; rm -rf "$work"' EXIT
 # Номер окна меню у процесса: окно шириной 150–500 точек на экране.
@@ -44,7 +44,7 @@ for frame in "$@"; do
     ok=0
     for try in 1 2 3 4; do
         print -r -- "$frame" > "$state"
-        OCBAR_DEMO_STATE="$state" OCBAR_DEMO_OPEN=1 "$app" --stage --demo-menu "--$theme" --backdrop "$bg" \
+        OCMAC_DEMO_STATE="$state" OCMAC_DEMO_OPEN=1 "$app" --stage --demo-menu "--$theme" --backdrop "$bg" \
             -AppleLanguages "($lang)" -InterfaceLanguage "$lang" >/dev/null 2>&1 &
         pid=$!
         id=""

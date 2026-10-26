@@ -5,7 +5,7 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage: /bin/bash install.sh [options]
-  --profile FILE        Import a .ocbar profile without replacing an existing one
+  --profile FILE        Import a .ocmac profile without replacing an existing one
   --csd FILE            Install its CSD script and set CsdWrapper in the profile
   --language ru|en|system  Set the interface language (default: keep current)
   --head                Install the current main branch instead of the stable release
@@ -46,21 +46,21 @@ major=${version%%.*}; minor=${version#*.}; minor=${minor%%.*}
 { [ "$major" -gt 14 ] || { [ "$major" -eq 14 ] && [ "$minor" -ge 4 ]; }; } || fail 'macOS 14.4 or newer is required'
 [ -r /dev/tty ] && [ -w /dev/tty ] || fail 'Run this command in Terminal so you can answer prompts'
 
-config="$HOME/.config/ocbar"
-export OCBAR_CONFIG_DIR="$config"
+config="$HOME/.config/ocmac"
+export OCMAC_CONFIG_DIR="$config"
 name='' destination='' skip_profile=0
 if [ -n "$profile" ]; then
-    case "$profile" in *.ocbar) ;; *) fail 'The profile must have a .ocbar extension' ;; esac
-    name=$(basename "$profile" .ocbar)
+    case "$profile" in *.ocmac|*.ocbar) ;; *) fail 'The profile must have a .ocmac extension' ;; esac
+    name=$(basename "$profile"); name=${name%.ocmac}; name=${name%.ocbar}
     case "$name" in ''|*[!a-zA-Z0-9._-]*|.*) fail 'Use a profile filename with letters, digits, dots, underscores or hyphens' ;; esac
-    destination="$config/profiles/$name.ocbar"
+    destination="$config/profiles/$name.ocmac"
     if [ -e "$destination" ]; then
         printf 'Keeping existing profile: %s\n' "$destination"
         skip_profile=1
     fi
 fi
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/ocbar-install.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/ocmac-install.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
 # The Apple tools provide both Git and Swift; /usr/bin/git can be just a stub.
@@ -100,10 +100,15 @@ if ! /bin/zsh -lc 'command -v brew' >/dev/null 2>&1; then
     touch "$HOME/.zprofile"
     if ! grep -Fqx "$shell_line" "$HOME/.zprofile"; then printf '\n%s\n' "$shell_line" >> "$HOME/.zprofile"; fi
 fi
-"$brew_bin" tap ValeraGin/ocbar
+"$brew_bin" tap ValeraGin/openconnect-for-mac
 # New Homebrew requires explicit trust for third-party taps; older versions do not.
-if "$brew_bin" help trust >/dev/null 2>&1; then "$brew_bin" trust ValeraGin/ocbar; fi
-formula=ValeraGin/ocbar/ocbar
+if "$brew_bin" help trust >/dev/null 2>&1; then "$brew_bin" trust ValeraGin/openconnect-for-mac; fi
+# Refresh the former tap so Homebrew sees its cross-tap migration rule.
+if "$brew_bin" list --versions ocbar >/dev/null 2>&1; then
+    "$brew_bin" update
+    "$brew_bin" migrate ocbar
+fi
+formula=ValeraGin/openconnect-for-mac/openconnect-for-mac
 if ! "$brew_bin" list --versions "$formula" >/dev/null 2>&1; then
     if [ "$head" = 1 ]; then "$brew_bin" install --HEAD "$formula"; else "$brew_bin" install "$formula"; fi
 elif [ "$head" = 1 ]; then
@@ -111,25 +116,31 @@ elif [ "$head" = 1 ]; then
 else
     "$brew_bin" upgrade "$formula"
 fi
-ocbar="$("$brew_bin" --prefix ocbar)/bin/ocbar"
-[ -x "$ocbar" ] || fail 'Homebrew did not provide the ocbar executable'
+ocmac="$("$brew_bin" --prefix openconnect-for-mac)/bin/ocmac"
+[ -x "$ocmac" ] || fail 'Homebrew did not provide the ocmac executable'
+"$ocmac" migrate
+# Migration may have populated this filename: never replace it with an import.
+if [ -n "$destination" ] && [ -e "$destination" ]; then
+    printf 'Keeping existing profile: %s\n' "$destination"
+    skip_profile=1
+fi
 
 if [ -n "$profile" ] && [ "$skip_profile" = 0 ]; then
     # Older releases accepted unknown profile keys and would silently omit CSD.
     if [ -z "$csd" ] && grep -Eiq '^[[:space:]]*CsdScriptBase64[[:space:]]*=' "$profile"; then
-        printf '[Connection]\nUrl = vpn.example.test\nCsdScriptBase64 = !\n' > "$work/csd-capability.ocbar"
-        if "$ocbar" profile-check "$work/csd-capability.ocbar" >/dev/null 2>&1; then
+        printf '[Connection]\nUrl = vpn.example.test\nCsdScriptBase64 = !\n' > "$work/csd-capability.ocmac"
+        if "$ocmac" profile-check "$work/csd-capability.ocmac" >/dev/null 2>&1; then
             if [ "$head" = 0 ]; then
                 "$brew_bin" upgrade "$formula"
-                ocbar="$("$brew_bin" --prefix ocbar)/bin/ocbar"
+                ocmac="$("$brew_bin" --prefix openconnect-for-mac)/bin/ocmac"
             fi
-            if "$ocbar" profile-check "$work/csd-capability.ocbar" >/dev/null 2>&1; then
-                fail 'Installed ocbar cannot read CsdScriptBase64. A newer release or --head is required.'
+            if "$ocmac" profile-check "$work/csd-capability.ocmac" >/dev/null 2>&1; then
+                fail 'Installed ocmac cannot read CsdScriptBase64. A newer release or --head is required.'
             fi
         fi
     fi
     # Validate before copying scripts or asking for administrator access.
-    "$ocbar" profile-check "$profile"
+    "$ocmac" profile-check "$profile"
     if [ -n "$csd" ]; then
         target="$config/csd/$name.sh"
         if [ -e "$target" ]; then
@@ -146,15 +157,15 @@ if [ -n "$profile" ] && [ "$skip_profile" = 0 ]; then
             connection && tolower($0) ~ /^[[:space:]]*(csdwrapper|csdscriptbase64)[[:space:]]*=/ { next }
             { print }
             tolower($0) ~ /^\[connection\][[:space:]]*$/ { print "CsdWrapper = " target }
-        ' "$profile" > "$work/$name.ocbar"
-        profile="$work/$name.ocbar"
+        ' "$profile" > "$work/$name.ocmac"
+        profile="$work/$name.ocmac"
     fi
-    "$ocbar" import "$profile" "$name"
+    "$ocmac" import "$profile" "$name"
 fi
-if [ -n "$language" ]; then defaults write ru.ocbar.app InterfaceLanguage -string "$language"; fi
+if [ -n "$language" ]; then defaults write ru.ocmac.app InterfaceLanguage -string "$language"; fi
 # Install after importing the profile: the helper copies its CSD script as well.
-sudo -- "$ocbar" install < /dev/tty
-if [ "$autostart" = 1 ]; then "$ocbar" app autostart on; fi
-if [ "$start" = 1 ]; then "$ocbar" app stop; "$ocbar" app start; fi
-printf '\nOpenConnect for Mac installed. Open your .ocbar profile, enter your username and connect.\n'
-printf 'OpenConnect for Mac установлен. Откройте файл .ocbar, введите свой логин и подключитесь.\n'
+sudo -- "$ocmac" install < /dev/tty
+if [ "$autostart" = 1 ]; then "$ocmac" app autostart on; fi
+if [ "$start" = 1 ]; then "$ocmac" app stop; "$ocmac" app start; fi
+printf '\nOpenConnect for Mac installed. Open your .ocmac profile, enter your username and connect.\n'
+printf 'OpenConnect for Mac установлен. Откройте файл .ocmac, введите свой логин и подключитесь.\n'

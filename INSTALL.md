@@ -1,9 +1,9 @@
 # Установка OpenConnect for Mac на macOS
 
-Команда и формула Homebrew остаются `ocbar`. Устанавливаемая копия приложения
-называется `OpenConnect for Mac.app`; старый путь `~/Applications/ocbar.app`
-при обновлении заменяется скрытой ссылкой, чтобы прежний автозапуск работал.
-Профили, настройки и записи Связки ключей сохраняются.
+Команда — `ocmac`, формула Homebrew — `openconnect-for-mac`, профиль — `.ocmac`.
+Для прежних установок: `ocmac migrate`, затем `sudo ocmac install`. Первый шаг
+копирует профили, настройки и записи Связки ключей, сохраняя оригиналы. Второй
+останавливает старую VPN-сессию и устанавливает новые системные компоненты.
 
 Проверено на macOS 26.6 (arm64) 2026-09-06. Пометки: **[проверено]** — шаг
 выполнялся на живой системе; **[не проверено]** — написано, но на чистой
@@ -12,20 +12,20 @@
 Установка делится на три части, и только вторая требует пароля:
 
 1. **Программа** — Homebrew или сборка из исходников, без прав root.
-2. **Привилегии** — `sudo ocbar install`, один раз: хелпер, sudoers, агент.
+2. **Привилегии** — `sudo ocmac install`, один раз: хелпер, sudoers, агент.
 3. **Свои данные** — профили, сети, зоны, пароль и второй фактор.
 
 ---
 
-Краткая инструкция: [Русский](https://valeragin.github.io/ocbar/ru/guide/) ·
-[English](https://valeragin.github.io/ocbar/guide/).
+Краткая инструкция: [Русский](https://valeragin.github.io/openconnect-for-mac/ru/guide/) ·
+[English](https://valeragin.github.io/openconnect-for-mac/guide/).
 
 ## Быстрая установка одной командой
 
 Откройте Терминал и выполните:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)"
 ```
 
 [Установочный скрипт](install.sh) хранится в этом репозитории. Он проверяет
@@ -40,15 +40,15 @@ Git отдельно ставить не нужно: он входит в Comman
 Если Homebrew уже установлен, но отсутствует в PATH, скрипт найдёт его сам.
 Запускайте команду от обычного пользователя, без `sudo` перед всей строкой.
 
-Для коллег достаточно одного файла `team.ocbar` со встроенным CSD и
-[ссылки на сайт](https://valeragin.github.io/ocbar/ru/guide/#profile).
+Для коллег достаточно одного файла `team.ocmac` со встроенным CSD и
+[ссылки на сайт](https://valeragin.github.io/openconnect-for-mac/ru/guide/#profile).
 Коллега установит приложение командой с сайта:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)" -- --language ru
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)" -- --language ru
 ```
 
-Затем откроет полученный `.ocbar` двойным щелчком в Finder, введёт свой логин
+Затем откроет полученный `.ocmac` двойным щелчком в Finder, введёт свой логин
 и нажмёт **Подключиться**. Файл можно сохранить под любым именем в любой папке.
 Кнопка **Открыть профиль…** также доступна в приложении и в разделе **Профили**.
 Если нужна системная подготовка, приложение откроет команду в Терминале;
@@ -63,22 +63,22 @@ Git отдельно ставить не нужно: он входит в Comman
 Если CSD передан отдельным файлом, используйте `--csd`:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)" -- --profile ~/Downloads/office.ocbar --csd ~/Downloads/csd-wrapper.sh --language ru
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)" -- --profile ~/Downloads/office.ocmac --csd ~/Downloads/csd-wrapper.sh --language ru
 ```
 
-Профиль будет в `~/.config/ocbar/profiles/`, CSD-скрипт в `~/.config/ocbar/csd/`;
+Профиль будет в `~/.config/ocmac/profiles/`, CSD-скрипт в `~/.config/ocmac/csd/`;
 путь `CsdWrapper` проставится автоматически. Готовый профиль не должен содержать
 пароли, секреты второго фактора или личные ссылки на чужое хранилище.
 Существующие профиль и CSD-файл сохраняются при повторном запуске. Язык можно
 выбрать позже в **Настройки → Общие → Язык интерфейса**: русский, English или
 язык системы. Меню и окна меняются сразу; новые окна входа используют тот же язык.
-Переменная `OCBAR_LANG=ru|en` по-прежнему имеет приоритет для проверок.
+Переменная `OCMAC_LANG=ru|en` по-прежнему имеет приоритет для проверок.
 
 По умолчанию установленная версия OpenConnect for Mac сохраняется. Если профиль содержит
 встроенный CSD, а установленная версия его ещё не поддерживает, скрипт сначала
 попробует обновить OpenConnect for Mac. Если поддержки нет и после обновления, установка
 остановится с подсказкой, не пропуская CSD молча. Для обычного обновления используйте
-`brew upgrade ocbar`. Параметр `--head` явно устанавливает текущую ветку `main`
+`brew upgrade openconnect-for-mac`. Параметр `--head` явно устанавливает текущую ветку `main`
 или пересобирает уже установленный OpenConnect for Mac из неё. `--no-start` пропускает запуск
 приложения, `--no-autostart` не включает автозапуск. Полный список: `bash install.sh --help`.
 
@@ -87,7 +87,7 @@ Git отдельно ставить не нужно: он входит в Comman
 
 После импорта или изменения CSD в редакторе проверьте подсказку о готовности
 системной части. Если нужна новая копия скрипта, приложение покажет
-`sudo ocbar install`; после команды нажмите **Проверить готовность**. До этого
+`sudo ocmac install`; после команды нажмите **Проверить готовность**. До этого
 подключение остановится перед входом. Внешние CSD wrapper хранятся с именами,
 зависящими от содержимого: одноимённые файлы разных профилей не заменяют друг друга.
 
@@ -100,7 +100,7 @@ Git отдельно ставить не нужно: он входит в Comman
 | Homebrew | `openconnect` | `brew --version` |
 | `openconnect` | сам туннель | `brew install openconnect` |
 | KeePassXC | если второй фактор храните там | необязательно |
-| SwiftBar | запасной плагин меню; основное меню — приложение `ocbar.app`, оно ставится вместе с OpenConnect for Mac | необязательно |
+| SwiftBar | запасной плагин меню; основное меню — приложение `ocmac.app`, оно ставится вместе с OpenConnect for Mac | необязательно |
 
 **[проверено]** Swift 6.3.3 идёт с Command Line Tools: полный Xcode не
 требуется. Если `swift --version` ругается, поставьте инструменты:
@@ -116,10 +116,10 @@ xcode-select --install
 ### Из репозитория (так работает сегодня)
 
 ```bash
-git clone https://github.com/ValeraGin/ocbar.git ~/Projects/ocbar
-cd ~/Projects/ocbar
-(cd auth && swift build -c release)      # ~1 минута, соберёт ocbar-auth
-./bin/ocbar doctor                        # красные строки пока ожидаемы
+git clone https://github.com/ValeraGin/openconnect-for-mac.git ~/Projects/openconnect-for-mac
+cd ~/Projects/openconnect-for-mac
+(cd auth && swift build -c release)      # ~1 минута, соберёт ocmac-auth
+./bin/ocmac doctor                        # красные строки пока ожидаемы
 ```
 
 ### Через Homebrew
@@ -128,21 +128,21 @@ cd ~/Projects/ocbar
 (клонирование, сборка, `brew test`) за полторы минуты:
 
 ```bash
-brew tap ValeraGin/ocbar
-brew trust ValeraGin/ocbar      # tap не из homebrew-core: с 2026 brew не грузит формулы из недоверенных tap
-brew install ocbar              # стабильная версия по тегу; --HEAD — с main
+brew tap ValeraGin/openconnect-for-mac
+brew trust ValeraGin/openconnect-for-mac      # tap не из homebrew-core: с 2026 brew не грузит формулы из недоверенных tap
+brew install openconnect-for-mac              # стабильная версия по тегу; --HEAD — с main
 ```
 
 Репозиторий приложения и Homebrew tap публичные: для установки не нужны
 аккаунт GitHub, `gh auth` или SSH-ключ.
 
-Формула собирает `ocbar-auth` из исходников на вашей машине. Это не
+Формула собирает `ocmac-auth` из исходников на вашей машине. Это не
 прихоть: у проекта нет Apple Developer ID, а собранное локально не получает
 карантина, поэтому Gatekeeper не мешает. Обновление — обычный
-`brew upgrade ocbar`, само оно не приходит. Если выпуск меняет хелпер (в
-CHANGELOG об этом строка «Needs `sudo ocbar install`»), после обновления
-нужен ещё `sudo ocbar install`: хелпер живёт в root-каталоге, и brew его не
-трогает. `ocbar doctor` показывает, что хелпер отстал, — с 0.17.4 выпуск не
+`brew upgrade openconnect-for-mac`, само оно не приходит. Если выпуск меняет хелпер (в
+CHANGELOG об этом строка «Needs `sudo ocmac install`»), после обновления
+нужен ещё `sudo ocmac install`: хелпер живёт в root-каталоге, и brew его не
+трогает. `ocmac doctor` показывает, что хелпер отстал, — с 0.17.4 выпуск не
 уходит, если код хелпера изменился, а его версия нет.
 
 ---
@@ -150,25 +150,25 @@ CHANGELOG об этом строка «Needs `sudo ocbar install`»), после
 ## 3. Привилегии: один раз с паролем
 
 ```bash
-sudo ./bin/ocbar install          # из репозитория
-sudo ocbar install                # или так, если ставили через brew
+sudo ./bin/ocmac install          # из репозитория
+sudo ocmac install                # или так, если ставили через brew
 ```
 
 Команда печатает каждый свой шаг. Что именно она делает:
 
 | Шаг | Зачем |
 |---|---|
-| каталоги в `/usr/local/{libexec,etc,var}/ocbar` | владелец `root:wheel` — пользователь туда не пишет |
-| `ocbar-helper` → `/usr/local/libexec/` | единственный привилегированный компонент |
+| каталоги в `/usr/local/{libexec,etc,var}/ocmac` | владелец `root:wheel` — пользователь туда не пишет |
+| `ocmac-helper` → `/usr/local/libexec/` | единственный привилегированный компонент |
 | копия `openconnect` и штатного `vpnc-script` туда же | root не должен исполнять файлы, доступные пользователю на запись |
-| `ocbar-helper trust` | манифест sha256 бинаря и его библиотек |
-| `/etc/sudoers.d/ocbar` | `NOPASSWD` на хелпер для группы `admin`, проверяется `visudo -cf` |
-| LaunchAgent `ru.ocbar.supervisor` | супервизор: реконнект, сон, смена сети |
+| `ocmac-helper trust` | манифест sha256 бинаря и его библиотек |
+| `/etc/sudoers.d/ocmac` | `NOPASSWD` на хелпер для группы `admin`, проверяется `visudo -cf` |
+| LaunchAgent `ru.ocmac.supervisor` | супервизор: реконнект, сон, смена сети |
 
 Посмотреть, ничего не меняя:
 
 ```bash
-./bin/ocbar install --dry-run
+./bin/ocmac install --dry-run
 ```
 
 **Почему не `NOPASSWD` на сам `openconnect`.** Так советуют почти все
@@ -178,10 +178,10 @@ Apple Silicon доступен пользователю на запись, и л
 файл лежит в root-каталоге, а его целостность проверяется по манифесту.
 
 После `brew upgrade openconnect` копия перестаёт совпадать с манифестом.
-`ocbar doctor` это заметит и подскажет:
+`ocmac doctor` это заметит и подскажет:
 
 ```bash
-sudo ocbar install --trust
+sudo ocmac install --trust
 ```
 
 ---
@@ -194,31 +194,31 @@ sudo ocbar install --trust
 и кода, правила формы входа — всё в нём:
 
 ```bash
-mkdir -p ~/.config/ocbar/profiles
-cp etc/example.ocbar ~/.config/ocbar/profiles/main.ocbar
-$EDITOR ~/.config/ocbar/profiles/main.ocbar
+mkdir -p ~/.config/ocmac/profiles
+cp etc/example.ocmac ~/.config/ocmac/profiles/main.ocmac
+$EDITOR ~/.config/ocmac/profiles/main.ocmac
 ```
 
 Для установки через Homebrew образцы лежат в
-`$(brew --prefix ocbar)/share/ocbar/examples`. Готовый файл от коллеги —
-`ocbar import <файл>.ocbar`. Ключи профиля-файла описаны в самом образце и в
+`$(brew --prefix openconnect-for-mac)/share/openconnect-for-mac/examples`. Готовый файл от коллеги —
+`ocmac import <файл>.ocmac`. Ключи профиля-файла описаны в самом образце и в
 [README](README.ru.md#профиль-одним-файлом).
 
 Ниже — старый формат: общий `profiles.conf` плюс `networks.conf` и
-`zones.conf`. Он продолжает работать, а `ocbar export <профиль> <файл>`
+`zones.conf`. Он продолжает работать, а `ocmac export <профиль> <файл>`
 переводит его в профиль-файл:
 
 ```bash
-mkdir -p ~/.config/ocbar
-cp etc/profiles.conf.example ~/.config/ocbar/profiles.conf
-cp etc/networks.conf.example ~/.config/ocbar/networks.conf
-cp etc/zones.conf.example    ~/.config/ocbar/zones.conf
-$EDITOR ~/.config/ocbar/profiles.conf
+mkdir -p ~/.config/ocmac
+cp etc/profiles.conf.example ~/.config/ocmac/profiles.conf
+cp etc/networks.conf.example ~/.config/ocmac/networks.conf
+cp etc/zones.conf.example    ~/.config/ocmac/zones.conf
+$EDITOR ~/.config/ocmac/profiles.conf
 ```
 
 Правила формы входа заводить заранее не нужно: без них используется
 встроенный набор для типовых форм (Keycloak, Microsoft). Если форма вашего
-провайдера входа не распознаётся, разметьте её (`ocbar learn`, ниже) —
+провайдера входа не распознаётся, разметьте её (`ocmac learn`, ниже) —
 правила лягут в секцию `[Autofill]` профиля-файла, прошлая версия профиля
 останется рядом с суффиксом `.bak`. Отдельный файл `autofill.rules` нужен
 только старому формату (`profiles.conf`) или для одного файла правил на
@@ -239,13 +239,13 @@ mode = split                  # единственное значение; мо�
 ```
 
 Режима `full` больше нет: с `mode = full` профиль не загружается, и
-`ocbar` скажет почему. «Всё в туннель» — две строки в `networks.conf`:
+`ocmac` скажет почему. «Всё в туннель» — две строки в `networks.conf`:
 `0.0.0.0/1` и `128.0.0.0/1`; шлюз при этом может не выпускать в интернет.
 
 Профилей может быть сколько угодно, они переключаются из меню. Группы, где
 вход идёт логином с паролем и одноразовым кодом из SMS, помечайте
 `auth = password` (в файле профиля — `Auth = password` в `[Connection]`).
-Пароль `ocbar` подставит сам, а код из SMS спросит окном «Код из SMS» (в
+Пароль `ocmac` подставит сам, а код из SMS спросит окном «Код из SMS» (в
 терминале — строкой ввода). Автоподключение такие профили не поднимает:
 без человека кода нет, и супервизор скажет «нужен вход».
 
@@ -260,7 +260,7 @@ mode = split                  # единственное значение; мо�
 
 **Важно.** Список ваш, а не шлюза. **[проверено]** шлюз просил забрать всю
 `192.168.0.0/16` — выполнив это, штатный `vpnc-script` увёл бы в туннель
-домашнюю сеть и лабораторию. `ocbar` ставит только то, что перечислено здесь.
+домашнюю сеть и лабораторию. `ocmac` ставит только то, что перечислено здесь.
 
 ### Зоны DNS — `zones.conf`
 
@@ -279,7 +279,7 @@ corp.example.com     vpn
 Создать из готового списка доменов:
 
 ```bash
-./bin/ocbar dns init ~/domains.txt vpn
+./bin/ocmac dns init ~/domains.txt vpn
 ```
 
 ### Своя форма входа
@@ -288,7 +288,7 @@ corp.example.com     vpn
 форму программе мышью — правила составятся сами:
 
 ```bash
-ocbar learn
+ocmac learn
 ```
 
 Подробнее — в [README](README.ru.md#своя-форма-входа); то же есть в приложении:
@@ -296,21 +296,21 @@ ocbar learn
 
 ### Пароль и второй фактор
 
-Пароль — в связке ключей, ввод спрашивает системная утилита, не `ocbar`:
+Пароль — в связке ключей, ввод спрашивает системная утилита, не `ocmac`:
 
 ```bash
-./bin/ocbar secret set-password
+./bin/ocmac secret set-password
 ```
 
 Второй фактор, три варианта на выбор:
 
 ```bash
 # 1. Секрет в связке ключей
-./bin/ocbar secret set-totp
+./bin/ocmac secret set-totp
 
 # 2. Из QR-кода (в том числе экспорт Google Authenticator)
-./bin/ocbar secret import-qr ~/Downloads/qr.png --list
-./bin/ocbar secret import-qr ~/Downloads/qr.png --select <часть имени>
+./bin/ocmac secret import-qr ~/Downloads/qr.png --list
+./bin/ocmac secret import-qr ~/Downloads/qr.png --select <часть имени>
 
 # 3. Из KeePassXC — секрет остаётся в базе, наружу идёт только код
 ```
@@ -330,7 +330,7 @@ keepass_keychain_service = keepassxc-docs   # где лежит мастер-п�
 Что настроено — покажет:
 
 ```bash
-./bin/ocbar secret status
+./bin/ocmac secret status
 ```
 
 ---
@@ -338,7 +338,7 @@ keepass_keychain_service = keepassxc-docs   # где лежит мастер-п�
 ## 5. Первый вход
 
 ```bash
-./bin/ocbar connect --show
+./bin/ocmac connect --show
 ```
 
 `--show` открывает окно сразу, чтобы видеть происходящее. Без него окно
@@ -347,12 +347,12 @@ keepass_keychain_service = keepassxc-docs   # где лежит мастер-п�
 Логин и пароль подставятся сами. Второй фактор — из базы или связки ключей,
 **ровно одна попытка**: несколько неверных кодов подряд блокируют учётную
 запись. Всё, что не распознано (SMS, выбор способа входа, настройка нового
-фактора), остаётся вам — и `ocbar` ничего не нажимает на такой форме.
+фактора), остаётся вам — и `ocmac` ничего не нажимает на такой форме.
 
 Проверить:
 
 ```bash
-./bin/ocbar status
+./bin/ocmac status
 route -n get <адрес внутри корпоративной сети>   # interface: utunN
 dscacheutil -q host -a name <внутреннее имя>     # приватный адрес
 ```
@@ -365,7 +365,7 @@ dscacheutil -q host -a name <внутреннее имя>     # приватны
 запоминанием:
 
 ```bash
-ocbar connect --teach
+ocmac connect --teach
 ```
 
 OpenConnect for Mac запомнит форму входа, а после входа предложит сохранить правила,
@@ -380,22 +380,22 @@ OpenConnect for Mac запомнит форму входа, а после вхо
 Ставится вместе с остальным; запускать и заводить в автозапуск — решение ваше:
 
 ```bash
-ocbar app start                 # запустить сейчас
-ocbar app autostart on          # запускать при входе в систему
-ocbar app status                # где бандл, работает ли, включён ли автозапуск
-ocbar app stop && ocbar app start   # после brew upgrade — подхватить новую сборку (и копию в ~/Applications)
+ocmac app start                 # запустить сейчас
+ocmac app autostart on          # запускать при входе в систему
+ocmac app status                # где бандл, работает ли, включён ли автозапуск
+ocmac app stop && ocmac app start   # после brew upgrade — подхватить новую сборку (и копию в ~/Applications)
 ```
 
 Homebrew кладёт бандл в свой каталог, а лаунчер и Spotlight видят программы
-только в `/Applications` и `~/Applications`. Поэтому `ocbar app start`
+только в `/Applications` и `~/Applications`. Поэтому `ocmac app start`
 держит копию в `~/Applications/OpenConnect for Mac.app` и обновляет её, когда версия в
 Homebrew другая; из лаунчера запускается она же. Убирает копию
-`sudo ocbar uninstall`.
+`sudo ocmac uninstall`.
 
 Из репозитория, без Homebrew, приложение собирается отдельно:
 
 ```bash
-(cd app && ./make-app.sh)       # → app/.build/ocbar.app
+(cd app && ./make-app.sh)       # → app/.build/ocmac.app
 ```
 
 Значок в строке состояния показывает состояние цветом. Меню — как у Wi‑Fi:
@@ -406,10 +406,10 @@ Homebrew другая; из лаунчера запускается она же.
 Режим / Сети и DNS») и диагностика с журналами. Язык — как у системы:
 русский или английский.
 
-Привилегий приложению не нужно: оно читает `ocbar status --json` и зовёт
-`ocbar`, а всё, что требует root, по-прежнему делает хелпер. Пункт
-«Диагностика и журналы…» показывает `ocbar doctor` и умеет уборку следов прошлой
-сессии — то же, что `ocbar cleanup`.
+Привилегий приложению не нужно: оно читает `ocmac status --json` и зовёт
+`ocmac`, а всё, что требует root, по-прежнему делает хелпер. Пункт
+«Диагностика и журналы…» показывает `ocmac doctor` и умеет уборку следов прошлой
+сессии — то же, что `ocmac cleanup`.
 
 Профилю с `Mode = proxy` нужен `ocproxy` — он не входит в формулу, потому
 что нужен только этому режиму:
@@ -427,11 +427,11 @@ brew install --cask swiftbar
 При первом запуске SwiftBar спросит каталог плагинов. Положите туда ссылку:
 
 ```bash
-ln -s ~/Projects/ocbar/swiftbar/ocbar.5s.sh <каталог плагинов>/
+ln -s ~/Projects/openconnect-for-mac/swiftbar/ocmac.5s.sh <каталог плагинов>/
 ```
 
 Плагин показывает состояние, профили, переключатели маршрутов и зон, паузу.
-Он не делает ничего привилегированного — только зовёт `ocbar` и читает его
+Он не делает ничего привилегированного — только зовёт `ocmac` и читает его
 вывод, поэтому его можно запустить прямо в терминале и посмотреть результат.
 
 ---
@@ -441,51 +441,51 @@ ln -s ~/Projects/ocbar/swiftbar/ocbar.5s.sh <каталог плагинов>/
 Копируется:
 
 - репозиторий (или ставится через brew);
-- `~/.config/ocbar/` — профили, сети, зоны, правила автозаполнения.
+- `~/.config/ocmac/` — профили, сети, зоны, правила автозаполнения.
 
 Если ставите через Homebrew, шаг с `git clone` и `swift build` не нужен —
 формула соберёт всё сама.
 
 **Не копируется**: пароли и секреты второго фактора. На новой машине их
 заводят заново — `secret set-password`, `secret import-qr` или KeePassXC.
-Каталог `/usr/local/…` создаёт `sudo ocbar install`.
+Каталог `/usr/local/…` создаёт `sudo ocmac install`.
 
 Итого на новой машине:
 
 ```bash
 brew install openconnect
-git clone https://github.com/ValeraGin/ocbar.git ~/Projects/ocbar && cd ~/Projects/ocbar
+git clone https://github.com/ValeraGin/openconnect-for-mac.git ~/Projects/openconnect-for-mac && cd ~/Projects/openconnect-for-mac
 (cd auth && swift build -c release)
-cp -r <откуда>/.config/ocbar ~/.config/ocbar
-sudo ./bin/ocbar install
-./bin/ocbar secret set-password
-./bin/ocbar doctor
-./bin/ocbar connect --show
+cp -r <откуда>/.config/ocmac ~/.config/ocmac
+sudo ./bin/ocmac install
+./bin/ocmac secret set-password
+./bin/ocmac doctor
+./bin/ocmac connect --show
 ```
 
 ---
 
 ## 8. Удаление
 
-**Порядок важен: сначала `sudo ocbar uninstall`, потом `brew uninstall
-ocbar`.** `uninstall` — команда самого `ocbar`; если сначала удалить
+**Порядок важен: сначала `sudo ocmac uninstall`, потом `brew uninstall
+ocmac`.** `uninstall` — команда самого `ocmac`; если сначала удалить
 формулу, убирать системную часть будет нечем, и на машине останутся
-root-хелпер с беспарольным правилом в `/etc/sudoers.d/ocbar`, копия
+root-хелпер с беспарольным правилом в `/etc/sudoers.d/ocmac`, копия
 `openconnect` в root-каталоге и LaunchAgent супервизора, который launchd
 будет перезапускать, хотя программы уже нет.
 
 ```bash
-sudo ocbar uninstall           # сам отключает туннель и прокси, снимает свой SOCKS и зоны; затем приложение, агент, sudoers, хелпер, /usr/local/libexec/ocbar
-brew uninstall ocbar           # только после uninstall; из репозитория — просто удалить клон
-sudo rm -rf /var/db/ocbar /usr/local/var/ocbar        # состояние: uninstall его оставляет (второй путь — до хелпера 0.8.0)
-rm -rf ~/.config/ocbar ~/Library/Logs/ocbar
-rm -rf "$HOME/Library/Application Support/ocbar"      # выбранный профиль, тумблеры меню
-rm -rf ~/Library/WebKit/ocbar-auth ~/Library/HTTPStorages/ocbar-auth.binarycookies
-rm -rf ~/Library/Caches/ocbar-auth                    # кэш окна входа
-rm -f ~/Library/Preferences/ru.ocbar.app.plist ~/Library/Preferences/ocbar-app.plist   # настройки приложения
+sudo ocmac uninstall           # сам отключает туннель и прокси, снимает свой SOCKS и зоны; затем приложение, агент, sudoers, хелпер, /usr/local/libexec/ocmac
+brew uninstall openconnect-for-mac           # только после uninstall; из репозитория — просто удалить клон
+sudo rm -rf /var/db/ocmac /usr/local/var/ocmac        # состояние: uninstall его оставляет (второй путь — до хелпера 0.8.0)
+rm -rf ~/.config/ocmac ~/Library/Logs/ocmac
+rm -rf "$HOME/Library/Application Support/ocmac"      # выбранный профиль, тумблеры меню
+rm -rf ~/Library/WebKit/ocmac-auth ~/Library/HTTPStorages/ocmac-auth.binarycookies
+rm -rf ~/Library/Caches/ocmac-auth                    # кэш окна входа
+rm -f ~/Library/Preferences/ru.ocmac.app.plist ~/Library/Preferences/ocmac-app.plist   # настройки приложения
 ```
 
-Из репозитория то же самое — `./bin/ocbar` вместо `ocbar`, без строки с
+Из репозитория то же самое — `./bin/ocmac` вместо `ocmac`, без строки с
 `brew`.
 
 `uninstall` требует root и сам гасит сессию: туннель, прокси, свой
@@ -495,20 +495,20 @@ rm -f ~/Library/Preferences/ru.ocbar.app.plist ~/Library/Preferences/ocbar-app.p
 логина их две — пароль и секрет кода.
 
 ```bash
-security delete-generic-password -s ru.ocbar.client -a <логин>        # пароль
-security delete-generic-password -s ru.ocbar.client -a totp/<логин>   # секрет TOTP
+security delete-generic-password -s ru.ocmac.client -a <логин>        # пароль
+security delete-generic-password -s ru.ocmac.client -a totp/<логин>   # секрет TOTP
 ```
 
 Логин — `User` из профиля (по умолчанию — имя пользователя macOS); если в
 профиле задан свой `KeychainService`, подставьте его вместо
-`ru.ocbar.client`. Команда без `-a` удаляет только первую найденную запись
+`ru.ocmac.client`. Команда без `-a` удаляет только первую найденную запись
 сервиса, и вторая остаётся.
 
 `uninstall` намеренно оставляет каталог состояния: там манифест зон, по
 которому убираются файлы в системном каталоге резолверов. Удаляйте его
 последним и только после `disconnect`.
 
-Строки с `~/Library/WebKit/ocbar-auth` и `HTTPStorages` стоит выполнить и без удаления программы, если нужно
+Строки с `~/Library/WebKit/ocmac-auth` и `HTTPStorages` стоит выполнить и без удаления программы, если нужно
 оборвать сохранённую сессию SSO: **[проверено]** cookie провайдера входа
 живут в этом хранилище месяцами, и отключение VPN их не трогает.
 
@@ -519,7 +519,7 @@ security delete-generic-password -s ru.ocbar.client -a totp/<логин>   # с�
 Сначала:
 
 ```bash
-./bin/ocbar doctor
+./bin/ocmac doctor
 ```
 
 Он проверяет каждый компонент отдельно и говорит, что именно чинить.

@@ -5,11 +5,11 @@
 <meta name="theme-color" content="#eef0ea">
 <title>OpenConnect for Mac — work VPN on your Mac</title><meta name="description" content="Work VPN on your Mac: SSO sign-in, selected networks and corporate DNS, and recovery after sleep. An open-source client built on OpenConnect.">
 <meta property="og:title" content="OpenConnect for Mac — work VPN on your Mac"><meta property="og:description" content="Work VPN on your Mac: SSO sign-in, selected networks and corporate DNS, and recovery after sleep. An open-source client built on OpenConnect.">
-<meta property="og:type" content="website"><meta property="og:image" content="https://valeragin.github.io/ocbar/assets/social-card-en.jpg">
+<meta property="og:type" content="website"><meta property="og:image" content="assets/social-card-en.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
 <link rel="stylesheet" href="landing.css?v=20261022-3">
-<script>(function(){var k="ocbar-lang",d=document.documentElement,c=null;
+<script>(function(){var k="ocmac-lang",d=document.documentElement,c=null;
 try{c=localStorage.getItem(k)}catch(e){}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".languages a[lang]");
 if(a)try{localStorage.setItem(k,a.lang)}catch(e){}});
@@ -17,24 +17,19 @@ if(d.lang!=="en")return;
 var w=c;if(!w){var l=navigator.languages||[navigator.language||""];
 for(var i=0;i<l.length;i++){var p=String(l[i]).toLowerCase().split("-")[0];if(p==="ru"||p==="en"){w=p;break}}}
 if(w==="ru")location.replace("ru/"+location.hash)})()</script>
-<link rel="canonical" href="https://valeragin.github.io/ocbar/">
-<meta property="og:url" content="https://valeragin.github.io/ocbar/">
-<link rel="alternate" hreflang="en" href="https://valeragin.github.io/ocbar/">
-<link rel="alternate" hreflang="ru" href="https://valeragin.github.io/ocbar/ru/">
-<link rel="alternate" hreflang="x-default" href="https://valeragin.github.io/ocbar/">
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
 <header class="top wrap">
   <a class="brand" href="./"><img src="assets/icon.svg" width="28" height="28" alt="">OpenConnect for Mac</a>
-  <nav><a href="https://github.com/ValeraGin/ocbar">GitHub</a><span class="languages" aria-label="Language"><a href="./" lang="en" aria-current="page">EN</a> / <a href="ru/" lang="ru" >RU</a></span></nav>
+  <nav><a href="https://github.com/ValeraGin/openconnect-for-mac">GitHub</a><span class="languages" aria-label="Language"><a href="./" lang="en" aria-current="page">EN</a> / <a href="ru/" lang="ru" >RU</a></span></nav>
 </header>
 <main id="content" class="wrap">
   <section class="hero">
     <div>
       <h1>Work VPN on your Mac</h1>
       <p class="lead">SSO, the networks you need, and recovery after sleep. A native macOS menu, open source, built on OpenConnect.</p>
-      <p class="actions"><a class="button" href="#install">Install</a><a class="link" href="https://github.com/ValeraGin/ocbar">Source on GitHub ↗</a></p>
+      <p class="actions"><a class="button" href="#install">Install</a><a class="link" href="https://github.com/ValeraGin/openconnect-for-mac">Source on GitHub ↗</a></p>
       <p><a class="link" href="guide/#profile">I have a configured profile from a teammate →</a></p>
     </div>
     <figure><img src="assets/demo-en.gif" width="373" height="595" alt="OpenConnect for Mac menu: connect, switch off a network, pause"><figcaption>The real menu on a demo profile.</figcaption></figure>
@@ -51,12 +46,12 @@ if(w==="ru")location.replace("ru/"+location.hash)})()</script>
     <p>Real connection: an AnyConnect-compatible gateway with Keycloak, macOS 26 on Apple Silicon. Used daily by the author.</p>
     <p>Automated checks: ocserv and test SSO gateways. These do not confirm compatibility with real Okta or Microsoft Entra ID deployments.</p>
     <p class="muted">Requires macOS 14.4+. Intel and macOS 14.4–15 have no real-device verification. A clean installation and first sign-in on another Mac have not been tested yet.</p>
-    <p><a class="link" href="https://github.com/ValeraGin/ocbar/issues/new?template=gateway_report.yml">Tried your gateway? Tell us how it went →</a></p>
+    <p><a class="link" href="https://github.com/ValeraGin/openconnect-for-mac/issues/new?template=gateway_report.yml">Tried your gateway? Tell us how it went →</a></p>
     <p class="muted">A short report helps clarify compatibility. No company name, gateway address or sign-in details needed.</p>
   </section>
   <section class="install" id="install">
     <h2>Install</h2>
-    <div class="code"><pre id="commands">/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/ocbar/main/install.sh)&quot;</pre><button type="button" data-copy="commands" data-done="Copied">Copy</button></div>
+    <div class="code"><pre id="commands">/bin/bash -c &quot;$(curl -fsSL https://raw.githubusercontent.com/ValeraGin/openconnect-for-mac/main/install.sh)&quot;</pre><button type="button" data-copy="commands" data-done="Copied">Copy</button></div>
     <p>This command downloads the installer from GitHub. It offers to install missing Apple tools and Homebrew, installs OpenConnect for Mac and opens the app. The system helper needs your Mac administrator password.</p>
     <p class="muted">macOS 14.4+ · access to an AnyConnect-compatible gateway</p>
     <p><a class="link" href="guide/#profile">I have a configured profile from a teammate →</a></p>
@@ -64,8 +59,8 @@ if(w==="ru")location.replace("ru/"+location.hash)})()</script>
   </section>
 </main>
 <footer class="wrap">
-  <a href="https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.en.md">If it does not work</a>
-  <a href="https://github.com/ValeraGin/ocbar">GitHub</a>
+  <a href="https://github.com/ValeraGin/openconnect-for-mac/blob/main/TROUBLESHOOTING.en.md">If it does not work</a>
+  <a href="https://github.com/ValeraGin/openconnect-for-mac">GitHub</a>
   <span>MIT · no telemetry</span>
   <span>Independent project, not an official OpenConnect product. Not affiliated with OpenConnect or Cisco. AnyConnect describes protocol compatibility.</span>
 </footer>

@@ -21,7 +21,7 @@ body:
     id: version
     attributes:
       label: OpenConnect for Mac version
-      description: Output of `ocbar version`
+      description: Output of `ocmac version`
     validations: {required: true}
   - type: input
     id: macos
@@ -67,5 +67,5 @@ body:
     id: notes
     attributes:
       label: Notes
-      description: What did not work, or what you had to configure. For failures, attach the relevant part of `ocbar report` after reading it.
+      description: What did not work, or what you had to configure. For failures, attach the relevant part of `ocmac report` after reading it.
       render: text

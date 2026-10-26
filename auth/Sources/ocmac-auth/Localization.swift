@@ -1,0 +1,33 @@
+import Foundation
+
+/// Перевод строк окон ocmac-auth. Ключ — русский текст, как в приложении
+/// (app/…/Localization.swift): пропущенный перевод показывается по-русски, а
+/// не ключом. Бандла у ocmac-auth нет — это голый файл в libexec, — поэтому
+/// перевод лежит в коде (Translations.swift), а язык выбирается тем же
+/// правилом, что у приложения: сохранённый выбор, затем языки системы.
+/// OCMAC_LANG=ru|en — явно (самопроверки, снимки окон).
+///
+/// Журнал и ответы для ocmac (Log.*, out) не переводятся: их читает клиент
+/// и сверяет самопроверка.
+enum Lang {
+    static var current: String = {
+        if let forced = ProcessInfo.processInfo.environment["OCMAC_LANG"], ["ru", "en"].contains(forced) { return forced }
+        if let saved = UserDefaults(suiteName: "ru.ocmac.app")?.string(forKey: "InterfaceLanguage"),
+           ["ru", "en"].contains(saved) { return saved }
+        return Bundle.preferredLocalizations(from: ["ru", "en"], forPreferences: Locale.preferredLanguages).first ?? "ru"
+    }()
+}
+
+func L(_ ru: String) -> String {
+    Lang.current == "en" ? (Translations.en[ru] ?? ru) : ru
+}
+
+/// С подстановками: каждое значение текстом встаёт на место очередного %@.
+func L(_ ru: String, _ args: Any...) -> String {
+    var out = L(ru)
+    for arg in args {
+        guard let r = out.range(of: "%@") else { break }
+        out.replaceSubrange(r, with: "\(arg)")
+    }
+    return out
+}

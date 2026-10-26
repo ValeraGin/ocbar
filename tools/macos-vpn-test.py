@@ -4,7 +4,7 @@
 Temporarily stops the supervisor, uses disposable config/user-state, and adds
 only routes to 1.1.1.1 and 8.8.8.8 plus the example.com split-DNS zone. Restores
 the supervisor and checks cleanup. Credentials are entered without echo and
-remain in memory. Tunnel mode requires the installed NOPASSWD ocbar-helper.
+remain in memory. Tunnel mode requires the installed NOPASSWD ocmac-helper.
 Proxy mode tests SOCKS HTTPS/remote DNS without changing system routes or DNS.
 Proxy environment variables are removed unless explicitly opted in: otherwise
 user-mode OpenConnect and the sudo helper can use different upstream paths.
@@ -22,16 +22,16 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
-CLI = str(ROOT / 'bin/ocbar')
-HELPER = '/usr/local/libexec/ocbar-helper'
+CLI = str(ROOT / 'bin/ocmac')
+HELPER = '/usr/local/libexec/ocmac-helper'
 ZONE = Path('/etc/resolver/example.com')
-STATE = Path('/var/db/ocbar')
+STATE = Path('/var/db/ocmac')
 FAILURES = []
 
 
 def test_environment(source, inherit_proxy=False):
     return {k: v for k, v in source.items()
-            if not k.startswith('OCBAR_') and
+            if not k.startswith('OCMAC_') and
             (inherit_proxy or k.lower() not in ('http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'))}
 
 
@@ -118,7 +118,7 @@ def main():
     if any(not re.fullmatch(r'[A-Za-z0-9.-]+', host) for host in args.hosts):
         parser.error('hosts must be DNS hostnames')
     before = status()
-    assert before['state'] == 'down' and not before['foreign'], 'disconnect ocbar before this test'
+    assert before['state'] == 'down' and not before['foreign'], 'disconnect ocmac before this test'
     assert not ZONE.exists(), 'example.com already has a resolver; refusing to overwrite it'
     for target in args.preserve_route:
         ipaddress.IPv4Address(target)
@@ -134,13 +134,13 @@ def main():
     assert username and password and not any(c in username for c in '\r\n'), 'invalid credentials'
     stopped = False
     started = False
-    with tempfile.TemporaryDirectory(prefix='ocbar-macos-live-') as directory:
+    with tempfile.TemporaryDirectory(prefix='ocmac-macos-live-') as directory:
         tmp = Path(directory)
         (tmp / 'profiles').mkdir()
         env = test_environment(os.environ, args.inherit_proxy_env)
-        env.update(OCBAR_CONFIG_DIR=str(tmp), OCBAR_USER_STATE=str(tmp / 'user-state'),
-                   OCBAR_LOG_DIR=str(tmp / 'logs'), OCBAR_NOTIFY='0',
-                   OCBAR_TEST_PASSWORD=password, OCBAR_AUTH=str(ROOT / 'auth/.build/release/ocbar-auth'))
+        env.update(OCMAC_CONFIG_DIR=str(tmp), OCMAC_USER_STATE=str(tmp / 'user-state'),
+                   OCMAC_LOG_DIR=str(tmp / 'logs'), OCMAC_NOTIFY='0',
+                   OCMAC_TEST_PASSWORD=password, OCMAC_AUTH=str(ROOT / 'auth/.build/release/ocmac-auth'))
         try:
             if supervisor_loaded:
                 run([CLI, 'supervisor', 'stop'])
@@ -150,7 +150,7 @@ def main():
                 with socket.socket() as sock:
                     sock.bind(('127.0.0.1', 0))
                     port = sock.getsockname()[1]
-                profile = tmp / 'profiles/live-test.ocbar'
+                profile = tmp / 'profiles/live-test.ocmac'
                 profile.write_text('[Connection]\nName = External live test\nUrl = https://' + host +
                                    '\nUser = ' + username + '\nAuth = password\n' +
                                    'Mode = ' + args.mode + '\n' +
@@ -159,7 +159,7 @@ def main():
                                    ('Mtu = %d\n' % args.mtu if args.mtu else '') +
                                    '[Routes]\n1.1.1.1/32\n8.8.8.8/32\n' +
                                    '[DNS]\nexample.com = vpn\n' +
-                                   '[Auth]\nPassword = command\nPasswordCommand = printf %s "$OCBAR_TEST_PASSWORD"\nTotp = off\n' +
+                                   '[Auth]\nPassword = command\nPasswordCommand = printf %s "$OCMAC_TEST_PASSWORD"\nTotp = off\n' +
                                    '[Proxy]\nSystemProxy = off\nPort = %d\n' % port +
                                    '[Health]\nCheck = https://1.1.1.1/cdn-cgi/trace\n')
                 run([CLI, 'profile-check', str(profile)], env)

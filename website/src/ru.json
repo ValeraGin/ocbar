@@ -29,7 +29,7 @@
   "requirements": "macOS 14.4+ · доступ к AnyConnect-совместимому шлюзу",
   "copied": "Скопировано",
   "troubleshooting": "Если не работает",
-  "troubleshooting_url": "https://github.com/ValeraGin/ocbar/blob/main/TROUBLESHOOTING.md",
+  "troubleshooting_url": "https://github.com/ValeraGin/openconnect-for-mac/blob/main/TROUBLESHOOTING.md",
   "license": "MIT · без телеметрии",
   "profile_link": "У меня есть готовый профиль от коллеги",
   "compat_title": "Где проверено",
