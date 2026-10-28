@@ -29,9 +29,8 @@ publish() {
 
     cp Formula/openconnect-for-mac.rb "$tap/Formula/openconnect-for-mac.rb"
     cp Formula/README.md "$tap/README.md"
-    cp Formula/tap_migrations.json "$tap/tap_migrations.json"
-    if [ -f "$tap/Formula/ocbar.rb" ]; then git -C "$tap" rm Formula/ocbar.rb; fi
-    git -C "$tap" add Formula/openconnect-for-mac.rb tap_migrations.json README.md
+    git -C "$tap" rm --ignore-unmatch tap_migrations.json
+    git -C "$tap" add Formula/openconnect-for-mac.rb README.md
     git -C "$tap" commit -q -m "ocmac $ver"
     git -C "$tap" push -q origin main
 
@@ -58,7 +57,8 @@ publish() {
     brew upgrade ValeraGin/openconnect-for-mac/openconnect-for-mac
     brew test ValeraGin/openconnect-for-mac/openconnect-for-mac
     ocmac migrate
-    if [ -e /usr/local/libexec/ocbar-helper ]; then
+    ocmac prepare
+    if ! cmp -s "$(brew --prefix openconnect-for-mac)/libexec/ocmac-helper" /usr/local/libexec/ocmac-helper; then
         sudo ocmac install
     fi
     ocmac app stop >/dev/null 2>&1 || true
@@ -117,6 +117,7 @@ prev=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
 python3 tools/i18n-scan.py --check >/dev/null || { python3 tools/i18n-scan.py --check; echo "release: интерфейс переведён не весь" >&2; exit 1; }
 echo "release: installer and embedded CSD checks"
 python3 tools/migration-selftest.py
+python3 tools/app-update-selftest.py
 python3 tools/installer-selftest.py
 python3 tools/embedded-csd-selftest.py
 python3 tools/profile-workflow-selftest.py

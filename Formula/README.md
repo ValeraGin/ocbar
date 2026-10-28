@@ -7,13 +7,13 @@ brew tap ValeraGin/openconnect-for-mac
 brew trust ValeraGin/openconnect-for-mac
 brew install ValeraGin/openconnect-for-mac/openconnect-for-mac
 ocmac migrate
-sudo ocmac install
+ocmac prepare && sudo ocmac install
 ocmac app start
 ```
 
 The migration preserves original profiles and credentials. System setup stops the previous VPN session and restores launch at login when it was enabled.
 
-Update with `brew upgrade openconnect-for-mac`, then `ocmac app stop && ocmac app start`.
+Update with `brew upgrade openconnect-for-mac`, the visible app and its login item are refreshed automatically.
 Uninstall with `sudo ocmac uninstall`, then `brew uninstall openconnect-for-mac`.
 
 [Website and installer](https://valeragin.github.io/openconnect-for-mac/) · [Инструкция по-русски](https://github.com/ValeraGin/openconnect-for-mac/blob/main/README.ru.md)

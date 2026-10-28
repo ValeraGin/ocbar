@@ -100,7 +100,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         <key>CFBundleTypeName</key><string>OpenConnect for Mac VPN profile</string>
         <key>CFBundleTypeRole</key><string>Viewer</string>
         <key>LSHandlerRank</key><string>Owner</string>
-        <key>LSItemContentTypes</key><array><string>ru.ocmac.profile</string><string>ru.ocbar.profile</string></array>
+        <key>LSItemContentTypes</key><array><string>ru.ocmac.profile</string></array>
     </dict></array>
     <key>UTExportedTypeDeclarations</key>
     <array><dict>
@@ -109,15 +109,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
         <key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
         <key>UTTypeTagSpecification</key><dict>
             <key>public.filename-extension</key><array><string>ocmac</string></array>
-        </dict>
-    </dict></array>
-    <key>UTImportedTypeDeclarations</key>
-    <array><dict>
-        <key>UTTypeIdentifier</key><string>ru.ocbar.profile</string>
-        <key>UTTypeDescription</key><string>Legacy VPN profile</string>
-        <key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
-        <key>UTTypeTagSpecification</key><dict>
-            <key>public.filename-extension</key><array><string>ocbar</string></array>
         </dict>
     </dict></array>
     <key>LSMinimumSystemVersion</key><string>14.4</string>

@@ -56,3 +56,13 @@ with a random per-launch token stored in a `0600` file.
 `ocmac selftest`, `tools/helper-selftest.sh`, `ocmac-auth --selftest`,
 `ocmac-auth --learn-selftest` and `ocmac-app --selftest` cover these rules and
 run in CI.
+
+
+## One-time upgrades
+
+The current application does not carry the previous product identities. An explicit
+`ocmac migrate` downloads the transition module from a fixed commit of release 0.25.1
+and verifies its SHA256. Every administrator phase verifies the cached bytes again
+and executes those bytes through stdin. Successful setup removes the downloaded module.
+Normal app startup performs no migration download. Source URLs and digests are in
+`libexec/ocmac-migrate.py`.

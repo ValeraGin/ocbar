@@ -448,8 +448,8 @@
 "нет такой программы: %@" = "no such program: %@";
 "отменено" = "cancelled";
 "команда не ответила за %@ с" = "the command did not answer in %@ s";
-"Хелпер не установлен: действия из меню не сработают — sudo ocmac install" = "The helper is not installed: menu actions will not work — sudo ocmac install";
-"Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — sudo ocmac install" = "The helper has no NOPASSWD: sudo would ask for a password, and the menu has no terminal — sudo ocmac install";
+"Хелпер не установлен: действия из меню не сработают — ocmac prepare && sudo ocmac install" = "The helper is not installed: menu actions will not work — ocmac prepare && sudo ocmac install";
+"Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — ocmac prepare && sudo ocmac install" = "The helper has no NOPASSWD: sudo would ask for a password, and the menu has no terminal — ocmac prepare && sudo ocmac install";
 "Молча войти не удалось — нужен вход" = "Silent sign-in failed — sign-in needed";
 "«%@» отменено" = "“%@” cancelled";
 "не получилось" = "did not work";
@@ -542,8 +542,8 @@
 "Не удалось открыть профиль: %@" = "Could not open the profile: %@";
 "Введите свой корпоративный логин." = "Enter your own work username.";
 "Профиль изменился. Откройте его заново, чтобы сохранить актуальные настройки." = "The profile changed. Open it again to keep the latest settings.";
-"В нестандартном окружении подготовьте системную часть вручную: sudo ocmac install" = "In a custom environment, set up the system components manually: sudo ocmac install";
-"Не удалось открыть Терминал. Выполните sudo ocmac install и повторите подключение." = "Could not open Terminal. Run sudo ocmac install and try connecting again.";
+"В нестандартном окружении подготовьте системную часть вручную: ocmac prepare && sudo ocmac install" = "In a custom environment, set up the system components manually: ocmac prepare && sudo ocmac install";
+"Не удалось открыть Терминал. Выполните ocmac prepare && sudo ocmac install и повторите подключение." = "Could not open Terminal. Run ocmac prepare && sudo ocmac install and try connecting again.";
 "Подготовка не завершена. Повторите подключение после установки системной части." = "Setup has not completed. Try connecting after the system components are installed.";
 "Открыть профиль…" = "Open profile…";
 "Сохранить профиль" = "Save profile";

@@ -354,16 +354,16 @@ extension SelfTest {
         let bad = URL(string: "ocmac://notify?title=t&body=b&token=ffff")!
         let none = URL(string: "ocmac://notify?title=t&body=b")!
         // Подсказка к ошибке: команда, которую приложение выполнить не может.
-        t.check("ошибка: «нужен root» предлагает sudo ocmac install",
-                MenuText.fix(for: "ocmac: нужен root: sudo ocmac install (посмотреть шаги — ...)")?.command == "sudo ocmac install")
+        t.check("ошибка: «нужен root» предлагает ocmac prepare && sudo ocmac install",
+                MenuText.fix(for: "ocmac: нужен root: sudo ocmac install (посмотреть шаги — ...)")?.command == "ocmac prepare && sudo ocmac install")
         t.check("ошибка: нет openconnect — предлагает brew install",
                 MenuText.fix(for: "нет openconnect — brew install openconnect")?.command == "brew install openconnect")
         t.check("ошибка: обычная — без подсказки", MenuText.fix(for: "сеть 10.0.0.0/8 не включилась") == nil)
         // Клиент говорит на языке системы: подсказка — по команде в сообщении.
         t.check("ошибка по-английски: полный путь в sudo … install — та же подсказка",
-                MenuText.fix(for: "ocmac: root is required: sudo /opt/homebrew/bin/ocmac install")?.command == "sudo ocmac install")
+                MenuText.fix(for: "ocmac: root is required: sudo /opt/homebrew/bin/ocmac install")?.command == "ocmac prepare && sudo ocmac install")
         t.check("ошибка по-английски: --trust — своя подсказка",
-                MenuText.fix(for: "the openconnect copy doesn't match: sudo ocmac install --trust")?.command == "sudo ocmac install --trust")
+                MenuText.fix(for: "the openconnect copy doesn't match: sudo ocmac install --trust")?.command == "ocmac prepare && sudo ocmac install --trust")
         t.check("ошибка по-английски: нет ocproxy — brew install ocproxy",
                 MenuText.fix(for: "proxy mode: no ocproxy — brew install ocproxy")?.command == "brew install ocproxy")
         // Доступ: состояние читается из status --short.

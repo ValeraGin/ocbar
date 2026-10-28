@@ -19,7 +19,7 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocmac='', command_string=False, migrated_profile=False, legacy_profile=False):
+def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocmac='', command_string=False, migrated_profile=False):
     tmp = tempfile.TemporaryDirectory(prefix='ocmac installer test ')
     base = Path(tmp.name)
     fake = base / 'bin'
@@ -81,7 +81,7 @@ case "$1" in
     profile-check|import) exec /bin/bash ''' + shlex.quote(str(ROOT / 'bin/ocmac')) + ''' "$@" ;;
 esac
 ''')
-    profile = base / ('office.ocbar' if legacy_profile else 'office.ocmac')
+    profile = base / 'office.ocmac'
     profile.write_text('[Connection]\nName = Office\nUrl = vpn.example.test/employees\nCsdWrapper = /old/path\n\n[Routes]\n10.0.0.0/8\n\n[DNS]\nexample.test = vpn\n')
     if embedded:
         encoded = base64.b64encode(b'#!/bin/bash\nexit 0\n').decode()
@@ -190,6 +190,7 @@ def main():
         assert target.stat().st_mode & 0o777 == 0o700
         assert dst.stat().st_mode & 0o777 == 0o600
         assert calls.index('ocmac import') < calls.index('sudo ')
+        assert calls.index('ocmac prepare') < calls.index('sudo ')
         dst.write_text(content + '# local edit\n')
         code, output = rerun()
         assert code == 0 and 'Keeping existing profile' in output, output
@@ -216,6 +217,7 @@ def main():
         assert (base / 'home/.config/ocmac/profiles/office.ocmac').exists()
         assert len(list((base / 'home/.config/ocmac/csd').glob('inline-*.sh'))) == 1
         assert calls.index('ocmac import') < calls.index('sudo ')
+        assert calls.index('ocmac prepare') < calls.index('sudo ')
     print('OK: GitHub-style one-line command forwards the profile path with spaces and prepares embedded CSD')
 
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', '--csd', 'CSD', embedded=True)
@@ -242,7 +244,9 @@ def main():
     tmp, base, code, output, _ = scenario('--no-start', '--no-autostart')
     with tmp:
         assert code == 0, output
-        assert 'ocmac app' not in (base / 'calls').read_text()
+        assert 'ocmac app start' not in (base / 'calls').read_text()
+        assert 'ocmac app autostart' not in (base / 'calls').read_text()
+        assert 'ocmac app upgrade' in (base / 'calls').read_text()
     print('OK: optional app start and login launch')
 
     tmp, base, code, output, rerun = scenario('--head')
@@ -252,7 +256,6 @@ def main():
         code, output = rerun()
         assert code == 0, output
         assert 'brew reinstall --HEAD' in (base / 'calls').read_text()
-        assert 'brew migrate ValeraGin/openconnect-for-mac/openconnect-for-mac' in (base / 'calls').read_text()
     print('OK: explicit HEAD install and reinstall')
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', migrated_profile=True)
     with tmp:
@@ -261,12 +264,6 @@ def main():
         assert 'ocmac import' not in (base / 'calls').read_text()
     print('OK: migration cannot be overwritten by a same-name installer profile')
 
-    tmp, base, code, output, _ = scenario('--profile', 'PROFILE', legacy_profile=True)
-    with tmp:
-        assert code == 0, output
-        assert (base / 'home/.config/ocmac/profiles/office.ocmac').is_file()
-        assert not (base / 'home/.config/ocmac/profiles/office.ocbar.ocmac').exists()
-    print('OK: legacy extension imports under the correct new filename')
     check_csd_plan()
 
 

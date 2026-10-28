@@ -2799,7 +2799,7 @@ cmd_import_data() {
     esac
     local url; url=$(pf_get "$src" Connection Url)
     [ -n "$url" ] || die "это не похоже на профиль ocmac: в [Connection] нет Url"
-    [ -n "$name" ] || { name=$(basename "$src"); name="${name%.ocmac}"; name="${name%.ocbar}"; name="${name%.conf}"; }
+    [ -n "$name" ] || { name=$(basename "$src"); name="${name%.*}"; }
     valid_name_soft "$name" || die "имя профиля может содержать буквы, цифры, дефис и точку: $name"
     mkdir -p "$PROFILE_DIR"
     local dst="$PROFILE_DIR/$name.ocmac"
@@ -3909,9 +3909,18 @@ cmd_app() {
     local uid; uid=$(id -u)
     local a; a=$(app_path) || true
     case "${1:-start}" in
+        upgrade)
+            [ -n "$a" ] || die "не найден ocmac.app"
+            local updater; updater=$(libexec_file ocmac-app-update.py) || die "app updater is missing"
+            /usr/bin/python3 "$updater" "$a" ;;
         start)
-            cmd_migrate || return $?
             [ -n "$a" ] || die "не найден ocmac.app (соберите: app/make-app.sh, или brew install)"
+            case "$a" in
+                */opt/openconnect-for-mac/ocmac.app|*/Cellar/openconnect-for-mac/*/ocmac.app)
+                    local updater; updater=$(libexec_file ocmac-app-update.py) || die "app updater is missing"
+                    /usr/bin/python3 "$updater" "$a" --start
+                    return $? ;;
+            esac
             [ -n "$(app_pid)" ] && { info "уже работает (pid $(app_pid))"; return 0; }
             local run; run=$(app_sync_copy "$a")
             open "$run" && ok "запущено" "$run" ;;
@@ -4070,6 +4079,7 @@ ocmac — OpenConnect для macOS: SSO, split DNS, split tunneling, супер�
   ocmac rules import <файл> [профиль] положить правила из файла в [Autofill]
   ocmac rules clear [профиль]         убрать [Autofill] из профиля
   ocmac migrate                     migrate existing profiles and settings
+  ocmac prepare                     prepare private CSD copies before sudo
   ocmac app [start|stop|status]       приложение меню-бара; autostart on|off; devmode on|off;
                                       start держит копию в ~/Applications — для лаунчера
   ocmac ui-lab [--live]               песочница интерфейса в браузере
@@ -4157,6 +4167,7 @@ ocmac — OpenConnect for macOS: SSO, split DNS, split tunneling, a supervisor.
   ocmac rules import <file> [profile] put rules from a file into [Autofill]
   ocmac rules clear [profile]         remove [Autofill] from the profile
   ocmac migrate                     migrate existing profiles and settings
+  ocmac prepare                     prepare private CSD copies before sudo
   ocmac app [start|stop|status]       the menu bar app; autostart on|off; devmode on|off;
                                       start keeps a copy in ~/Applications for Launchpad
   ocmac ui-lab [--live]               interface sandbox in the browser
@@ -4215,6 +4226,10 @@ case "${1:-}" in
                 # shellcheck source=/dev/null
                 . "$st"; cmd_selftest ;;
     import)     shift; cmd_import "$@" ;;
+    prepare)
+        cmd_migrate || exit $?
+        tool=$(libexec_file ocmac-prepare.py) || die "preparation tool is missing"
+        /usr/bin/python3 "$tool" "$CONFIG_DIR" ;;
     migrate)    cmd_migrate ;;
     check-access) shift; cmd_check_access "$@" ;;
     csd-status) shift; cmd_csd_status "$@" ;;

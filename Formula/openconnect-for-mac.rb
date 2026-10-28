@@ -30,6 +30,8 @@ class OpenconnectForMac < Formula
     libexec.install "libexec/ocmac-pwauth.py"
     libexec.install "libexec/ocmac-csd.py"
     libexec.install "libexec/ocmac-migrate.py"
+    libexec.install "libexec/ocmac-app-update.py"
+    libexec.install "libexec/ocmac-prepare.py"
     # Перевод сообщений клиента: каталог шаблонов и тот, кто его применяет.
     libexec.install "libexec/ocmac-tr.pl"
     libexec.install "libexec/ocmac-en.tsv"
@@ -42,11 +44,20 @@ class OpenconnectForMac < Formula
     doc.install "README.md", "README.ru.md", "INSTALL.md", "TROUBLESHOOTING.md", "SECURITY.md", "CHANGELOG.md"
   end
 
+  def post_install
+    # Refresh the visible app even if administrator setup is postponed or canceled.
+    begin
+      system bin/"ocmac", "migrate"
+    ensure
+      system bin/"ocmac", "app", "upgrade"
+    end
+  end
+
   def caveats
     <<~EOS
       Один раз, с паролем — хелпер root:wheel, sudoers.d, LaunchAgent супервизора:
         ocmac migrate
-        sudo ocmac install
+        ocmac prepare && sudo ocmac install
 
       Профиль — один файл на подключение (образцы в #{pkgshare}/examples):
         mkdir -p ~/.config/ocmac/profiles
@@ -59,7 +70,8 @@ class OpenconnectForMac < Formula
         ocmac app start                 запустить; кладёт копию в ~/Applications,
                                         чтобы OpenConnect for Mac был в лаунчере и Spotlight
         ocmac app autostart on          запускать при входе в систему
-      После brew upgrade: ocmac app stop && ocmac app start — обновит и копию.
+      Homebrew обновляет копию приложения и её автозапуск автоматически.
+      Повторить обновление копии: ocmac app upgrade.
 
       Прокси-режим (Mode = proxy в профиле) нуждается в ocproxy — он не
       зависимость формулы, потому что нужен только этому режиму:

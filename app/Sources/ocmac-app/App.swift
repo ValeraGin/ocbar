@@ -143,6 +143,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Только значок в меню-баре: ни в Dock, ни в переключателе приложений
         // ему делать нечего.
         NSApp.setActivationPolicy(.accessory)
+        if CommandLine.arguments.contains("--installation-check") {
+            let client = OCMacClient.shared
+            let status = client.status()
+            let version = client.binary.map { Shell.run($0, ["version"], timeout: 10) }
+            let report: [String: Any] = [
+                "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                "clientPath": client.binary ?? "",
+                "clientVersion": version?.out.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+                "clientAvailable": client.binary != nil && version?.code == 0 && status.available && status.error == nil,
+                "profileCount": status.profiles.count
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
+               let text = String(data: data, encoding: .utf8) { print(text) }
+            exit(report["clientAvailable"] as? Bool == true ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--selftest") {
             var code = SelfTest.run()
             code += SelfTest.audit()
@@ -163,13 +178,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
            ProcessInfo.processInfo.environment["OCMAC_CONFIG_DIR"] == nil,
            let dir = Fixture.demoConfigDir() {
             setenv("OCMAC_CONFIG_DIR", dir, 1)
-        }
-        if !CommandLine.arguments.contains("--stage") {
-            let result = OCMacClient.shared.action(["migrate"], timeout: 180)
-            if case .failed(_, let note) = result {
-                let alert = NSAlert(); alert.messageText = "OpenConnect for Mac"
-                alert.informativeText = note; alert.runModal(); NSApp.terminate(nil); return
-            }
         }
         OCMacClient.shared.preloadVersions()
         if !CommandLine.arguments.contains("--stage") { Notifier.setup() }

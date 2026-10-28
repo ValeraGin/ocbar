@@ -142,9 +142,9 @@ final class StatusStore: ObservableObject {
             if v.isEmpty {
                 warning = nil
             } else if v["helper_path"] == nil {
-                warning = L("Хелпер не установлен: действия из меню не сработают — sudo ocmac install")
+                warning = L("Хелпер не установлен: действия из меню не сработают — ocmac prepare && sudo ocmac install")
             } else if v["helper_nopasswd"] != "1" {
-                warning = L("Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — sudo ocmac install")
+                warning = L("Хелпер без NOPASSWD: sudo спросит пароль, а терминала у меню нет — ocmac prepare && sudo ocmac install")
             } else {
                 warning = nil
             }

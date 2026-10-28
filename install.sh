@@ -50,8 +50,8 @@ config="$HOME/.config/ocmac"
 export OCMAC_CONFIG_DIR="$config"
 name='' destination='' skip_profile=0
 if [ -n "$profile" ]; then
-    case "$profile" in *.ocmac|*.ocbar) ;; *) fail 'The profile must have a .ocmac extension' ;; esac
-    name=$(basename "$profile"); name=${name%.ocmac}; name=${name%.ocbar}
+    case "$profile" in *.ocmac) ;; *) fail 'The profile must have a .ocmac extension' ;; esac
+    name=$(basename "$profile"); name=${name%.ocmac}
     case "$name" in ''|*[!a-zA-Z0-9._-]*|.*) fail 'Use a profile filename with letters, digits, dots, underscores or hyphens' ;; esac
     destination="$config/profiles/$name.ocmac"
     if [ -e "$destination" ]; then
@@ -104,22 +104,12 @@ fi
 # New Homebrew requires explicit trust for third-party taps; older versions do not.
 if "$brew_bin" help trust >/dev/null 2>&1; then "$brew_bin" trust ValeraGin/openconnect-for-mac; fi
 formula=ValeraGin/openconnect-for-mac/openconnect-for-mac
-# Refresh the former tap so Homebrew sees its cross-tap migration rule.
-if "$brew_bin" list --versions ocbar >/dev/null 2>&1; then
-    "$brew_bin" update
-    "$brew_bin" migrate "$formula"
-fi
 if ! "$brew_bin" list --versions "$formula" >/dev/null 2>&1; then
     if [ "$head" = 1 ]; then "$brew_bin" install --HEAD "$formula"; else "$brew_bin" install "$formula"; fi
 elif [ "$head" = 1 ]; then
     "$brew_bin" reinstall --HEAD "$formula"
 else
     "$brew_bin" upgrade "$formula"
-fi
-# Both tap names can briefly expose the new formula during a repository rename.
-# Only remove the previous tap after a successful package install/upgrade.
-if "$brew_bin" tap | grep -Fxiq 'valeragin/ocbar'; then
-    "$brew_bin" untap ValeraGin/ocbar || printf 'Previous tap retained; use the fully qualified package name for updates.\n'
 fi
 ocmac="$("$brew_bin" --prefix "$formula")/bin/ocmac"
 [ -x "$ocmac" ] || fail 'Homebrew did not provide the ocmac executable'
@@ -169,6 +159,8 @@ if [ -n "$profile" ] && [ "$skip_profile" = 0 ]; then
 fi
 if [ -n "$language" ]; then defaults write ru.ocmac.app InterfaceLanguage -string "$language"; fi
 # Install after importing the profile: the helper copies its CSD script as well.
+"$ocmac" app upgrade
+"$ocmac" prepare
 sudo -- "$ocmac" install < /dev/tty
 if [ "$autostart" = 1 ]; then "$ocmac" app autostart on; fi
 if [ "$start" = 1 ]; then "$ocmac" app stop; "$ocmac" app start; fi

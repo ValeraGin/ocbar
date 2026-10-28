@@ -32,7 +32,7 @@ Russian; the first-connection problems are also in
 > the OpenConnect project or Cisco. “AnyConnect” describes protocol compatibility.
 
 The CLI is `ocmac`; profiles use `.ocmac`. Existing installations can be
-migrated with `ocmac migrate` followed by `sudo ocmac install`. Original user
+migrated with `ocmac migrate` followed by `ocmac prepare && sudo ocmac install`. Original user
 files are preserved. System setup stops the previous VPN session.
 
 ## Quick install

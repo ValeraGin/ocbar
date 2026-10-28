@@ -13,7 +13,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 f=libexec/ocmac-helper
 ver() { sed -n 's/^VERSION="\([^"]*\)".*/\1/p' | head -1; }
 
-old=$(git -C "$root" show "$base:$f" 2>/dev/null || git -C "$root" show "$base:libexec/ocbar-helper") || { echo "helper-version-check: нет $f в $base" >&2; exit 2; }
+old=$(git -C "$root" show "$base:$f" 2>/dev/null) || { echo "helper-version-check: нет $f в $base" >&2; exit 2; }
 if [ -n "$head" ]; then
     new=$(git -C "$root" show "$head:$f") || { echo "helper-version-check: нет $f в $head" >&2; exit 2; }
 else

@@ -18,7 +18,7 @@ enum MenuText {
         let m = message.lowercased()
         if m.range(of: #"sudo \S*ocmac install"#, options: .regularExpression) != nil,
            !m.contains("--trust") {
-            return (L("Скопировать команду"), "sudo ocmac install")
+            return (L("Скопировать команду"), "ocmac prepare && sudo ocmac install")
         }
         if m.contains("brew install openconnect") || m.contains("нет openconnect") || m.contains("no openconnect") {
             return (L("Скопировать команду"), "brew install openconnect")
@@ -26,7 +26,7 @@ enum MenuText {
         if m.contains("brew install ocproxy") || m.contains("нет ocproxy") || m.contains("no ocproxy") {
             return (L("Скопировать команду"), "brew install ocproxy")
         }
-        if m.contains("--trust") { return (L("Скопировать команду"), "sudo ocmac install --trust") }
+        if m.contains("--trust") { return (L("Скопировать команду"), "ocmac prepare && sudo ocmac install --trust") }
         return nil
     }
 

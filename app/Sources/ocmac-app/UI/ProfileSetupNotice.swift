@@ -15,8 +15,8 @@ struct ProfileSetupNotice: View {
                     Text(L("Выполните команду в Терминале. Для установки скрипта понадобится пароль администратора Mac."))
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                     HStack {
-                        Text("sudo ocmac install").font(.ocMono).textSelection(.enabled)
-                        CopyButton(text: "sudo ocmac install")
+                        Text("ocmac prepare && sudo ocmac install").font(.ocMono).textSelection(.enabled)
+                        CopyButton(text: "ocmac prepare && sudo ocmac install")
                     }
                 }
                 Button(checking ? L("Проверяю…") : L("Проверить готовность"), action: check)

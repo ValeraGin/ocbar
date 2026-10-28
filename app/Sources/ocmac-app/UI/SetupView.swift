@@ -146,8 +146,8 @@ struct SetupView: View {
                     }
                     LabeledContent(L("Команда")) {
                         HStack(spacing: 8) {
-                            Text("sudo ocmac install").font(.ocMono).textSelection(.enabled)
-                            CopyButton(text: "sudo ocmac install")
+                            Text("ocmac prepare && sudo ocmac install").font(.ocMono).textSelection(.enabled)
+                            CopyButton(text: "ocmac prepare && sudo ocmac install")
                         }
                     }
                     HStack {

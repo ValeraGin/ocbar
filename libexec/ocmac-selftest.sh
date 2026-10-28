@@ -156,7 +156,13 @@ PROFILE
     # Машинное состояние: приложение читает его целиком, поэтому проверяем
     # не текст, а разобранный JSON.
     # run() подмешивает поток ошибок — берём только строку JSON.
-    local js; js=$(run status --json | grep '^{' | tail -1)
+    local js json_status
+    if json_status=$(run status --json); then
+        js=$(printf '%s\n' "$json_status" | grep '^{' | tail -1 || true)
+    else
+        bad "status --json: команда завершилась с ошибкой" "$json_status"
+        return 1
+    fi
     is "status --json: состояние" "down" \
        "$(printf '%s' "$js" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])' 2>/dev/null || echo "не JSON")"
     is "status --json: сеть профиля списком объектов" "10.11.12.0/24 on" \

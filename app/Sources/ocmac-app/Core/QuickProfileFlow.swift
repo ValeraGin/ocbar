@@ -34,7 +34,7 @@ enum ProfileOpening {
 
     static func setupScript(binary: String, resultPath: String) -> String {
         func quote(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-        return "#!/bin/bash\n/usr/bin/sudo -- \(quote(binary)) install\nresult=$?\nprintf '%s\\n' \"$result\" > \(quote(resultPath))\nprintf '\\n'\nexit \"$result\"\n"
+        return "#!/bin/bash\n\(quote(binary)) prepare\nresult=$?\nif [ \"$result\" = 0 ]; then\n/usr/bin/sudo -- \(quote(binary)) install\nresult=$?\nfi\nprintf '%s\\n' \"$result\" > \(quote(resultPath))\nprintf '\\n'\nexit \"$result\"\n"
     }
 }
 
@@ -97,7 +97,7 @@ final class QuickProfileFlow: ObservableObject {
             note = L("Дождитесь завершения текущего действия и откройте файл ещё раз."); return
         }
         guard urls.count == 1, let url = urls.first, url.isFileURL,
-              ["ocmac", "ocbar", "xml"].contains(url.pathExtension.lowercased()) else {
+              ["ocmac", "xml"].contains(url.pathExtension.lowercased()) else {
             note = L("Откройте один файл профиля .ocmac или Cisco .xml."); return
         }
         busy = true; note = nil; doc = nil; system = nil; ids = []
@@ -115,7 +115,7 @@ final class QuickProfileFlow: ObservableObject {
                 try data.write(to: snapshot, options: .atomic)
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: snapshot.path)
                 let existing = ProfileStore.list()
-                if ["ocmac", "ocbar"].contains(url.pathExtension.lowercased()) {
+                if url.pathExtension.lowercased() == "ocmac" {
                     guard let text = String(data: data, encoding: .utf8) else { throw CocoaError(.fileReadInapplicableStringEncoding) }
                     if let why = OCMacClient.shared.profileRejection(text, name: "profile") {
                         result = ([], why)
@@ -218,7 +218,7 @@ final class QuickProfileFlow: ObservableObject {
         guard ProcessInfo.processInfo.environment["OCMAC_STATE_DIR"] == nil,
               OCMacClient.shared.configDir == NSString(string: "~/.config/ocmac").expandingTildeInPath,
               let binary = OCMacClient.shared.binary else {
-            note = L("В нестандартном окружении подготовьте системную часть вручную: sudo ocmac install"); return
+            note = L("В нестандартном окружении подготовьте системную часть вручную: ocmac prepare && sudo ocmac install"); return
         }
         do {
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -231,14 +231,14 @@ final class QuickProfileFlow: ObservableObject {
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
             waitingForSetup = true; setupDeadline = Date().addingTimeInterval(600)
             guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
-                stopWaiting(); note = L("Не удалось открыть Терминал. Выполните sudo ocmac install и повторите подключение."); return
+                stopWaiting(); note = L("Не удалось открыть Терминал. Выполните ocmac prepare && sudo ocmac install и повторите подключение."); return
             }
             NSWorkspace.shared.open([script], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration()) { _, error in
                 guard error != nil else { return }
                 DispatchQueue.main.async {
                     guard self.setupDirectory == directory else { return }
                     self.stopWaiting()
-                    self.note = L("Не удалось открыть Терминал. Выполните sudo ocmac install и повторите подключение.")
+                    self.note = L("Не удалось открыть Терминал. Выполните ocmac prepare && sudo ocmac install и повторите подключение.")
                 }
             }
         } catch { stopWaiting(); note = error.localizedDescription }
