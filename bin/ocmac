@@ -15,7 +15,7 @@ set -euo pipefail
 PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 export LC_CTYPE="${LC_CTYPE:-UTF-8}"
 
-VERSION="0.25.1"
+VERSION="0.26.0"
 # SELF_ENTRY — как нас позвали (например, /opt/homebrew/bin/ocmac: этот путь
 # переживает brew upgrade, его кладём в plist). SELF — реальный файл после
 # симлинков (Cellar), рядом с ним лежат libexec/ocmac-helper и ocmac-auth.
