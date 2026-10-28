@@ -139,9 +139,9 @@ brew install openconnect-for-mac              # стабильная верси�
 Формула собирает `ocmac-auth` из исходников на вашей машине. Это не
 прихоть: у проекта нет Apple Developer ID, а собранное локально не получает
 карантина, поэтому Gatekeeper не мешает. Обновление — обычный
-`brew upgrade openconnect-for-mac`, само оно не приходит. Если выпуск меняет хелпер (в
+`brew upgrade openconnect-for-mac`, затем `ocmac app upgrade`; само оно не приходит. Если выпуск меняет хелпер (в
 CHANGELOG об этом строка «Needs `sudo ocmac install`»), после обновления
-нужен ещё `sudo ocmac install`: хелпер живёт в root-каталоге, и brew его не
+нужен ещё `ocmac prepare && sudo ocmac install`: хелпер живёт в root-каталоге, и brew его не
 трогает. `ocmac doctor` показывает, что хелпер отстал, — с 0.17.4 выпуск не
 уходит, если код хелпера изменился, а его версия нет.
 
@@ -383,7 +383,7 @@ OpenConnect for Mac запомнит форму входа, а после вхо
 ocmac app start                 # запустить сейчас
 ocmac app autostart on          # запускать при входе в систему
 ocmac app status                # где бандл, работает ли, включён ли автозапуск
-ocmac app stop && ocmac app start   # после brew upgrade — подхватить новую сборку (и копию в ~/Applications)
+ocmac app upgrade                 # после brew upgrade — обновить копию в ~/Applications
 ```
 
 Homebrew кладёт бандл в свой каталог, а лаунчер и Spotlight видят программы
@@ -528,7 +528,8 @@ security delete-generic-password -s ru.ocmac.client -a totp/<логин>   # с�
 
 ### Проверка обновления приложения
 
-Homebrew обновляет копию в `~/Applications/OpenConnect for Mac.app` отдельно от установки
+После обновления Homebrew команда `ocmac app upgrade` обновляет копию в
+`~/Applications/OpenConnect for Mac.app` отдельно от установки
 системного помощника. Отложенное подтверждение администратора не должно оставлять старую
 копию приложения с командой от прежней версии. Повторить обновление копии:
 

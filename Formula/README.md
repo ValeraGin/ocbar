@@ -13,7 +13,7 @@ ocmac app start
 
 The migration preserves original profiles and credentials. System setup stops the previous VPN session and restores launch at login when it was enabled.
 
-Update with `brew upgrade openconnect-for-mac`, the visible app and its login item are refreshed automatically.
+Update with `brew upgrade openconnect-for-mac`, then `ocmac app upgrade` to refresh the visible app and its login item. The installer runs both steps.
 Uninstall with `sudo ocmac uninstall`, then `brew uninstall openconnect-for-mac`.
 
 [Website and installer](https://valeragin.github.io/openconnect-for-mac/) · [Инструкция по-русски](https://github.com/ValeraGin/openconnect-for-mac/blob/main/README.ru.md)

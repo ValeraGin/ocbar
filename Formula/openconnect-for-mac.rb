@@ -44,15 +44,6 @@ class OpenconnectForMac < Formula
     doc.install "README.md", "README.ru.md", "INSTALL.md", "TROUBLESHOOTING.md", "SECURITY.md", "CHANGELOG.md"
   end
 
-  def post_install
-    # Refresh the visible app even if administrator setup is postponed or canceled.
-    begin
-      system bin/"ocmac", "migrate"
-    ensure
-      system bin/"ocmac", "app", "upgrade"
-    end
-  end
-
   def caveats
     <<~EOS
       Один раз, с паролем — хелпер root:wheel, sudoers.d, LaunchAgent супервизора:
@@ -70,8 +61,8 @@ class OpenconnectForMac < Formula
         ocmac app start                 запустить; кладёт копию в ~/Applications,
                                         чтобы OpenConnect for Mac был в лаунчере и Spotlight
         ocmac app autostart on          запускать при входе в систему
-      Homebrew обновляет копию приложения и её автозапуск автоматически.
-      Повторить обновление копии: ocmac app upgrade.
+      После brew upgrade обновите копию приложения: ocmac app upgrade.
+      Установщик и ocmac app start выполняют это автоматически.
 
       Прокси-режим (Mode = proxy в профиле) нуждается в ocproxy — он не
       зависимость формулы, потому что нужен только этому режиму:

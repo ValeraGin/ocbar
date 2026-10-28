@@ -26,8 +26,9 @@ ocmac status</code></pre>
 <p>The app also has a diagnostics and logs window. Start with any failed checks; confirm your gateway, group and authentication requirements with your administrator. <a href="https://github.com/ValeraGin/openconnect-for-mac/blob/main/TROUBLESHOOTING.md">Detailed troubleshooting (Russian)</a> covers common failures. Before opening a public issue, remove gateway details, account names, cookies and tokens from any logs you share.</p>
 <h2>Update</h2>
 <pre><code>brew upgrade openconnect-for-mac
+ocmac app upgrade
 ocmac doctor</code></pre>
-<p>If the release notes or diagnostics report an outdated helper, run <code>ocmac prepare &amp;&amp; sudo ocmac install</code> again. Homebrew refreshes the menu app together with the client. To repair the app copy, run <code>ocmac app upgrade</code>.</p>
+<p>If the release notes or diagnostics report an outdated helper, run <code>ocmac prepare &amp;&amp; sudo ocmac install</code> again. After updating the package, <code>ocmac app upgrade</code> refreshes the menu app and checks client availability. The installer performs this step for you.</p>
 <h2 id="share">Share a configured profile with a teammate</h2>
 <p>One .ocmac file brings together the gateway, networks, DNS zones and SSO form rules. New teammates can start with settings you have already checked.</p>
 <pre><code>ocmac export main team.ocmac</code></pre>
