@@ -31,7 +31,9 @@ publish() {
     cp Formula/README.md "$tap/README.md"
     git -C "$tap" rm --ignore-unmatch tap_migrations.json
     git -C "$tap" add Formula/openconnect-for-mac.rb README.md
-    git -C "$tap" commit -q -m "ocmac $ver"
+    if ! git -C "$tap" diff --cached --quiet; then
+        git -C "$tap" commit -q -m "ocmac $ver"
+    fi
     git -C "$tap" push -q origin main
 
     # Заметки к релизу — из CHANGELOG, раздел этой версии.
