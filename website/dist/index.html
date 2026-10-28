@@ -40,12 +40,13 @@ if(w==="ru")location.replace("ru/"+location.hash)})()</script>
     <figure><img src="assets/demo-en.gif" width="373" height="595" alt="OpenConnect for Mac menu: connect, switch off a network, pause"><figcaption>The real menu on a demo profile.</figcaption></figure>
   </section>
   <section class="pros" aria-label="Why OpenConnect for Mac">
-    <div><h2>Password and code filled in for you</h2><p>Password and one-time code come from Keychain, KeePassXC or your own command. The sign-in window shows up only when a person is needed.</p></div>
+    <div><h2>SSO: fill in multiple sign-in steps</h2><p>Teach the web form once. Passwords and one-time codes come from Keychain, KeePassXC or your own command. Cisco single-sign-on-v2 uses a WebKit sign-in window.</p></div>
     <div><h2>Work networks through VPN; everything else uses your usual connection</h2><p>Only the networks in your profile go through the tunnel; everything else, home network included, goes the usual way. Switch them from the menu without reconnecting.</p></div>
-    <div><h2>Smart DNS: yours and the company’s at once</h2><p>Company domains resolve through the company DNS, everything else through yours. System DNS stays untouched.</p></div>
-    <div><h2>An app, not a terminal</h2><p>A native macOS menu: connect, pause, switch networks, read logs. A setup wizard and a profile editor; the CLI is there for automation.</p></div>
+    <div><h2>Smart DNS: yours and the company’s at once</h2><p>Company domains resolve through the company DNS, everything else through yours. Switch individual zones from the menu. System DNS stays untouched.</p></div>
+    <div><h2>A native macOS menu with pause</h2><p>Built with SwiftUI. Pause removes the app’s routes and DNS zones while keeping the VPN session; resume restores them. Profiles and logs open from the menu.</p></div>
     <div><h2>Survives sleep and network changes</h2><p>The supervisor brings the connection back after sleep, Wi-Fi changes and dropped links, without opening a sign-in window on its own.</p></div>
   </section>
+  <p class="muted">OpenConnect already has a graphical client: <a href="https://gitlab.com/openconnect/openconnect-gui">OpenConnect GUI</a>. I build OpenConnect for Mac around my daily workflow: multi-step SSO in WebKit, individual route and DNS-zone switches, pausing without ending the session, and a ready-to-use profile from a teammate.</p>
   <section class="compatibility" aria-labelledby="compatibility-title">
     <h2 id="compatibility-title">Where it has been tested</h2>
     <p>Real connection: an AnyConnect-compatible gateway with Keycloak, macOS 26 on Apple Silicon. Used daily by the author.</p>

@@ -50,10 +50,8 @@ ocmac status</code></pre>
 <p>В приложении также есть окно диагностики и журналов. Начните с неуспешных проверок; уточните у администратора шлюз, группу и требования входа. Типовые проблемы описаны в <a href="https://github.com/ValeraGin/openconnect-for-mac/blob/main/TROUBLESHOOTING.md">инструкции по диагностике</a>. Перед публикацией журналов в issue удалите из них адреса рабочих шлюзов, имена учётных записей, cookies и токены.</p>
 <h2>Обновление</h2>
 <pre><code>brew upgrade openconnect-for-mac
-ocmac app stop
-ocmac app start
 ocmac doctor</code></pre>
-<p>Если история выпуска или диагностика сообщает об устаревшем помощнике, повторите <code>sudo ocmac install</code>. Автоматически обновления не устанавливаются.</p>
+<p>Если история выпуска или диагностика сообщает об устаревшем помощнике, повторите <code>ocmac prepare &amp;&amp; sudo ocmac install</code>. Homebrew обновляет копию приложения в меню вместе с клиентом. Для восстановления копии используйте <code>ocmac app upgrade</code>.</p>
 <h2 id="share">Передайте готовый профиль коллеге</h2>
 <p>Один файл .ocmac объединяет шлюз, сети, зоны DNS и правила заполнения формы SSO. Это помогает новым коллегам начать с уже проверенных настроек.</p>
 <pre><code>ocmac export main team.ocmac</code></pre>

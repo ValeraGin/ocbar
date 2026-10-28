@@ -14,14 +14,14 @@
   "demo_alt": "OpenConnect for Mac menu: connect, switch off a network, pause",
   "demo_caption": "The real menu on a demo profile.",
   "pros_label": "Why OpenConnect for Mac",
-  "p1_t": "Password and code filled in for you",
-  "p1_d": "Password and one-time code come from Keychain, KeePassXC or your own command. The sign-in window shows up only when a person is needed.",
+  "p1_t": "SSO: fill in multiple sign-in steps",
+  "p1_d": "Teach the web form once. Passwords and one-time codes come from Keychain, KeePassXC or your own command. Cisco single-sign-on-v2 uses a WebKit sign-in window.",
   "p2_t": "Work networks through VPN; everything else uses your usual connection",
   "p2_d": "Only the networks in your profile go through the tunnel; everything else, home network included, goes the usual way. Switch them from the menu without reconnecting.",
   "p3_t": "Smart DNS: yours and the company’s at once",
-  "p3_d": "Company domains resolve through the company DNS, everything else through yours. System DNS stays untouched.",
-  "p4_t": "An app, not a terminal",
-  "p4_d": "A native macOS menu: connect, pause, switch networks, read logs. A setup wizard and a profile editor; the CLI is there for automation.",
+  "p3_d": "Company domains resolve through the company DNS, everything else through yours. Switch individual zones from the menu. System DNS stays untouched.",
+  "p4_t": "A native macOS menu with pause",
+  "p4_d": "Built with SwiftUI. Pause removes the app’s routes and DNS zones while keeping the VPN session; resume restores them. Profiles and logs open from the menu.",
   "p5_t": "Survives sleep and network changes",
   "p5_d": "The supervisor brings the connection back after sleep, Wi-Fi changes and dropped links, without opening a sign-in window on its own.",
   "install_title": "Install",
@@ -37,5 +37,7 @@
   "compat_ci": "Automated checks: ocserv and test SSO gateways. These do not confirm compatibility with real Okta or Microsoft Entra ID deployments.",
   "compat_limits": "Requires macOS 14.4+. Intel and macOS 14.4–15 have no real-device verification. A clean installation and first sign-in on another Mac have not been tested yet.",
   "feedback_link": "Tried your gateway? Tell us how it went",
-  "feedback_note": "A short report helps clarify compatibility. No company name, gateway address or sign-in details needed."
+  "feedback_note": "A short report helps clarify compatibility. No company name, gateway address or sign-in details needed.",
+  "alternative_intro": "OpenConnect already has a graphical client:",
+  "alternative_focus": "I build OpenConnect for Mac around my daily workflow: multi-step SSO in WebKit, individual route and DNS-zone switches, pausing without ending the session, and a ready-to-use profile from a teammate."
 }
