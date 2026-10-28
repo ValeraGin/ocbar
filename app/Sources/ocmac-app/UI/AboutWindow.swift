@@ -109,6 +109,7 @@ struct AboutView: View {
 }
 
 enum WindowID {
+    static let connection = "connection"
     static let quickProfile = "quick-profile"
     static let settings = "settings"
     static let logs = "logs"

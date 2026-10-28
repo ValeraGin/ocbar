@@ -409,6 +409,8 @@ struct MenuContent: View {
             .keyboardShortcut("p", modifiers: [.command, .option])
             .disabled(!idle)
         }
+        Button(L("Открыть OpenConnect for Mac")) { WindowBridge.open(WindowID.connection) }
+            .keyboardShortcut("o")
         Button(L("Настройки…")) { WindowBridge.open(WindowID.settings) }
             .keyboardShortcut(",")
         Button(L("Диагностика и журналы…")) { WindowBridge.open(WindowID.diagnostics) }

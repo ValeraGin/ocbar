@@ -144,7 +144,6 @@
 "URL, хост:порт или имя" = "URL, host:port or a name";
 "Показать файл, как он будет записан" = "Show the file as it will be written";
 "Дополнительно" = "Advanced";
-"User-Agent, MTU, DTLS, CSD, правила" = "User-Agent, MTU, DTLS, CSD, rules";
 "Режим подключения" = "Connection mode";
 "Режим — свойство профиля: новый режим начнёт действовать со следующего подключения." = "The mode belongs to the profile: a new mode takes effect on the next connection.";
 "Порт" = "Port";
@@ -244,7 +243,6 @@
 "Сохранить их, прежде чем открыть другой профиль?" = "Save them before opening another profile?";
 "Пока профиль был открыт, файл записали снаружи — разметка формы, «Запомнить, как я вхожу» или ocmac rules. «Перечитать» покажет файл с диска, правки здесь пропадут; «Перезаписать» запишет форму, и пропадёт то, что записали снаружи." = "While the profile was open the file was written from outside — the form learn step, “learn my sign-in”, or ocmac rules. “Reload” shows the file from disk and drops the edits here; “Overwrite” writes this form and drops what was written outside.";
 "Файл %@ уже существует. Перезаписать его содержимым этой формы? Прошлая версия останется рядом с суффиксом .bak." = "The file %@ already exists. Overwrite it with this form? The previous version stays next to it with a .bak suffix.";
-"адрес не задан" = "no address set";
 "Сначала сохраните профиль" = "Save the profile first";
 "Подключиться этим профилем" = "Connect with this profile";
 "Переключиться на «%@»?" = "Switch to “%@”?";
@@ -511,7 +509,6 @@
 // Profile setup and first connection
 "Не удалось получить список импортированных профилей" = "Could not read the list of imported profiles";
 "Не удалось проверить системную часть профиля" = "Could not check the profile’s system components";
-"Показать или скрыть список профилей" = "Show or hide the profile list";
 "Вводить при подключении" = "Enter when connecting";
 "Проверяю и сохраняю…" = "Checking and saving…";
 "Проверяю готовность…" = "Checking readiness…";
@@ -570,3 +567,7 @@
 "Настроить вручную…" = "Set up manually…";
 
 "Независимый проект. Не связан с проектом OpenConnect или Cisco." = "Independent project. Not affiliated with the OpenConnect project or Cisco.";
+"Сервер" = "Server";
+"Открыть OpenConnect for Mac" = "Open OpenConnect for Mac";
+"Управление профилями…" = "Manage profiles…";
+"Режим, сети, параметры входа" = "Mode, networks, sign-in options";

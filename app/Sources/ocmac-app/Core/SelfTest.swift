@@ -518,10 +518,12 @@ extension SelfTest {
         check("редактор: разметка доступна у открытого профиля", ProfileEditorView.probeLearnEnabled == true,
               "кнопка " + (ProfileEditorView.probeLearnEnabled.map { $0 ? "доступна" : "серая" } ?? "не отрисована"))
 
-        // Выбор другого профиля в списке — ровно то, что делает человек.
-        // Профили в списке по алфавиту, «b» — последняя строка.
-        if let table = views(NSTableView.self).first, table.numberOfRows > 0 {
-            table.selectRowIndexes(IndexSet(integer: table.numberOfRows - 1), byExtendingSelection: false)
+        // Выбор другого профиля через тот же компактный Picker, что видит человек.
+        if let picker = views(NSPopUpButton.self).first(where: { $0.itemTitles.contains("Бета") }) {
+            // SwiftUI хранит действие выбора на NSMenuItem. Простая смена
+            // selectedItem у NSPopUpButton не обновляет Binding.
+            let index = picker.indexOfItem(withTitle: "Бета")
+            picker.menu?.performActionForItem(at: index)
             settle(2)
             check("редактор: выбран второй профиль", shows("Бета"))
             check("редактор: разметка доступна после выбора другого профиля", ProfileEditorView.probeLearnEnabled == true,
@@ -536,7 +538,7 @@ extension SelfTest {
                   "сверок с диском \(ProfileEditorView.probeDiskChecks - checksBefore), последняя: «\(ProfileEditorView.probeDiskNote)»; поля: "
                   + views(NSTextField.self).map(\.stringValue).filter { $0.contains("Бета") }.joined(separator: ", "))
         } else {
-            check("редактор: список профилей найден", false)
+            check("редактор: выбор профиля найден", false)
         }
         return failures
     }

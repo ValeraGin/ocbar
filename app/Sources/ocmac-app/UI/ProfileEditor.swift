@@ -14,8 +14,7 @@ struct ProfileEditorView: View {
     @State private var saving = false
     @State private var systemState: ProfileSystemState?
     @State private var checkingSystem = false
-    @State private var showProfileList: Bool?
-    private var profileListVisible: Bool { showProfileList ?? (files.count + legacy.count > 1) }
+    @State private var showProfileList = false
     @State private var files: [String] = []
     @State private var legacy: [ProfileEntry] = []
     @State private var selected: String?
@@ -53,7 +52,7 @@ struct ProfileEditorView: View {
     @State private var learnResult: String?
     // Редкое свёрнуто: наверху то, что нужно для входа.
     @State private var showNets = false
-    @State private var showMore = CommandLine.arguments.contains("--advanced")
+    @State private var showMore = CommandLine.arguments.contains("--advanced") || CommandLine.arguments.contains("--segment")
     // Есть ли пароль и секрет кода в связке — `ocmac secret status --short`.
     @State private var secrets: [String: String] = [:]
     // Редактор разбит на три части, как вкладки профиля: вход, режим, сети.
@@ -94,14 +93,9 @@ struct ProfileEditorView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if profileListVisible {
-                sidebar.frame(width: 230)
-                Divider()
-            }
-            editor.frame(minWidth: 520, maxWidth: .infinity)
-        }
-        .frame(minWidth: profileListVisible ? 760 : 520, minHeight: 540)
+        let _ = { Self.probeLearnEnabled = !learnDisabled }()
+        editor
+        .frame(minWidth: 560, minHeight: 540)
         .disabled(saving)
         .onAppear { reloadList(); loadVersions() }
         // Файл могли записать снаружи: ocmac rules из терминала, разметка,
@@ -255,39 +249,39 @@ struct ProfileEditorView: View {
 
     private var editor: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .center, spacing: 12) {
-                    Button { showProfileList = !profileListVisible } label: { Image(systemName: "sidebar.left") }
-                        .help(L("Показать или скрыть список профилей"))
-                    Button {
-                        if dirty { alert = .unsaved(.new) } else { newDoc() }
-                    } label: { Image(systemName: "plus") }
-                        .help(L("Новый профиль"))
-                    Button(L("Открыть профиль…")) { QuickProfileFlow.shared.chooseFile() }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(doc.name.trimmed.isEmpty ? (loadedName == nil ? L("Новый профиль") : doc.fileName) : doc.name)
-                            .font(.system(size: 20, weight: .semibold)).lineLimit(1)
-                        Text(doc.url.trimmed.isEmpty ? L("адрес не задан") : doc.url)
-                            .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
-                            .textSelection(.enabled)
+            HStack(spacing: 8) {
+                Picker(L("Профиль"), selection: $selected) {
+                    if loadedName == nil { Text(L("Новый профиль")).tag(String?.none) }
+                    ForEach(files, id: \.self) { name in
+                        Text(title(of: name)).tag(Optional(name))
                     }
-                    Spacer()
-                    connectControl
                 }
-                Picker("", selection: $segment) {
-                    ForEach(Segment.allCases, id: \.self) { Text($0.title).tag($0) }
+                .onChange(of: selected) { name in
+                    guard let name, name != loadedName else { return }
+                    if dirty { selected = loadedName; alert = .unsaved(.file(name)) }
+                    else { open(name) }
                 }
-                .pickerStyle(.segmented).labelsHidden()
+                Button {
+                    if dirty { alert = .unsaved(.new) } else { newDoc() }
+                } label: { Image(systemName: "plus") }
+                .help(L("Новый профиль"))
+                Menu {
+                    Button(L("Открыть профиль…")) { QuickProfileFlow.shared.chooseFile() }
+                    Divider()
+                    Button(L("Управление профилями…")) { showProfileList = true }
+                    Button(L("Показать папку профилей")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: OCMacClient.shared.profileDir)])
+                    }
+                } label: { Image(systemName: "ellipsis.circle") }
+                .fixedSize()
+                .help(L("Управление профилями…"))
+                .popover(isPresented: $showProfileList) { sidebar.frame(width: 280, height: 360) }
+                Spacer()
+                connectControl
             }
             .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 4)
-            Form {
-                switch segment {
-                case .connection: connectionSections
-                case .mode: modeSections
-                case .networks: networkSections
-                }
-            }
-            .formStyle(.grouped)
+            Form { connectionSections }
+                .formStyle(.grouped)
             Divider()
             bottomBar
         }
@@ -374,7 +368,6 @@ struct ProfileEditorView: View {
     private var connectionSections: some View {
         Section(L("Подключение")) {
             field(L("Название"), $doc.name, hint: L("как в меню"))
-            field(L("Описание"), $doc.descr, hint: L("вторая строка в меню"))
             field(L("Адрес"), $doc.url, hint: L("vpn.example.com/группа"))
             field(L("Пользователь"), $doc.user)
         }
@@ -395,11 +388,6 @@ struct ProfileEditorView: View {
                  : doc.password == "ask" ? L("Пароль вводит человек — молчаливое переподключение работать не будет.")
                  : L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC.")))
         }
-        if doc.auth != "password" {
-            Section {
-                learnBlock
-            } header: { Text(L("Форма входа")) }
-        }
         Section {
             // Вся строка нажимается, а не только треугольник: у стандартного
             // раскрывающегося блока в форме в него было трудно попасть.
@@ -413,7 +401,7 @@ struct ProfileEditorView: View {
                         .frame(width: 14)
                     Text(L("Дополнительно")).foregroundStyle(.primary)
                     Spacer()
-                    Text(L("User-Agent, MTU, DTLS, CSD, правила")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(L("Режим, сети, параметры входа")).font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                 .contentShape(Rectangle())
@@ -421,7 +409,29 @@ struct ProfileEditorView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L("Дополнительно"))
             .accessibilityValue(showMore ? L("раскрыто") : L("свёрнуто"))
-            if showMore {
+        }
+        if showMore {
+            Section {
+                Picker("", selection: $segment) {
+                    ForEach(Segment.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+            }
+            switch segment {
+            case .connection: advancedConnectionSections
+            case .mode: modeSections
+            case .networks: networkSections
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var advancedConnectionSections: some View {
+        if doc.auth != "password" {
+            Section { learnBlock } header: { Text(L("Форма входа")) }
+        }
+        Section {
+                field(L("Описание"), $doc.descr, hint: L("вторая строка в меню"))
                 field(L("Прокси для подключения"), $doc.upstreamProxy, hint: "http://127.0.0.1:10808")
                 Footnote(L("HTTP CONNECT или SOCKS5 без пароля. Вход и VPN идут через этот прокси; DTLS выключается. Для SSO нужна macOS 14 или новее. Пусто — обычное подключение."))
                 // Откуда брать пароль и код — для тех, кто держит их в
@@ -469,7 +479,6 @@ struct ProfileEditorView: View {
                         .padding(8)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                 }
-            }
         }
     }
 
@@ -493,7 +502,7 @@ struct ProfileEditorView: View {
                     .help(secretsReady ? L("Пароль ляжет в связку ключей macOS") : L("Сначала сохраните профиль"))
                 } else {
                     Text(sourceWords(doc.password)).foregroundStyle(.secondary)
-                    Button(L("Изменить…")) { showMore = true }
+                    Button(L("Изменить…")) { segment = .connection; showMore = true }
                 }
             }
         } label: { Text(L("Пароль")) }
@@ -520,7 +529,7 @@ struct ProfileEditorView: View {
                     .help(secretsReady ? L("Код ляжет в связку ключей macOS") : L("Сначала сохраните профиль"))
                 } else {
                     Text(sourceWords(doc.totp)).foregroundStyle(.secondary)
-                    Button(L("Изменить…")) { showMore = true }
+                    Button(L("Изменить…")) { segment = .connection; showMore = true }
                 }
             }
         } label: { Text(L("Одноразовый код")) }
@@ -1202,6 +1211,7 @@ struct ProfileEditorView: View {
         if now.text == nil {
             loadedName = nil
             disk = nil
+            selected = nil
             files = ProfileStore.list()
             message = L("файл профиля удалён на диске — «Сохранить» запишет его заново")
             return

@@ -183,8 +183,32 @@ struct StageWindowsView: View {
 struct ScreenshotSettingsView: View {
     var body: some View {
         SettingsWindow()
-            .frame(width: 1000, height: 660)
+            .frame(width: 620, height: 640)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .underPageBackgroundColor))
+    }
+}
+
+// То же главное окно на вымышленных данных, без сетевых действий.
+struct ScreenshotConnectionView: View {
+    @StateObject private var store: StatusStore = {
+        let args = CommandLine.arguments
+        let value = args.firstIndex(of: "--state").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        let states: [String: Presentation] = ["connected": .connected, "down": .down,
+            "paused": .paused, "starting": .starting, "needsLogin": .needsLogin,
+            "lost": .lost, "missing": .missing, "foreign": .foreign]
+        let presentation = value.flatMap { states[$0] } ?? .down
+        return StatusStore(preview: Fixture.status(presentation))
+    }()
+
+    var body: some View {
+        ConnectionView(store: store, demo: true)
+            .frame(width: 440, height: 240)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

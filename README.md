@@ -113,9 +113,14 @@ directories, and it only touches what it created itself. See
   networks and DNS zones as checkmark submenus, pause and the usual commands
   below. The menu bar icon fills step by step while connecting. Hold ⌥ while
   opening the menu for connection details: tunnel address, gateway, MTU,
-  resolvers, speed, traffic, latency. Settings hold the profile editor, notification
+  resolvers, speed, traffic, latency. Choose **Open OpenConnect for Mac** for a compact
+  window with a profile selector, connection status and Connect/Disconnect button.
+  The profile editor keeps network, proxy and advanced sign-in options under **Advanced**.
+  Settings hold the profile editor, notification
   settings and diagnostics with logs; a first-run wizard walks through system
   component → profile → first login.
+
+![Connection window](assets/connection.png)
 
 ## Try it without a VPN
 

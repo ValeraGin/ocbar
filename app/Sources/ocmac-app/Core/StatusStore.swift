@@ -133,7 +133,7 @@ final class StatusStore: ObservableObject {
         trafficTimer = traffic
     }
 
-    private func refreshHelperState() {
+    func refreshHelperState() {
         guard !isPreview else { return }
         // `version --all` бывает долгим (до 15 с) — не на очереди опроса.
         DispatchQueue.global(qos: .utility).async { [weak self] in

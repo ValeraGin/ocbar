@@ -20,7 +20,12 @@ struct OCMacApp: App {
         // Ссылки ocmac:// (уведомления от клиента, проверки) разбирает
         // AppDelegate. Без пустого handlesExternalEvents SwiftUI на каждую
         // ссылку открывал бы окно настроек.
+        Window("OpenConnect for Mac", id: WindowID.connection) { ConnectionView() }
+            .defaultSize(width: 440, height: 240)
+            .windowResizability(.contentMinSize)
+            .handlesExternalEvents(matching: [])
         Window(L("Настройка OpenConnect for Mac"), id: WindowID.settings) { SettingsWindow() }
+            .defaultSize(width: 620, height: 640)
             .handlesExternalEvents(matching: [])
         Window(L("Открыть профиль OpenConnect for Mac"), id: WindowID.quickProfile) { QuickProfileView() }
             .windowResizability(.contentSize)
@@ -139,6 +144,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setIcon(MenuBarIcon.image(for: status, blink: blinkOn))
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !CommandLine.arguments.contains("--stage") {
+            WindowBridge.open(WindowID.connection)
+        }
+        return true
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Только значок в меню-баре: ни в Dock, ни в переключателе приложений
         // ему делать нечего.
@@ -233,7 +245,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Меню снимается с запасом по высоте, пустое поле снизу срезается
         // при съёмке: высота зависит от языка, замер SwiftUI её занижает.
         let size: NSSize = screenshot == "quick-profile" ? NSSize(width: 668, height: 620)
-            : screenshot == "settings" ? NSSize(width: 1048, height: 708)
+            : screenshot == "connection" ? NSSize(width: 488, height: 288)
+            : screenshot == "settings" ? NSSize(width: 668, height: 688)
             : screenshot == "setup" ? NSSize(width: 800, height: 660)
             : screenshot == "icons" ? NSSize(width: 980, height: 360) : NSSize(width: 1500, height: 2400)
         // Кадр README — в окне без рамки: окно с заголовком система подгоняет
@@ -252,6 +265,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.contentView = NSHostingView(rootView: QuickProfileView().padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(nsColor: .windowBackgroundColor)))
+        } else if screenshot == "connection" {
+            let host = NSHostingView(rootView: ScreenshotConnectionView())
+            host.sizingOptions = []
+            window.contentView = host
         } else if screenshot == "settings" {
             let host = NSHostingView(rootView: ScreenshotSettingsView())
             host.sizingOptions = []
