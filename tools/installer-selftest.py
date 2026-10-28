@@ -19,7 +19,7 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocmac='', command_string=False, migrated_profile=False):
+def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501', version='15.0', embedded=False, old_ocmac='', command_string=False, migrated_profile=False, installed=False, head_fail=False):
     tmp = tempfile.TemporaryDirectory(prefix='ocmac installer test ')
     base = Path(tmp.name)
     fake = base / 'bin'
@@ -28,9 +28,12 @@ def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501
     (base / 'prefix/bin').mkdir(parents=True)
     log = base / 'calls'
     log.touch()
+    if installed:
+        (base / 'installed').touch()
     clean_env = {k: v for k, v in os.environ.items() if not k.startswith('OCMAC_')}
     env = dict(clean_env, HOME=str(base / 'home'), PATH=f'{fake}:/usr/bin:/bin:/usr/sbin:/sbin',
-               TEST_BASE=str(base), TEST_LOG=str(log), TEST_OLD=old_ocmac, TEST_MIGRATED=str(int(migrated_profile)))
+               TEST_BASE=str(base), TEST_LOG=str(log), TEST_OLD=old_ocmac, TEST_MIGRATED=str(int(migrated_profile)),
+               TEST_HEAD_FAIL=str(int(head_fail)))
     # Only replace the fallback Homebrew locations so a real local brew cannot be used.
     script = (ROOT / 'install.sh').read_text().replace('/opt/homebrew/bin/brew', shlex.quote(str(fake / 'brew')))
     script = script.replace('/usr/local/bin/brew', shlex.quote(str(fake / 'brew')))
@@ -49,7 +52,13 @@ def scenario(*args, brew=True, tools=True, answer='y', system='Darwin', uid='501
 case "$1" in
     --prefix) if [ "$#" = 1 ] || [ "$2" = ValeraGin/openconnect-for-mac/openconnect-for-mac ]; then echo "$TEST_BASE/prefix"; else echo "Ambiguous formula name" >&2; exit 1; fi ;;
     list) [ -f "$TEST_BASE/installed" ] ;;
-    install|reinstall) touch "$TEST_BASE/installed" ;;
+    reinstall) [ "${2:-}" != --HEAD ] || { echo 'invalid option: --HEAD' >&2; exit 1; } ;;
+    install)
+        if [ "${2:-}" = --HEAD ]; then
+            [ "$TEST_HEAD_FAIL" != 1 ] || exit 1
+            if [ -f "$TEST_BASE/installed" ] && [[ " $* " != *" --skip-link "* ]]; then exit 1; fi
+        fi
+        touch "$TEST_BASE/installed" ;;
     upgrade) if [ "$TEST_OLD" = upgradable ]; then touch "$TEST_BASE/inline-supported"; fi ;;
     help) exit 0 ;;
 esac
@@ -255,8 +264,22 @@ def main():
         assert 'brew install --HEAD' in (base / 'calls').read_text()
         code, output = rerun()
         assert code == 0, output
-        assert 'brew reinstall --HEAD' in (base / 'calls').read_text()
-    print('OK: explicit HEAD install and reinstall')
+        calls = (base / 'calls').read_text()
+        assert 'brew reinstall --HEAD' not in calls
+        assert 'brew install --HEAD --fetch-HEAD --skip-link' in calls
+        assert 'brew link --HEAD' in calls
+    print('OK: explicit HEAD install and refresh')
+    tmp, base, code, output, _ = scenario('--head', installed=True)
+    with tmp:
+        assert code == 0, output
+        calls = (base / 'calls').read_text()
+        assert calls.index('brew install --HEAD --fetch-HEAD --skip-link') < calls.index('brew unlink') < calls.index('brew link --HEAD')
+    tmp, base, code, output, _ = scenario('--head', installed=True, head_fail=True)
+    with tmp:
+        assert code != 0, output
+        assert 'brew unlink' not in (base / 'calls').read_text()
+        assert 'sudo ' not in (base / 'calls').read_text()
+    print('OK: stable-to-HEAD switch keeps linked client until build succeeds')
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', migrated_profile=True)
     with tmp:
         assert code == 0, output

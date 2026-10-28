@@ -104,10 +104,14 @@ fi
 # New Homebrew requires explicit trust for third-party taps; older versions do not.
 if "$brew_bin" help trust >/dev/null 2>&1; then "$brew_bin" trust ValeraGin/openconnect-for-mac; fi
 formula=ValeraGin/openconnect-for-mac/openconnect-for-mac
-if ! "$brew_bin" list --versions "$formula" >/dev/null 2>&1; then
-    if [ "$head" = 1 ]; then "$brew_bin" install --HEAD "$formula"; else "$brew_bin" install "$formula"; fi
-elif [ "$head" = 1 ]; then
-    "$brew_bin" reinstall --HEAD "$formula"
+if [ "$head" = 1 ]; then
+    # Build beside the linked release; reinstall does not accept --HEAD.
+    # Keep the current client available until the new build succeeds.
+    "$brew_bin" install --HEAD --fetch-HEAD --skip-link "$formula"
+    "$brew_bin" unlink "$formula"
+    "$brew_bin" link --HEAD "$formula"
+elif ! "$brew_bin" list --versions "$formula" >/dev/null 2>&1; then
+    "$brew_bin" install "$formula"
 else
     "$brew_bin" upgrade "$formula"
 fi
