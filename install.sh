@@ -108,7 +108,9 @@ if [ "$head" = 1 ]; then
     # Build beside the linked release; reinstall does not accept --HEAD.
     # Keep the current client available until the new build succeeds.
     "$brew_bin" install --HEAD --fetch-HEAD --skip-link "$formula"
-    "$brew_bin" unlink "$formula"
+    # --skip-link may move opt/ to HEAD while bin/ still points at stable.
+    # Unlink the actual linked keg, not the keg selected through opt/.
+    "$brew_bin" ruby -e 'require "keg"; ref = HOMEBREW_LINKED_KEGS/"openconnect-for-mac"; if ref.symlink? && ref.directory?; keg = Keg.new(ref.realpath); keg.lock { keg.unlink }; end'
     "$brew_bin" link --HEAD "$formula"
 elif ! "$brew_bin" list --versions "$formula" >/dev/null 2>&1; then
     "$brew_bin" install "$formula"

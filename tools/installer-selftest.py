@@ -273,11 +273,13 @@ def main():
     with tmp:
         assert code == 0, output
         calls = (base / 'calls').read_text()
-        assert calls.index('brew install --HEAD --fetch-HEAD --skip-link') < calls.index('brew unlink') < calls.index('brew link --HEAD')
+        assert calls.index('brew install --HEAD --fetch-HEAD --skip-link') < calls.index('brew ruby') < calls.index('brew link --HEAD')
+        assert 'HOMEBREW_LINKED_KEGS/"openconnect-for-mac"' in calls
     tmp, base, code, output, _ = scenario('--head', installed=True, head_fail=True)
     with tmp:
         assert code != 0, output
         assert 'brew unlink' not in (base / 'calls').read_text()
+        assert 'brew ruby' not in (base / 'calls').read_text()
         assert 'sudo ' not in (base / 'calls').read_text()
     print('OK: stable-to-HEAD switch keeps linked client until build succeeds')
     tmp, base, code, output, _ = scenario('--profile', 'PROFILE', migrated_profile=True)
