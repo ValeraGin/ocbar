@@ -5,7 +5,7 @@ class OpenconnectForMac < Formula
   # архива не нужно считать заранее.
   url "https://github.com/ValeraGin/openconnect-for-mac.git",
       tag:      "v0.26.0",
-      revision: "98d50492a52e494cdcb4760b15a4c4f29de4ab12"
+      revision: "f25aae595ca0cb0fa5aab9c11414bddde5401f4e"
   license "MIT"
   head "https://github.com/ValeraGin/openconnect-for-mac.git", branch: "main"
 
