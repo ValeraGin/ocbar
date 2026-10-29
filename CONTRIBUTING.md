@@ -109,7 +109,7 @@ must not depend on the language: use exit codes or `--json`. Strings that are co
 against output of the CLI, or written into files, are not UI text and stay
 unwrapped.
 
-Visual review: build the app, then run `python3 tools/design-review.py`.
+Visual review: build the app, then run `python3 tools/design-review.py --capture-active`.
 It opens the production SwiftUI window scenes with synthetic data and captures
 them through macOS `screencapture`. Windows take focus one at a time; do not
 switch apps during the run. Screen Recording access must be available. Each PNG
@@ -117,6 +117,10 @@ has a JSON sidecar proving that its window was active, key and main, and recordi
 its actual size and appearance. Tall forms are reviewed by scrolling within the
 screen, not by rendering an oversized invisible window. Use `--only <case>` to
 repeat a case; the gallery is saved in `.local/active-design-review/`.
+Active capture interrupts normal work: agree on a capture window before running
+it. The runner requires an explicit capture mode and otherwise exits without
+opening windows. While the user works, review saved frames and run checks that
+do not activate UI; do not run menu benchmarks or active captures.
 If another app takes focus, the case is rejected and retried. Use `--resume` to
 continue an interrupted matrix: only verified captures from the same app binary
 and case definition are reused. Activation is done through LaunchServices, while

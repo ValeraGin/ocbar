@@ -22,9 +22,12 @@ def main():
     parser.add_argument('--output', type=Path, default=ROOT / '.local/active-design-review')
     parser.add_argument('--jobs', type=int, default=1)
     parser.add_argument('--resume', action='store_true', help='Reuse verified captures from the same binary and case')
+    parser.add_argument('--capture-active', action='store_true', help='Explicitly allow real windows to take focus during capture')
     parser.add_argument('--offscreen', action='store_true', help='Layout-only cache renders; not valid for color review')
     parser.add_argument('--only', action='append', default=[], help='Render IDs containing this text (repeatable)')
     args = parser.parse_args()
+    if args.capture_active == args.offscreen:
+        parser.error('Choose --capture-active only when taking focus is acceptable, or --offscreen for layout-only renders')
     if not args.offscreen and args.jobs != 1:
         parser.error("Active windows must be captured sequentially (--jobs 1)")
     out = args.output.resolve()
