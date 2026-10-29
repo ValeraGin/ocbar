@@ -17,9 +17,13 @@ struct ConnectionView: View {
     private var active: Bool { [.connected, .lost, .paused, .starting].contains(status.presentation) }
     private var selected: ProfileEntry? { status.profiles.first { $0.name == selectedProfile } }
     private var locked: Bool { active || store.busy != nil }
+    private var headline: String {
+        if let busy = store.busy { return busy }
+        return status.presentation == .missing ? look.title : look.subtitle
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(L("Профиль"))
                 Picker(L("Профиль"), selection: $selectedProfile) {
@@ -32,6 +36,7 @@ struct ConnectionView: View {
                 .labelsHidden()
                 .disabled(locked || status.profiles.isEmpty)
             }
+            .help(selected?.display ?? selectedProfile)
 
             if let address = selected?.address, !address.isEmpty {
                 HStack(alignment: .firstTextBaseline) {
@@ -48,14 +53,24 @@ struct ConnectionView: View {
                 StateDot(color: look.color, pulsing: look.pulsing)
                     .padding(.top, 4)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(store.busy ?? look.subtitle).fontWeight(.medium)
+                    Text(headline).fontWeight(.medium)
                     if let step = ConnectStep.of(status) {
                         Text(step.title).foregroundStyle(.secondary)
+                    } else if status.presentation == .missing {
+                        Text(L("Настройте клиент, чтобы подключаться к VPN.")).foregroundStyle(.secondary)
                     } else if let note = look.note {
                         Text(note).foregroundStyle(.secondary)
                     }
+                    if status.isProxySession { proxyDetails }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
+            }
+
+            if status.presentation == .missing, let note = look.note {
+                DisclosureGroup(L("Технические подробности")) {
+                    Text(note).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
             }
 
             if let message = store.actionNote ?? store.lastError ?? status.error ?? store.helperWarning {
@@ -66,29 +81,19 @@ struct ConnectionView: View {
                 Button(L("Журнал…")) { if !demo { WindowBridge.open(WindowID.logs) } }
             }
 
-            HStack {
-                Button(L("Настройки…")) { if !demo { WindowBridge.open(WindowID.settings) } }
-                Spacer()
-                if status.presentation == .missing {
-                    Button(L("Настроить OpenConnect for Mac…")) { if !demo { WindowBridge.open(WindowID.setup) } }
-                } else if status.profiles.isEmpty && !active && store.busy == nil {
-                    Button(L("Открыть профиль…")) { if !demo { QuickProfileFlow.shared.chooseFile() } }
-                        .disabled(store.busy != nil)
-                    Button(L("Новый профиль")) { if !demo { WindowBridge.open(WindowID.setup) } }
-                        .disabled(store.busy != nil)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    settingsButton
+                    Spacer(minLength: 12)
+                    connectionActions
                 }
-                if status.presentation == .paused {
-                    Button(L("Возобновить")) { if !demo { store.resume() } }
-                        .disabled(store.busy != nil)
-                } else if [.connected, .lost].contains(status.presentation), !status.isProxySession {
-                    Button(L("Приостановить")) { if !demo { store.pause() } }
-                        .disabled(store.busy != nil)
+                VStack(alignment: .leading, spacing: 10) {
+                    settingsButton
+                    HStack {
+                        Spacer(minLength: 0)
+                        connectionActions
+                    }
                 }
-                if status.presentation == .needsLogin {
-                    Button(L("Не подключаться")) { if !demo { store.disconnect() } }
-                        .disabled(store.busy != nil)
-                }
-                if (store.busy != nil && store.cancelTitle != nil) || active || (!status.profiles.isEmpty && status.presentation != .missing) { mainButton }
             }
         }
         .padding(20)
@@ -105,6 +110,60 @@ struct ConnectionView: View {
         .onChange(of: store.finishedActions) { _, _ in
             if !demo { store.refreshHelperState() }
         }
+    }
+
+    private var settingsButton: some View {
+        Button(L("Настройки…")) { if !demo { WindowBridge.open(WindowID.settings) } }
+            .fixedSize()
+    }
+
+    private var proxyDetails: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(L("Прокси SOCKS"))
+                Text(status.socks.isEmpty ? "—" : status.socks).textSelection(.enabled)
+                if !status.socks.isEmpty {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(status.socks, forType: .string)
+                    } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(.borderless)
+                    .help(L("Скопировать"))
+                    .accessibilityLabel(L("Скопировать адрес SOCKS"))
+                }
+            }
+            Text(status.systemSocksOn.isEmpty
+                 ? (status.systemProxy ? L("Системный SOCKS: не включён") : L("Системный SOCKS: выключен в профиле"))
+                 : L("Системный SOCKS: включён на %@", status.systemSocksOn.joined(separator: ", ")))
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption)
+    }
+
+    private var connectionActions: some View {
+        HStack(spacing: 8) {
+            if status.presentation == .missing {
+                Button(L("Настроить клиент…")) { if !demo { WindowBridge.open(WindowID.setup) } }
+            } else if status.profiles.isEmpty && !active && store.busy == nil {
+                Button(L("Открыть профиль…")) { if !demo { QuickProfileFlow.shared.chooseFile() } }
+                    .disabled(store.busy != nil)
+                Button(L("Новый профиль")) { if !demo { WindowBridge.open(WindowID.setup) } }
+                    .disabled(store.busy != nil)
+            }
+            if status.presentation == .paused {
+                Button(L("Возобновить")) { if !demo { store.resume() } }
+                    .disabled(store.busy != nil)
+            } else if [.connected, .lost].contains(status.presentation), !status.isProxySession {
+                Button(L("Приостановить")) { if !demo { store.pause() } }
+                    .disabled(store.busy != nil)
+            }
+            if status.presentation == .needsLogin {
+                Button(L("Не подключаться")) { if !demo { store.disconnect() } }
+                    .disabled(store.busy != nil)
+            }
+            if (store.busy != nil && store.cancelTitle != nil) || active || (!status.profiles.isEmpty && status.presentation != .missing) { mainButton }
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder private var mainButton: some View {

@@ -52,7 +52,9 @@ struct ProfileEditorView: View {
     @State private var learnResult: String?
     // Редкое свёрнуто: наверху то, что нужно для входа.
     @State private var showNets = false
-    @State private var showMore = CommandLine.arguments.contains("--advanced") || CommandLine.arguments.contains("--segment")
+    @State private var showMore = !CommandLine.arguments.contains("--reveal-advanced")
+        && (CommandLine.arguments.contains("--advanced") || CommandLine.arguments.contains("--segment"))
+    @State private var advancedScrollRequest = 0
     // Есть ли пароль и секрет кода в связке — `ocmac secret status --short`.
     @State private var secrets: [String: String] = [:]
     // Редактор разбит на три части, как вкладки профиля: вход, режим, сети.
@@ -84,6 +86,14 @@ struct ProfileEditorView: View {
     @State private var autoFileName = ""
 
     private var errors: [Issue] { issues.filter { $0.level == .error } }
+    private var blankDraft: Bool {
+        loadedName == nil && doc.name.trimmed.isEmpty && doc.url.trimmed.isEmpty && doc.user.trimmed.isEmpty
+    }
+    private var connectDisabled: Bool {
+        loadedName == nil || dirty || !errors.isEmpty || saving || checkingSystem
+            || systemState?.ready != true || store.busy != nil || OCMacClient.shared.binary == nil
+    }
+    static var probeConnectEnabled: Bool?
 
     enum Next { case file(String), new }
     enum EditorAlert {
@@ -93,11 +103,19 @@ struct ProfileEditorView: View {
     }
 
     var body: some View {
-        let _ = { Self.probeLearnEnabled = !learnDisabled }()
+        let _ = { Self.probeLearnEnabled = !learnDisabled; Self.probeConnectEnabled = !connectDisabled }()
         editor
         .frame(minWidth: 560, minHeight: 540)
         .disabled(saving)
         .onAppear { reloadList(); loadVersions() }
+        .task {
+            if CommandLine.arguments.contains("--stage"), CommandLine.arguments.contains("--reveal-advanced") {
+                // Витрина проверяет тот же переход, что нажатие «Дополнительно».
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+                showMore = true
+            }
+        }
         // Файл могли записать снаружи: ocmac rules из терминала, разметка,
         // запоминание входа. Время изменения дёшево — смотрим раз в две
         // секунды и сразу по завершении любого действия. Цикл в .task, а не
@@ -282,6 +300,12 @@ struct ProfileEditorView: View {
             .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 4)
             Form { connectionSections }
                 .formStyle(.grouped)
+                .onChange(of: showMore) { _, expanded in
+                    if expanded { advancedScrollRequest += 1 }
+                }
+                .onChange(of: segment) { _, _ in
+                    if showMore { advancedScrollRequest += 1 }
+                }
             Divider()
             bottomBar
         }
@@ -320,8 +344,9 @@ struct ProfileEditorView: View {
                     if otherActive != nil { switchAsk = true } else { connectThis() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(loadedName == nil || dirty || saving || checkingSystem || systemState?.ready != true || store.busy != nil || OCMacClient.shared.binary == nil)
-                .help(loadedName == nil || dirty ? L("Сначала сохраните профиль") : L("Подключиться этим профилем"))
+                .disabled(connectDisabled)
+                .help(!errors.isEmpty ? L("Исправьте ошибки профиля перед подключением")
+                      : loadedName == nil || dirty ? L("Сначала сохраните профиль") : L("Подключиться этим профилем"))
             }
         }
         .alert(L("Переключиться на «%@»?", doc.name.trimmed.isEmpty ? doc.fileName : doc.name), isPresented: $switchAsk) {
@@ -358,7 +383,7 @@ struct ProfileEditorView: View {
     }
 
     private func connectThis() {
-        guard let name = loadedName else { return }
+        guard let name = loadedName, !connectDisabled else { return }
         store.connect(profile: name)
     }
 
@@ -384,7 +409,9 @@ struct ProfileEditorView: View {
         } footer: {
             Footnote(SecretNote.shown(secretNote, for: loadedName)
                  ?? (doc.auth == "password"
-                 ? L("Пароль OpenConnect for Mac подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может.")
+                 ? (doc.password == "ask"
+                    ? L("Пароль и код из SMS нужно ввести при подключении. Автоматическое переподключение недоступно.")
+                    : L("Пароль OpenConnect for Mac подставит сам, код из SMS спросит окном. Молча переподключиться такой профиль не может."))
                  : doc.password == "ask" ? L("Пароль вводит человек — молчаливое переподключение работать не будет.")
                  : L("Секреты хранятся вне профиля: в связке ключей или в KeePassXC.")))
         }
@@ -392,7 +419,8 @@ struct ProfileEditorView: View {
             // Вся строка нажимается, а не только треугольник: у стандартного
             // раскрывающегося блока в форме в него было трудно попасть.
             Button {
-                withAnimation(.easeOut(duration: 0.15)) { showMore.toggle() }
+                // Анимация Form восстанавливает прежнее смещение после прокрутки.
+                showMore.toggle()
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "chevron.right")
@@ -416,6 +444,7 @@ struct ProfileEditorView: View {
                     ForEach(Segment.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden()
+                .background(FormScrollTarget(request: advancedScrollRequest))
             }
             switch segment {
             case .connection: advancedConnectionSections
@@ -910,6 +939,7 @@ struct ProfileEditorView: View {
                     }
                 } label: { Image(systemName: "list.bullet") }
                     .menuStyle(.borderlessButton).fixedSize()
+                    .tint(Palette.accent)
                     .help(L("Строки известных клиентов: шлюзы иногда придираются к User-Agent"))
             }
         }
@@ -944,6 +974,7 @@ struct ProfileEditorView: View {
             }
             Button { doc.routes.append(""); touched() } label: { Label(L("Добавить сеть"), systemImage: "plus") }
                 .buttonStyle(.borderless)
+                .tint(Palette.accent)
         }
     }
 
@@ -972,6 +1003,7 @@ struct ProfileEditorView: View {
                 Label(L("Добавить зону"), systemImage: "plus")
             }
             .buttonStyle(.borderless)
+            .tint(Palette.accent)
         }
     }
 
@@ -988,17 +1020,13 @@ struct ProfileEditorView: View {
                         .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
                 }
             }
-            if !issues.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(issues) { issue in
-                        HStack(alignment: .top, spacing: 6) {
-                            Image(systemName: issue.level == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                .font(.system(size: 10))
-                                .foregroundStyle(issue.level == .error ? Palette.bad : Palette.warn)
-                            Text(issue.text).font(.system(size: 11)).foregroundStyle(Palette.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
+            if !issues.isEmpty && !blankDraft {
+                if issues.count > 2 {
+                    Text(L("Замечаний к профилю: %@", issues.count)).font(.system(size: 12, weight: .medium))
+                    ScrollView { issueList }
+                        .frame(height: 90)
+                } else {
+                    issueList
                 }
             }
             if let message {
@@ -1009,7 +1037,9 @@ struct ProfileEditorView: View {
                 if saving || checkingSystem {
                     ProgressView().controlSize(.small)
                     Text(saving ? L("Проверяю и сохраняю…") : L("Проверяю готовность…")).font(.system(size: 12)).foregroundStyle(.secondary)
-                } else if issues.isEmpty && systemState?.ready != false {
+                } else if blankDraft {
+                    Text(L("Укажите название и адрес сервера.")).font(.system(size: 12)).foregroundStyle(.secondary)
+                } else if issues.isEmpty && !doc.url.trimmed.isEmpty && systemState?.ready != false {
                     Label(L("Профиль без ошибок"), systemImage: "checkmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Palette.ok)
                 }
@@ -1024,6 +1054,21 @@ struct ProfileEditorView: View {
             }
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
+    }
+
+    private var issueList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(issues) { issue in
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: issue.level == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(issue.level == .error ? Palette.bad : Palette.warn)
+                    Text(issue.text).font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // --- служебное -------------------------------------------------------
@@ -1240,6 +1285,8 @@ struct ProfileEditorView: View {
         reloadLegacy()
         if selected == nil, loadedName == nil, let first = files.first {
             open(first)
+        } else if files.isEmpty, loadedName == nil, savedText == nil {
+            newDoc()
         }
     }
 
@@ -1338,6 +1385,51 @@ struct ProfileEditorView: View {
                     issues = [Issue(level: .error, text: L("перевод не удался: %@", text))]
                 }
             }
+        }
+    }
+}
+
+// Сгруппированная Form на macOS использует NSScrollView: ScrollViewReader
+// не прокручивает её к динамически добавленным секциям. Якорь ждёт нативной
+// раскладки и сдвигает только свой scroll view, один раз на запрос пользователя.
+private struct FormScrollTarget: NSViewRepresentable {
+    let request: Int
+
+    func makeNSView(context: Context) -> AnchorView { AnchorView() }
+    func updateNSView(_ view: AnchorView, context: Context) { view.update(request) }
+
+    final class AnchorView: NSView {
+        private var lastRequest = 0
+        private var pending = false
+
+        func update(_ request: Int) {
+            guard request > 0, request != lastRequest else { return }
+            lastRequest = request
+            pending = true
+            DispatchQueue.main.async { [weak self] in self?.reveal() }
+        }
+
+        override func layout() {
+            super.layout()
+            if pending { DispatchQueue.main.async { [weak self] in self?.reveal() } }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if pending { DispatchQueue.main.async { [weak self] in self?.reveal() } }
+        }
+
+        private func reveal() {
+            guard pending, window != nil, !bounds.isEmpty,
+                  let scroll = enclosingScrollView, let document = scroll.documentView else { return }
+            pending = false
+            document.layoutSubtreeIfNeeded()
+            let rect = convert(bounds, to: document)
+            let clip = scroll.contentView
+            let y = document.isFlipped ? rect.minY : rect.maxY - clip.bounds.height
+            let maxY = max(document.bounds.minY, document.bounds.maxY - clip.bounds.height)
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: min(maxY, max(document.bounds.minY, y))))
+            scroll.reflectScrolledClipView(clip)
         }
     }
 }

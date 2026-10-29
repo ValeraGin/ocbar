@@ -223,8 +223,12 @@ struct ScreenshotConnectionView: View {
             "lost": .lost, "missing": .missing, "foreign": .foreign]
         let presentation = value.flatMap { states[$0] } ?? .down
         var status = Fixture.status(presentation)
-        if value == "proxy" || value == "proxy-lost" {
-            status = Fixture.proxy(socksUp: value != "proxy-lost")
+        if let value, ["proxy", "proxy-lost", "proxy-off", "proxy-refused"].contains(value) {
+            status = Fixture.proxy(refused: value == "proxy-refused", socksUp: value != "proxy-lost")
+            if value == "proxy-off" {
+                status.systemProxy = false
+                status.systemSocksOn = []
+            }
         }
         if let count = argument("--profile-count").flatMap(Int.init), (0...100).contains(count) {
             status.profiles = (0..<count).map { index in

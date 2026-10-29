@@ -42,7 +42,7 @@ def main():
                           if lang == 'ru' else 'Could not connect to the server. Check your internet connection. '
                           'Certificate verification failed. See the log for details. ') * 4)
         for state in ('down', 'connected', 'paused', 'starting', 'needsLogin', 'lost',
-                      'missing', 'foreign', 'proxy', 'proxy-lost'):
+                      'missing', 'foreign', 'proxy', 'proxy-lost', 'proxy-off', 'proxy-refused'):
             add(f'connection-{state}', lang, 'connection', 380, 240, ['--state', state])
         for count in (0, 1, 30):
             add(f'connection-count-{count}', lang, 'connection', 440, 240,
@@ -65,6 +65,8 @@ def main():
                 ['--segment', str(segment)])
             add(f'advanced-full-{segment}', lang, 'settings', 620, 1500,
                 ['--segment', str(segment)])
+            add(f'advanced-reveal-{segment}', lang, 'settings', 620, 640,
+                ['--segment', str(segment), '--reveal-advanced'])
         for kind in ('empty', 'long', 'invalid', 'many', 'many-errors', 'password', 'proxy'):
             config = out / f'profiles-{kind}-{lang}'
             (config / 'profiles').mkdir(parents=True, exist_ok=True)

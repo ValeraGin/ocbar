@@ -537,6 +537,15 @@ extension SelfTest {
             check("редактор: файл, изменённый на диске, перечитан", shows("Бета-2"),
                   "сверок с диском \(ProfileEditorView.probeDiskChecks - checksBefore), последняя: «\(ProfileEditorView.probeDiskNote)»; поля: "
                   + views(NSTextField.self).map(\.stringValue).filter { $0.contains("Бета") }.joined(separator: ", "))
+            check("редактор: корректный сохранённый профиль можно подключить", ProfileEditorView.probeConnectEnabled == true)
+            let valid = "[Connection]\nName = Бета-2\nUrl = vpn.example.test/b\n[Routes]\n10.0.0.0/8\n"
+            try? valid.replacingOccurrences(of: "10.0.0.0/8", with: "invalid-network")
+                .write(toFile: tmp + "/profiles/b.ocmac", atomically: true, encoding: .utf8)
+            settle(3.5)
+            check("редактор: ошибка в сохранённом профиле блокирует подключение", ProfileEditorView.probeConnectEnabled == false)
+            try? valid.write(toFile: tmp + "/profiles/b.ocmac", atomically: true, encoding: .utf8)
+            settle(3.5)
+            check("редактор: после исправления подключение снова доступно", ProfileEditorView.probeConnectEnabled == true)
         } else {
             check("редактор: выбор профиля найден", false)
         }

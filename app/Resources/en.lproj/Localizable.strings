@@ -13,6 +13,14 @@
 "О программе" = "About";
 "Показать в Finder" = "Show in Finder";
 "Скопировать" = "Copy";
+"Скопировать адрес SOCKS" = "Copy SOCKS address";
+"Настройте клиент, чтобы подключаться к VPN." = "Set up the client to connect to the VPN.";
+"Технические подробности" = "Technical details";
+"Настроить клиент…" = "Set up client…";
+"Исправьте ошибки профиля перед подключением" = "Fix the profile errors before connecting";
+"Пароль и код из SMS нужно ввести при подключении. Автоматическое переподключение недоступно." = "Enter your password and SMS code when connecting. Automatic reconnection is unavailable.";
+"Замечаний к профилю: %@" = "Profile issues: %@";
+"Укажите название и адрес сервера." = "Enter a name and server address.";
 "Скрыть" = "Dismiss";
 
 /* Диагностика */
