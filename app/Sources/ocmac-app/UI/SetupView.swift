@@ -89,18 +89,18 @@ struct SetupView: View {
         HStack(alignment: .top, spacing: 0) {
             ForEach(0..<3, id: \.self) { i in
                 if i > 0 {
-                    Rectangle().fill(i <= step ? Palette.accent : Palette.groupLine)
+                    Rectangle().fill(i <= step ? Color.accentColor : Palette.groupLine)
                         .frame(width: 90, height: 2).padding(.top, 14)
                 }
                 VStack(spacing: 6) {
                     ZStack {
-                        Circle().fill(done(i) ? Palette.ok : i == step ? Palette.brand : Color.clear)
+                        Circle().fill(done(i) ? Palette.ok : i == step ? Color.accentColor : Color.clear)
                         Circle().strokeBorder(done(i) || i == step ? Color.clear : Palette.line2, lineWidth: 1.5)
                         if done(i) {
                             Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
                         } else {
                             Text("\(i + 1)").font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(i == step ? Palette.onBrand : Palette.secondary)
+                                .foregroundStyle(i == step ? Color.white : Palette.secondary)
                         }
                     }
                     .frame(width: 30, height: 30)
@@ -245,13 +245,16 @@ struct SetupView: View {
                 }.frame(maxWidth: 460)
             } else {
                 ProfileSetupNotice(state: systemState, checking: checkingSystem, check: checkSystem)
-                WideButton(title: store.busy ?? L("Подключить и запомнить вход…"), systemImage: "person.badge.key",
-                           kind: .primary, enabled: !busy && hasProfile && store.busy == nil && systemState?.ready == true && !checkingSystem) {
+                Button {
                     store.connect(profile: selectedProfile, teach: true)
+                } label: {
+                    Label(store.busy ?? L("Подключить и запомнить вход…"), systemImage: "person.badge.key")
                 }
-                .frame(width: 320)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(busy || !hasProfile || store.busy != nil || systemState?.ready != true || checkingSystem)
                 if store.busy != nil {
-                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(BrandLinkStyle())
+                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(.link)
                 }
             }
             if let actionNote = store.actionNote { Text(actionNote).font(.system(size: 12)).foregroundStyle(Palette.warn).textSelection(.enabled) }

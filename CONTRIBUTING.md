@@ -125,6 +125,16 @@ the app; the app checks focus both before and after the capture.
 `--offscreen` retains the old layout-only renderer: its inactive controls and
 artificial background are **not evidence of the app's colors or materials**.
 
+Menu latency: launch the app with `--stage --menu-benchmark` to open/cancel the
+real status menu eight times without executing an item. `--live` uses a read-only
+snapshot of the current client status; otherwise the data is synthetic. JSON
+reports the delay from the programmatic click to tracking and to the menu window
+appearing in WindowServer (not completion of its animation). `--cold` disables
+startup preparation for comparison in the same build. Run via `open -n -W` with
+`--stdout` and `--stderr` paths, separately from other UI tests. The probe does not
+poll while the menu is open, so it is not a test of every intermittent live stall.
+`--selftest-menu` runs the native menu/update regression checks on their own.
+
 Runtime state lives in small files under `~/Library/Application Support/ocmac`,
 one value each: `desired` (profile that should be up), `autoconnect`,
 `access`, `connecting`, `needs-login`, `link-lost`, `routes.disabled`,

@@ -20,11 +20,11 @@ enum ActiveWindowCapture {
 
     static func run() async {
         guard let path = argument("--shot"), let screen = argument("--screenshot"),
-              ["settings", "connection"].contains(screen) else { exit(2) }
+              ["settings", "connection", "setup"].contains(screen) else { exit(2) }
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         if CommandLine.arguments.contains("--dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }
         WindowBridge.install()
-        WindowBridge.open(screen == "settings" ? WindowID.settings : WindowID.connection)
+        WindowBridge.open(screen == "settings" ? WindowID.settings : screen == "setup" ? WindowID.setup : WindowID.connection)
         var target: NSWindow?
         for _ in 0..<40 {
             target = NSApp.windows.first { $0.isVisible && $0.styleMask.contains(.titled) }
@@ -32,11 +32,14 @@ enum ActiveWindowCapture {
             await pause(0.1)
         }
         guard let window = target, let display = window.screen ?? NSScreen.main else { exit(2) }
+        await pause(0.2) // SwiftUI publishes the scene's native min/max size after layout.
         let requested = ScreenshotWindowSize.content(settings: screen == "settings")
         let visible = display.visibleFrame
         let chrome = window.frame.height - (window.contentView?.bounds.height ?? 0)
-        window.setContentSize(NSSize(width: min(requested.width, visible.width),
-                                     height: min(requested.height, visible.height - chrome)))
+        // setContentSize can bypass user resize limits; screenshots must respect them.
+        let minimum = window.contentMinSize, maximum = window.contentMaxSize
+        window.setContentSize(NSSize(width: min(max(requested.width, minimum.width), maximum.width, visible.width),
+                                     height: min(max(requested.height, minimum.height), maximum.height, visible.height - chrome)))
         window.setFrameTopLeftPoint(NSPoint(x: visible.midX - window.frame.width / 2, y: visible.maxY))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -82,6 +85,10 @@ enum ActiveWindowCapture {
             "windowID": window.windowNumber, "pid": ProcessInfo.processInfo.processIdentifier,
             "requestedWidth": requested.width, "requestedHeight": requested.height,
             "contentWidth": content.width, "contentHeight": content.height,
+            "layoutWidth": window.contentLayoutRect.width, "layoutHeight": window.contentLayoutRect.height,
+            "minWidth": window.contentMinSize.width, "maxWidth": window.contentMaxSize.width,
+            "minHeight": window.contentMinSize.height, "maxHeight": window.contentMaxSize.height,
+            "zoomEnabled": window.standardWindowButton(.zoomButton)?.isEnabled ?? false,
             "appearance": window.effectiveAppearance.name.rawValue,
             "screen": screen, "syntheticData": true
         ]

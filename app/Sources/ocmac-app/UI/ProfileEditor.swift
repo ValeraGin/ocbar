@@ -221,7 +221,7 @@ struct ProfileEditorView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(p.display).font(.system(size: 12))
                                 Button(L("перевести в файл")) { convert(p.name) }
-                                    .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
+                                    .buttonStyle(.link).font(.system(size: 11))
                             }
                         }
                     }
@@ -659,16 +659,20 @@ struct ProfileEditorView: View {
     @ViewBuilder
     private var modeSections: some View {
         Section {
-            // Обе карточки — одной высоты: по более высокой.
-            HStack(alignment: .top, spacing: 12) {
-                modeCard("tunnel", L("Туннель"), symbol: "point.3.connected.trianglepath.dotted",
-                         lines: [L("Маршруты и DNS"), L("Нужен системный помощник")])
-                modeCard("proxy", L("Прокси SOCKS"), symbol: "arrow.left.arrow.right",
-                         lines: [L("Для программ с поддержкой SOCKS"),
-                                 ocproxy == false ? L("Нужен ocproxy: brew install ocproxy") : L("Без прав администратора")])
+            Picker(L("Режим подключения"), selection: $doc.mode) {
+                Text(L("Туннель")).tag("tunnel")
+                Text(L("Прокси SOCKS")).tag("proxy")
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.vertical, 4)
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            .onChange(of: doc.mode) { _ in touched() }
+            if doc.mode == "tunnel" {
+                Footnote(L("Маршруты и DNS"))
+                Footnote(L("Нужен системный помощник"))
+            } else {
+                Footnote(L("Для программ с поддержкой SOCKS"))
+                Footnote(ocproxy == false ? L("Нужен ocproxy: brew install ocproxy") : L("Без прав администратора"))
+            }
         } header: {
             Text(L("Режим подключения"))
         } footer: {
@@ -700,36 +704,6 @@ struct ProfileEditorView: View {
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func modeCard(_ value: String, _ title: String, symbol: String, lines: [String]) -> some View {
-        let on = doc.mode == value
-        return Button {
-            doc.mode = value; touched()
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: symbol).font(.system(size: 20)).foregroundStyle(on ? Palette.accent : .secondary)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
-                    ForEach(lines, id: \.self) {
-                        Text($0).font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: on ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16)).foregroundStyle(on ? Palette.accent : Color.secondary.opacity(0.6))
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(on ? Palette.accent.opacity(0.12) : Palette.group))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(on ? Palette.accent : Palette.groupLine, lineWidth: on ? 1.5 : 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private func loadVersions() {
@@ -766,7 +740,7 @@ struct ProfileEditorView: View {
                 Spacer()
                 if learning {
                     ProgressView().controlSize(.small).scaleEffect(0.6)
-                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(BrandLinkStyle()).font(.system(size: 11))
+                    Button(L("Отменить")) { store.cancelCurrent() }.buttonStyle(.link).font(.system(size: 11))
                 }
                 Button(learning ? L("Идёт разметка…") : L("Разметить…")) { learn() }
                     .disabled(learnDisabled)
@@ -939,7 +913,6 @@ struct ProfileEditorView: View {
                     }
                 } label: { Image(systemName: "list.bullet") }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .tint(Palette.accent)
                     .help(L("Строки известных клиентов: шлюзы иногда придираются к User-Agent"))
             }
         }
@@ -974,7 +947,6 @@ struct ProfileEditorView: View {
             }
             Button { doc.routes.append(""); touched() } label: { Label(L("Добавить сеть"), systemImage: "plus") }
                 .buttonStyle(.borderless)
-                .tint(Palette.accent)
         }
     }
 
@@ -1003,7 +975,6 @@ struct ProfileEditorView: View {
                 Label(L("Добавить зону"), systemImage: "plus")
             }
             .buttonStyle(.borderless)
-            .tint(Palette.accent)
         }
     }
 
@@ -1017,7 +988,7 @@ struct ProfileEditorView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Button(L("Перечитать")) { if let name = loadedName { open(name) } }
-                        .buttonStyle(BrandLinkStyle()).font(.system(size: 11))
+                        .buttonStyle(.link).font(.system(size: 11))
                 }
             }
             if !issues.isEmpty && !blankDraft {

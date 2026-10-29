@@ -1,20 +1,5 @@
 import SwiftUI
 
-// Нативный .link на macOS сохраняет системный синий вопреки tint.
-// Общий стиль для текстовых команд с контрастным акцентом обеих тем.
-struct BrandLinkStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var hover = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Palette.accent)
-            .opacity(!isEnabled ? 0.45 : configuration.isPressed ? 0.6 : hover ? 0.8 : 1)
-            .contentShape(Rectangle())
-            .onHover { hover = $0 }
-    }
-}
-
 struct StateDot: View {
     let color: Color
     var pulsing: Bool = false
@@ -63,70 +48,6 @@ extension View {
             .fill(tint.map { $0.opacity(0.12) } ?? Palette.group))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
             .strokeBorder(tint.map { $0.opacity(0.35) } ?? Palette.groupLine))
-    }
-}
-
-// Главное действие меню — кнопка на всю ширину вместо выключателя: подпись
-// говорит, что произойдёт, а не в каком положении рычажок.
-struct WideButton: View {
-    enum Kind { case primary, destructive, neutral }
-    let title: String
-    var systemImage: String?
-    let kind: Kind
-    var compact = false
-    var hint: String?
-    var enabled = true
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let systemImage { Image(systemName: systemImage).font(.system(size: 11)) }
-                Text(title).font(.system(size: 13, weight: kind == .neutral ? .regular : .semibold))
-            }
-            .frame(maxWidth: .infinity)
-            .overlay(alignment: .trailing) {
-                if let hint { Text(hint).font(.system(size: 11)).opacity(0.55) }
-            }
-            .padding(.horizontal, 10)
-            .frame(height: compact ? 26 : 32)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(WideButtonStyle(kind: kind, hover: hover && enabled))
-        .disabled(!enabled)
-        .onHover { hover = $0 }
-        .accessibilityLabel(title)
-    }
-    @State private var hover = false
-}
-
-// Под курсором кнопка заметно меняется: подложка плотнее, обводка ярче —
-// видно, на что сейчас нажмёшь.
-private struct WideButtonStyle: ButtonStyle {
-    let kind: WideButton.Kind
-    let hover: Bool
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        let (fill, text): (Color, Color) = switch kind {
-        case .primary: (Palette.brand, Palette.onBrand)
-        // «Отключить» — спокойная кнопка с красной подписью: в рабочем
-        // состоянии главное на карточке — статус, а не выход из него.
-        case .destructive: (hover ? Palette.bad.opacity(0.16) : Palette.group, Palette.bad)
-        case .neutral: (hover ? Palette.text.opacity(0.14) : Palette.group, Palette.text)
-        }
-        let stroke: Color = switch kind {
-        case .primary: hover ? .white.opacity(0.35) : .clear
-        case .destructive: hover ? Palette.bad.opacity(0.5) : Palette.groupLine
-        case .neutral: hover ? Palette.text.opacity(0.3) : Palette.groupLine
-        }
-        return configuration.label
-            .foregroundStyle(text)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fill))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(stroke))
-            .brightness(configuration.isPressed ? -0.1 : (hover && kind == .primary ? 0.08 : 0))
-            .animation(.easeOut(duration: 0.1), value: hover)
-            .opacity(isEnabled ? 1 : 0.45)
     }
 }
 

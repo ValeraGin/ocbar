@@ -86,6 +86,22 @@ extension SelfTest {
             menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             check("меню: перерисовка без изменений не трогает пункты", changes.isEmpty,
                   "\(changes.count): " + changes.prefix(8).joined(separator: ", "))
+            changes.removeAll()
+            var checked = store.status
+            checked.accessAt = Date()
+            store.applyPreview(checked)
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            check("меню: скрытое время проверки доступа не трогает пункты", changes.isEmpty,
+                  "\(changes.count) изменений")
+            store.optionAtOpen = true
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            changes.removeAll()
+            checked.accessAt = Date().addingTimeInterval(120)
+            store.applyPreview(checked)
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            check("меню: время проверки обновляется в сведениях по Option", !changes.isEmpty)
+            store.optionAtOpen = false
+            menu.update(); RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             // Сменилась только подпись профиля (время) — подменю сетей и зон
             // не трогаются.
             changes.removeAll()

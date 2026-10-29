@@ -1,7 +1,10 @@
 import SwiftUI
+import AppKit
 
 // Одна форма с вкладками: выбор раздела не отнимает колонку у полей.
 struct SettingsWindow: View {
+    static let width: CGFloat = 580
+    static let height: CGFloat = 610
     enum Tab: Int, CaseIterable, Identifiable { case profiles, notifications, general, about
         var id: Int { rawValue }
         var title: String {
@@ -34,10 +37,8 @@ struct SettingsWindow: View {
             Divider()
             detail.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 580, maxWidth: 720, minHeight: 610)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .tint(Palette.control)
-        .accentColor(Palette.control)
+        .frame(width: Self.width, height: Self.height)
+        .background(FixedSettingsWindow())
     }
 
     @ViewBuilder
@@ -47,6 +48,26 @@ struct SettingsWindow: View {
         case .notifications: NotificationsView()
         case .general: GeneralView()
         case .about: AboutView()
+        }
+    }
+}
+
+// Preferences stay a small utility window, including the title-bar zoom action.
+private struct FixedSettingsWindow: NSViewRepresentable {
+    func makeNSView(context: Context) -> Anchor { Anchor() }
+    func updateNSView(_ view: Anchor, context: Context) { view.lockWindow() }
+
+    final class Anchor: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            DispatchQueue.main.async { [weak self] in self?.lockWindow() }
+        }
+        func lockWindow() {
+            guard let window else { return }
+            window.styleMask.remove(.resizable)
+            window.collectionBehavior.remove(.fullScreenPrimary)
+            window.collectionBehavior.insert(.fullScreenNone)
+            window.standardWindowButton(.zoomButton)?.isEnabled = false
         }
     }
 }

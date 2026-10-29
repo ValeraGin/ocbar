@@ -27,12 +27,13 @@ struct OCMacApp: App {
             .windowResizability(.contentMinSize)
             .handlesExternalEvents(matching: [])
         Window(L("Настройка OpenConnect for Mac"), id: WindowID.settings) { SettingsWindow() }
-            .defaultSize(width: 620, height: 640)
+            .defaultSize(width: SettingsWindow.width, height: SettingsWindow.height)
+            .windowResizability(.contentSize)
             .handlesExternalEvents(matching: [])
         Window(L("Открыть профиль OpenConnect for Mac"), id: WindowID.quickProfile) { QuickProfileView() }
             .windowResizability(.contentSize)
             .handlesExternalEvents(matching: [])
-        Window(L("Первый запуск OpenConnect for Mac"), id: WindowID.setup) { SetupView().tint(Palette.control).accentColor(Palette.control) }
+        Window(L("Первый запуск OpenConnect for Mac"), id: WindowID.setup) { SetupView() }
             .defaultSize(width: 740, height: 560)
             .handlesExternalEvents(matching: [])
 
@@ -172,6 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                let text = String(data: data, encoding: .utf8) { print(text) }
             exit(report["clientAvailable"] as? Bool == true ? 0 : 1)
         }
+        if CommandLine.arguments.contains("--selftest-menu") { exit(SelfTest.hostedMenu()) }
         if CommandLine.arguments.contains("--selftest") {
             var code = SelfTest.run()
             code += SelfTest.audit()
@@ -204,6 +206,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                           modifiers: HotkeyCode.cmdOption) {
                 StatusStore.shared.togglePause()
             }
+        }
+        if CommandLine.arguments.contains("--stage"), CommandLine.arguments.contains("--menu-benchmark") {
+            Task { await MenuLatencyProbe.run() }
+            return
         }
         if ActiveWindowCapture.enabled {
             Task { await ActiveWindowCapture.run() }

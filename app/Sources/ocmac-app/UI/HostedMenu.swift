@@ -58,6 +58,9 @@ final class MenuModel: ObservableObject {
     static func snapshot(_ store: StatusStore) -> MenuSnapshot {
         var m = MenuSnapshot()
         m.status = store.status
+        // The supervisor advances this timestamp even when no visible text changes.
+        // Publishing it rebuilds native menu items and interrupts open submenus.
+        if !store.optionAtOpen { m.status.accessAt = nil }
         m.busy = store.busy
         m.cancelTitle = store.cancelTitle
         m.helperWarning = store.helperWarning
@@ -83,7 +86,7 @@ final class HostedMenu: NSObject {
     private let store: StatusStore
     private var watch: [AnyCancellable] = []
 
-    init(store: StatusStore) {
+    init(store: StatusStore, prepare: Bool = true) {
         self.store = store
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         menu = NSHostingMenu(rootView: MenuContent(store: store, model: MenuModel(store: store)))
@@ -97,6 +100,12 @@ final class HostedMenu: NSObject {
             .sink { [weak self] _ in self?.opened() })
         watch.append(center.publisher(for: NSMenu.didEndTrackingNotification, object: menu)
             .sink { [weak self] _ in self?.closed() })
+        // Resolve SwiftUI items and native layout at startup, before the first click.
+        // The probe can disable preparation to compare both paths in one build.
+        if prepare {
+            menu.update()
+            _ = menu.size
+        }
     }
 
     var image: NSImage? {
@@ -113,9 +122,10 @@ final class HostedMenu: NSObject {
         if !CommandLine.arguments.contains("--demo-menu") {
             store.optionAtOpen = NSEvent.modifierFlags.contains(.option)
         }
-        Notifier.refreshAllowed()
+        // Notification permission is maintained by Notifier's timer. Opening the
+        // menu must not synchronously check its token file or contact that service.
         store.menuOpen = true
-        store.detailsOpen = true
+        store.detailsOpen = store.optionAtOpen
         store.refresh()
     }
 

@@ -102,6 +102,8 @@ def main():
             theme='dark' if lang == 'en' else 'light')
 
     for lang in ('ru', 'en'):
+        for step in range(3):
+            add(f'setup-{step}', lang, 'setup', 740, 560, ['--step', str(step)])
         add('settings-system-wide', lang, 'settings', 1100, 820, theme='system')
 
     def render(case):

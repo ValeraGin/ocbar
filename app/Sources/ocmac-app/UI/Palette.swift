@@ -15,12 +15,8 @@ enum Palette {
     static let ok        = dynamic(light: "#248a3d", dark: "#30d158")
     static let warn      = dynamic(light: "#c56a00", dark: "#ff9f0a")
     static let bad       = dynamic(light: "#d70015", dark: "#ff453a")
-    // Лайм — заливка с тёмной подписью. На светлом фоне ссылки темнее.
+    // Лайм остаётся в знаке приложения; контролы используют оформление macOS.
     static let brand     = Color(nsColor: NSColor(hex: "#C3F36B"))
-    static let onBrand   = Color(nsColor: NSColor(hex: "#182018"))
-    static let accent    = dynamic(light: "#49691e", dark: "#C3F36B")
-    // Нативные контролы рисуют белые галочки: их заливка должна быть темнее.
-    static let control   = Color(nsColor: NSColor(hex: "#527525"))
     static let violet    = dynamic(light: "#8944ab", dark: "#bf5af2")
     // Подложка групп и их обводка — как у сгруппированных форм.
     static let group     = dynamic(light: "#00000008", dark: "#ffffff0d")
