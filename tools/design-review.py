@@ -61,7 +61,7 @@ def main():
         error.write_text(('Не удалось подключиться к серверу. Проверьте подключение к интернету. '
                           'Проверка сертификата завершилась ошибкой. Подробности доступны в журнале. '
                           if lang == 'ru' else 'Could not connect to the server. Check your internet connection. '
-                          'Certificate verification failed. See the log for details. ') * 4)
+                          'Certificate verification failed. See the log for details. ') * 4 + '\nTRACE-END-42')
         for state in ('down', 'connected', 'paused', 'starting', 'needsLogin', 'lost',
                       'missing', 'foreign', 'proxy', 'proxy-lost', 'proxy-off', 'proxy-refused'):
             add(f'connection-{state}', lang, 'connection', 380, 240, ['--state', state])
@@ -73,6 +73,10 @@ def main():
                 ['--profile-title', title, '--profile-url', address, '--state', 'needsLogin'])
             add(f'connection-error-{width}', lang, 'connection', width, 300,
                 ['--error-file', str(error)])
+        add('connection-error-expanded', lang, 'connection', 380, 300,
+            ['--error-file', str(error), '--expand-message'])
+        add('connection-error-expanded-bottom', lang, 'connection', 380, 300,
+            ['--error-file', str(error), '--expand-message', '--capture-scroll-bottom'])
         add('connection-disconnecting', lang, 'connection', 440, 240,
             ['--state', 'connected', '--disconnecting'])
         add('connection-long-active', lang, 'connection', 440, 240,
@@ -109,6 +113,10 @@ def main():
                         body += '[Routes]\n' + '\n'.join(f'invalid-network-{n}' for n in range(20)) + '\n'
                     (config / 'profiles' / f'p{index:02}.ocmac').write_text(body)
             add(f'profiles-{kind}', lang, 'settings', 580, 640, config=config)
+            if kind == 'invalid':
+                for destination in ('basics', 'networks'):
+                    add(f'issue-jump-{destination}', lang, 'settings', 580, 640,
+                        ['--reveal-issue', destination], config=config)
         # Same language in both themes, avoiding a language/theme confound.
         add('connection-other-theme', lang, 'connection', 440, 240,
             ['--state', 'paused'], theme='dark' if lang == 'en' else 'light')

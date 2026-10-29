@@ -97,10 +97,44 @@ struct Footnote: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text).font(.system(size: 11)).foregroundStyle(.secondary)
+        Text(text).font(.system(size: 12)).foregroundStyle(Palette.secondary)
             .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Keep the summary compact while making the complete diagnostic readable/copyable.
+struct ExpandableMessage: View {
+    let text: String
+    var summary: String? = nil
+    var color: Color = .primary
+    @State private var expanded = CommandLine.arguments.contains("--stage")
+        && CommandLine.arguments.contains("--expand-message")
+
+    static func needsDisclosure(_ text: String) -> Bool {
+        text.count > 160 || text.components(separatedBy: .newlines).count > 3
+    }
+    private var canExpand: Bool { Self.needsDisclosure(text) || (summary.map { $0 != text } ?? false) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if expanded && canExpand {
+                ScrollView {
+                    Text(text).foregroundStyle(color).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }.frame(height: 140)
+            } else {
+                Text(summary ?? text).lineLimit(canExpand ? 3 : nil)
+                    .foregroundStyle(color).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
+            if canExpand {
+                Button(expanded ? L("Свернуть") : L("Показать полностью")) { expanded.toggle() }
+                    .buttonStyle(.link)
+            }
+        }
+        .onChange(of: text) { _, _ in expanded = false }
     }
 }
 

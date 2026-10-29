@@ -384,8 +384,10 @@ struct ProfileDoc {
 
 struct Issue: Identifiable {
     enum Level { case error, warning }
+    enum Destination: String { case basics, connection, mode, networks }
     let level: Level
     let text: String
+    var destination: Destination = .connection
     let id = UUID()
 }
 
@@ -443,18 +445,21 @@ enum ProfileCheck {
 
     static func check(_ d: ProfileDoc) -> [Issue] {
         var issues: [Issue] = []
-        func err(_ t: String) { issues.append(Issue(level: .error, text: t)) }
-        func warn(_ t: String) { issues.append(Issue(level: .warning, text: t)) }
+        var destination: Issue.Destination = .connection
+        func err(_ t: String) { issues.append(Issue(level: .error, text: t, destination: destination)) }
+        func warn(_ t: String) { issues.append(Issue(level: .warning, text: t, destination: destination)) }
 
         if !validFileName(d.fileName) {
             err(L("имя файла «%@»: буквы, цифры, точка, дефис и подчёркивание, начинается с буквы или цифры", d.fileName))
         }
+        destination = .basics
         if d.url.trimmed.isEmpty { err(L("не задан Url — без него профиль не подключится")) }
         else if d.url.contains(" ") { err(L("в Url есть пробел: %@", d.url)) }
         else if !d.url.contains("/") {
             warn(L("в Url нет группы (host/group) — шлюз обычно её ждёт"))
         }
         if d.name.trimmed.isEmpty { warn(L("не задано Name — в меню будет имя файла")) }
+        destination = .connection
         let ua = d.userAgent.trimmed
         if !ua.isEmpty, !validUserAgent(ua) {
             err(L("User-Agent содержит недопустимые символы — хелпер такой не пропустит"))
@@ -463,6 +468,7 @@ enum ProfileCheck {
             warn(L("ключ %@ указан дважды — действует первое значение, повтор при сохранении уберётся", dup))
         }
 
+        destination = .networks
         var seenRoutes = Set<String>()
         for r in d.routeNets {
             if !validCIDR(r) { err(L("сеть «%@» — не CIDR вида 10.0.0.0/8", r)); continue }
@@ -489,6 +495,7 @@ enum ProfileCheck {
             }
         }
 
+        destination = .connection
         let alg = d.totpAlgorithm.uppercased()
         if !ProfileDoc.totpAlgorithms.contains(alg) {
             err(L("алгоритм кода «%@» — бывает SHA1, SHA256 или SHA512", d.totpAlgorithm))
@@ -526,9 +533,11 @@ enum ProfileCheck {
         if !ProfileDoc.passwordSources.contains(d.password) {
             err(L("источник пароля «%@» — бывает ", d.password) + ProfileDoc.passwordSources.joined(separator: ", "))
         }
+        destination = .mode
         if d.mode != "tunnel" && d.mode != "proxy" {
             err(L("режим «%@» — бывает tunnel или proxy", d.mode))
         }
+        destination = .connection
         if !d.upstreamProxy.isEmpty {
             let pattern = "\\A(http|socks5)://[A-Za-z0-9][A-Za-z0-9.-]{0,252}:[0-9]{1,5}\\z"
             let port = Int(d.upstreamProxy.split(separator: ":").last.map(String.init) ?? "") ?? 0
@@ -546,6 +555,7 @@ enum ProfileCheck {
         if !dtls.isEmpty, !["on", "off"].contains(dtls) {
             err(L("Dtls «%@» — on или off", dtls))
         }
+        destination = .mode
         if d.mode == "proxy" {
             warn(L("прокси-режим: нужен ocproxy (brew install ocproxy); маршруты и зоны из профиля не применяются, ходят только программы, которым указан SOCKS"))
         }
@@ -565,6 +575,7 @@ enum ProfileCheck {
         if d.systemProxy && d.mode != "proxy" {
             warn(L("системный SOCKS имеет смысл только в прокси-режиме"))
         }
+        destination = .connection
         if !d.csdScriptBase64.isEmpty {
             if !d.csdWrapper.isEmpty { err(L("Укажите CsdWrapper или встроенный CSD-скрипт, только один вариант")) }
             if let why = ProfileDoc.csdScriptIssue(d.csdScriptBase64) { err(why) }

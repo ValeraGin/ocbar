@@ -61,9 +61,10 @@ enum PassiveWindowCapture {
         case "setup": content = AnyView(SetupView())
         default: content = AnyView(ConnectionView(store: ConnectionScreenshotFixture.store))
         }
-        let host = NSHostingView(rootView: content)
-        host.sizingOptions = []
-        panel.contentView = host
+        let controller = NSHostingController(rootView: content)
+        controller.sizingOptions = [.minSize]
+        panel.contentViewController = controller
+        let host = controller.view
         panel.setContentSize(size)
         panel.setFrameTopLeftPoint(NSPoint(x: display.visibleFrame.midX - panel.frame.width / 2,
                                           y: display.visibleFrame.maxY))
@@ -74,6 +75,17 @@ enum PassiveWindowCapture {
         panel.orderFrontRegardless()
         defer { panel.orderOut(nil) }
         try? await Task.sleep(for: .seconds(4))
+        if screen == "connection" {
+            // Match the production scene's content minimum: warnings/details may
+            // need a taller window than the requested default.
+            host.layoutSubtreeIfNeeded()
+            let minimum = controller.sizeThatFits(in: NSSize(width: size.width, height: 0))
+            let height = max(size.height, minimum.height, panel.contentMinSize.height)
+            panel.setContentSize(NSSize(width: size.width, height: height))
+            panel.setFrameTopLeftPoint(NSPoint(x: display.visibleFrame.midX - panel.frame.width / 2,
+                                              y: display.visibleFrame.maxY))
+            try? await Task.sleep(for: .milliseconds(200))
+        }
         if CommandLine.arguments.contains("--capture-scroll-bottom") {
             ActiveWindowCapture.scrollToBottom(host)
             try? await Task.sleep(for: .milliseconds(300))

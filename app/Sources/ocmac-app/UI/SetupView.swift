@@ -66,22 +66,16 @@ struct SetupView: View {
     // --- шапка: знак и шаги ------------------------------------------------
 
     private var header: some View {
-        ZStack(alignment: .top) {
-            HStack(spacing: 10) {
-                AppMark(size: 34)
-                Text("OpenConnect for Mac").font(.system(size: 16, weight: .semibold))
-                Spacer()
-            }
+        // The title bar already names the app; the header is reserved for steps.
+        steps.frame(maxWidth: .infinity)
             .padding(.horizontal, 20).padding(.top, 14)
-            steps.padding(.top, 14)
-        }
     }
 
     private func done(_ i: Int) -> Bool {
         switch i {
         case 0: return systemReady
         case 1: return hasProfile && step > 1
-        default: return store.status.state == .connected && step == 2
+        default: return connectedHere && step == 2
         }
     }
 

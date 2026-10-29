@@ -55,6 +55,7 @@ struct ProfileEditorView: View {
     @State private var showMore = !CommandLine.arguments.contains("--reveal-advanced")
         && (CommandLine.arguments.contains("--advanced") || CommandLine.arguments.contains("--segment"))
     @State private var advancedScrollRequest = 0
+    @State private var basicsScrollRequest = 0
     // Есть ли пароль и секрет кода в связке — `ocmac secret status --short`.
     @State private var secrets: [String: String] = [:]
     // Редактор разбит на три части, как вкладки профиля: вход, режим, сети.
@@ -109,6 +110,13 @@ struct ProfileEditorView: View {
         .disabled(saving)
         .onAppear { reloadList(); loadVersions() }
         .task {
+            let args = CommandLine.arguments
+            if args.contains("--stage"), let index = args.firstIndex(of: "--reveal-issue"), index + 1 < args.count,
+               let destination = Issue.Destination(rawValue: args[index + 1]) {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                revealIssue(destination)
+            }
             if CommandLine.arguments.contains("--stage"), CommandLine.arguments.contains("--reveal-advanced") {
                 // Витрина проверяет тот же переход, что нажатие «Дополнительно».
                 try? await Task.sleep(for: .milliseconds(250))
@@ -298,6 +306,13 @@ struct ProfileEditorView: View {
                 connectControl
             }
             .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 4)
+            if showMore {
+                Picker(L("Дополнительно"), selection: $segment) {
+                    ForEach(Segment.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                .padding(.horizontal, 20).padding(.vertical, 8)
+            }
             Form { connectionSections }
                 .formStyle(.grouped)
                 .onChange(of: showMore) { _, expanded in
@@ -393,6 +408,7 @@ struct ProfileEditorView: View {
     private var connectionSections: some View {
         Section(L("Подключение")) {
             field(L("Название"), $doc.name, hint: L("как в меню"))
+                .background(FormScrollTarget(request: basicsScrollRequest))
             field(L("Адрес"), $doc.url, hint: L("vpn.example.com/группа"))
             field(L("Пользователь"), $doc.user)
         }
@@ -439,13 +455,6 @@ struct ProfileEditorView: View {
             .accessibilityValue(showMore ? L("раскрыто") : L("свёрнуто"))
         }
         if showMore {
-            Section {
-                Picker("", selection: $segment) {
-                    ForEach(Segment.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                .background(FormScrollTarget(request: advancedScrollRequest))
-            }
             switch segment {
             case .connection: advancedConnectionSections
             case .mode: modeSections
@@ -457,10 +466,13 @@ struct ProfileEditorView: View {
     @ViewBuilder
     private var advancedConnectionSections: some View {
         if doc.auth != "password" {
-            Section { learnBlock } header: { Text(L("Форма входа")) }
+            Section { learnBlock } header: {
+                Text(L("Форма входа")).background(FormScrollTarget(request: advancedScrollRequest))
+            }
         }
         Section {
                 field(L("Описание"), $doc.descr, hint: L("вторая строка в меню"))
+                    .background(FormScrollTarget(request: doc.auth == "password" ? advancedScrollRequest : 0))
                 field(L("Прокси для подключения"), $doc.upstreamProxy, hint: "http://127.0.0.1:10808")
                 Footnote(L("HTTP CONNECT или SOCKS5 без пароля. Вход и VPN идут через этот прокси; DTLS выключается. Для SSO нужна macOS 14 или новее. Пусто — обычное подключение."))
                 // Откуда брать пароль и код — для тех, кто держит их в
@@ -675,6 +687,7 @@ struct ProfileEditorView: View {
             }
         } header: {
             Text(L("Режим подключения"))
+                .background(FormScrollTarget(request: advancedScrollRequest))
         } footer: {
             Footnote(L("Режим — свойство профиля: новый режим начнёт действовать со следующего подключения."))
         }
@@ -719,9 +732,11 @@ struct ProfileEditorView: View {
     private var networkSections: some View {
         // Кнопка «Добавить» и пояснение — строками внутри группы: в подвале
         // формы кнопка вставала рядом с текстом.
-        Section(L("Сети в туннеле")) {
+        Section {
             routesEditor
             Footnote(L("Что не попало в список, идёт мимо туннеля. «Всё в туннель» — 0.0.0.0/1 и 128.0.0.0/1."))
+        } header: {
+            Text(L("Сети в туннеле")).background(FormScrollTarget(request: advancedScrollRequest))
         }
         Section(L("DNS-зоны")) {
             zonesEditor
@@ -1030,19 +1045,42 @@ struct ProfileEditorView: View {
     private var issueList: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(issues) { issue in
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: issue.level == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(issue.level == .error ? Palette.bad : Palette.warn)
-                    Text(issue.text).font(.system(size: 11)).foregroundStyle(Palette.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                Button { revealIssue(issue.destination) } label: {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: issue.level == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(issue.level == .error ? Palette.bad : Palette.warn)
+                        Text(issue.text).font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 4)
+                        Image(systemName: "arrow.turn.up.right").font(.system(size: 11)).foregroundStyle(Palette.secondary)
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help(L("Перейти к настройке"))
+                .accessibilityHint(L("Перейти к настройке"))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // --- служебное -------------------------------------------------------
+
+    private func revealIssue(_ destination: Issue.Destination) {
+        if destination == .basics {
+            showMore = false
+            basicsScrollRequest += 1
+        } else {
+            showMore = true
+            switch destination {
+            case .mode: segment = .mode
+            case .networks: segment = .networks
+            default: segment = .connection
+            }
+            advancedScrollRequest += 1
+        }
+    }
 
     private func group<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 7) {

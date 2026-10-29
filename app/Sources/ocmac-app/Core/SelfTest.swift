@@ -23,6 +23,23 @@ enum SelfTest {
 
         print("ocmac-app selftest")
 
+        let reviewDoc = ProfileDoc(fileName: "review", name: "Review", url: "vpn.example.test/group", routes: ["10.0.0.0/8"])
+        func reviewDestination(_ edit: (inout ProfileDoc) -> Void, _ expected: Issue.Destination) -> Bool {
+            var doc = reviewDoc
+            edit(&doc)
+            let errors = ProfileCheck.check(doc).filter { $0.level == .error }
+            return !errors.isEmpty && errors.allSatisfy { $0.destination == expected }
+        }
+        check("переход из ошибки: адрес → основные поля", reviewDestination({ $0.url = "" }, .basics))
+        check("переход из ошибки: сеть → сети и DNS", reviewDestination({ $0.routes = ["bad-network"] }, .networks))
+        check("переход из ошибки: DNS → сети и DNS", reviewDestination({ $0.zones = [.init(zone: "example.test", resolver: "bad", port: "")] }, .networks))
+        check("переход из ошибки: порт → режим", reviewDestination({ $0.proxyPort = "99999" }, .mode))
+        check("переход из ошибки: пароль → параметры входа", reviewDestination({ $0.password = "command" }, .connection))
+        check("переход из ошибки: файл → параметры входа", reviewDestination({ $0.fileName = "bad name" }, .connection))
+        check("полный текст: короткая ошибка без раскрытия", !ExpandableMessage.needsDisclosure("Short error"))
+        check("полный текст: длинная ошибка раскрывается", ExpandableMessage.needsDisclosure(String(repeating: "x", count: 500)))
+        check("полный текст: многострочная ошибка раскрывается", ExpandableMessage.needsDisclosure("1\n2\n3\n4"))
+
         check("язык: явный русский", AppLanguage.resolve("ru", preferred: ["en-US"]) == "ru")
         check("язык: явный английский", AppLanguage.resolve("en", preferred: ["ru-RU"]) == "en")
         check("язык: системный", AppLanguage.resolve("system", preferred: ["en-US"]) == "en")

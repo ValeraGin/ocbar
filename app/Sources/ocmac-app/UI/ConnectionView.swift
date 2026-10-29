@@ -74,10 +74,8 @@ struct ConnectionView: View {
             }
 
             if let message = store.actionNote ?? store.lastError ?? status.error ?? store.helperWarning {
-                Text(MenuText.human(message))
-                    .foregroundStyle(store.actionFailed || store.actionNote == nil ? Color.red : Color.secondary)
-                    .lineLimit(3)
-                    .textSelection(.enabled)
+                ExpandableMessage(text: message, summary: MenuText.human(message),
+                                  color: store.actionFailed || store.actionNote == nil ? Palette.bad : Palette.secondary)
                 Button(L("Журнал…")) { if !demo { WindowBridge.open(WindowID.logs) } }
             }
 
@@ -132,10 +130,17 @@ struct ConnectionView: View {
                     .accessibilityLabel(L("Скопировать адрес SOCKS"))
                 }
             }
-            Text(status.systemSocksOn.isEmpty
+            if status.systemSocksRefused.isEmpty || !status.systemSocksOn.isEmpty {
+                Text(status.systemSocksOn.isEmpty
                  ? (status.systemProxy ? L("Системный SOCKS: не включён") : L("Системный SOCKS: выключен в профиле"))
                  : L("Системный SOCKS: включён на %@", status.systemSocksOn.joined(separator: ", ")))
-                .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondary)
+            }
+            if !status.systemSocksRefused.isEmpty {
+                Label(L("Системный SOCKS не включён"), systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Palette.warn).fontWeight(.medium)
+                ExpandableMessage(text: status.systemSocksRefused, color: Palette.secondary)
+            }
         }
         .font(.caption)
     }
