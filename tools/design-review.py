@@ -17,20 +17,31 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def valid_capture(report, passive):
+    if passive:
+        return (report.get('capture') == 'screencapture-passive-window'
+                and report.get('appearanceMode') == 'inactive'
+                and all(report.get(k) is True for k in ('focusPreserved', 'builtInDisplay'))
+                and all(report.get(k) is False for k in ('active', 'keyWindow', 'mainWindow')))
+    return (report.get('capture') == 'screencapture-window'
+            and all(report.get(k) is True for k in ('active', 'keyWindow', 'mainWindow')))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, default=ROOT / '.local/active-design-review')
+    parser.add_argument('--output', type=Path)
     parser.add_argument('--jobs', type=int, default=1)
     parser.add_argument('--resume', action='store_true', help='Reuse verified captures from the same binary and case')
     parser.add_argument('--capture-active', action='store_true', help='Explicitly allow real windows to take focus during capture')
+    parser.add_argument('--capture-passive', action='store_true', help='Built-in display only; no input/focus; inactive native controls')
     parser.add_argument('--offscreen', action='store_true', help='Layout-only cache renders; not valid for color review')
     parser.add_argument('--only', action='append', default=[], help='Render IDs containing this text (repeatable)')
     args = parser.parse_args()
-    if args.capture_active == args.offscreen:
-        parser.error('Choose --capture-active only when taking focus is acceptable, or --offscreen for layout-only renders')
+    if sum((args.capture_active, args.capture_passive, args.offscreen)) != 1:
+        parser.error('Choose --capture-passive (built-in display, no focus), --capture-active (takes focus), or --offscreen (layout only)')
     if not args.offscreen and args.jobs != 1:
         parser.error("Active windows must be captured sequentially (--jobs 1)")
-    out = args.output.resolve()
+    out = (args.output or ROOT / ('.local/passive-design-review' if args.capture_passive else '.local/active-design-review')).resolve()
     out.mkdir(parents=True, exist_ok=True)
     app = ROOT / 'app/.build/ocmac.app/Contents/MacOS/ocmac-app'
     binary_hash = hashlib.sha256(app.read_bytes()).hexdigest()
@@ -110,13 +121,13 @@ def main():
         add('settings-system-wide', lang, 'settings', 1100, 820, theme='system')
 
     def render(case):
-        signature = hashlib.sha256(json.dumps(case, sort_keys=True).encode()).hexdigest()
+        signature = hashlib.sha256(json.dumps([case, args.capture_passive], sort_keys=True).encode()).hexdigest()
         png = out / (case['id'] + '.png')
         metadata = png.with_suffix('.json')
         if args.resume and not args.offscreen and png.is_file() and metadata.is_file():
             previous = json.loads(metadata.read_text())
             if (previous.get('binarySHA256') == binary_hash and previous.get('caseSignature') == signature
-                    and all(previous.get(key) for key in ('active', 'keyWindow', 'mainWindow'))):
+                    and valid_capture(previous, args.capture_passive)):
                 print('reuse ' + case['id'], flush=True)
                 return
         command = [str(app), '--stage', '--screenshot', case['screen'],
@@ -127,7 +138,7 @@ def main():
         if case['theme'] != 'system':
             command.append('--' + case['theme'])
         if not args.offscreen:
-            command.append('--capture-active')
+            command.append('--capture-passive' if args.capture_passive else '--capture-active')
         png = out / (case['id'] + '.png')
         metadata = png.with_suffix('.json')
         png.unlink(missing_ok=True)
@@ -151,6 +162,8 @@ def main():
                 app_err.write_text('')
                 launch = ['/usr/bin/open', '-n', '-W', '--stdout', str(app_out),
                           '--stderr', str(app_err)]
+                if args.capture_passive:
+                    launch.append('-g')
                 if case['config']:
                     launch += ['--env', 'OCMAC_CONFIG_DIR=' + case['config']]
                 launch += [str(app.parents[2]), '--args', *command[1:]]
@@ -184,7 +197,7 @@ def main():
             succeeded = returncode == 0 and png.is_file()
             if not args.offscreen:
                 report = json.loads(metadata.read_text()) if metadata.is_file() else {}
-                succeeded = succeeded and all(report.get(key) for key in ('active', 'keyWindow', 'mainWindow'))
+                succeeded = succeeded and valid_capture(report, args.capture_passive)
             if succeeded:
                 break
             time.sleep(0.5)
@@ -214,7 +227,11 @@ def main():
     for case in cases:
         if not args.offscreen:
             case['capture'] = json.loads((out / (case['id'] + '.json')).read_text())
-    label = 'OFFSCREEN — layout only, inaccurate colors' if args.offscreen else 'Active production windows — screen capture'
+    if not args.offscreen:
+        cases = [c for c in cases if valid_capture(c['capture'], args.capture_passive)]
+    label = ('OFFSCREEN — layout only, inaccurate colors' if args.offscreen else
+             'PASSIVE — built-in display, no focus; inactive controls and title bar, not valid for active colors' if args.capture_passive else
+             'Active production windows — screen capture')
     (out / 'cases.json').write_text(json.dumps(cases, ensure_ascii=False, indent=2))
     cards = ''.join(f'<article><h2>{html.escape(c["id"])}</h2>'
                     f'<p>{c.get("capture", {}).get("contentWidth", c["width"])} × {c.get("capture", {}).get("contentHeight", c["height"])} pt · {c["theme"]}</p>'

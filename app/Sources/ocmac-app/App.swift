@@ -211,6 +211,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             Task { await MenuLatencyProbe.run() }
             return
         }
+        if PassiveWindowCapture.enabled {
+            Task { await PassiveWindowCapture.run() }
+            return
+        }
         if ActiveWindowCapture.enabled {
             Task { await ActiveWindowCapture.run() }
             return

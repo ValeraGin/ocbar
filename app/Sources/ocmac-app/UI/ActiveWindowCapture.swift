@@ -109,7 +109,7 @@ enum ActiveWindowCapture {
         "active=\(NSApp.isActive) key=\(window.isKeyWindow) main=\(window.isMainWindow) frontmost=\(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0) self=\(ProcessInfo.processInfo.processIdentifier)"
     }
 
-    private static func scrollToBottom(_ view: NSView) {
+    static func scrollToBottom(_ view: NSView) {
         if let scroll = view as? NSScrollView, let document = scroll.documentView,
            document.bounds.height > scroll.contentView.bounds.height {
             let clip = scroll.contentView

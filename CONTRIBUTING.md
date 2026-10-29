@@ -121,6 +121,18 @@ Active capture interrupts normal work: agree on a capture window before running
 it. The runner requires an explicit capture mode and otherwise exits without
 opening windows. While the user works, review saved frames and run checks that
 do not activate UI; do not run menu benchmarks or active captures.
+For an explicitly requested visible preview on the Mac's own screen, use
+`--capture-passive`. It launches with `open -g` and uses a nonactivating NSPanel
+that cannot become key/main and ignores mouse input. It uses the same SwiftUI
+views, but native controls and title bar remain inactive. A SwiftUI
+`appearsActive` override did not reproduce native active colors in the live check;
+do not label these frames as active or use them to approve active colors.
+It requires a connected, non-mirrored built-in display and never falls back to
+the external monitor. Metadata records the display and verifies that the app
+never activated. The separate gallery is `.local/passive-design-review/`.
+`python3 tools/design-review-test.py` checks capture acceptance and the explicit
+mode requirement without launching UI. macOS has one key/input window across
+the user's desktop; see [Apple's window states](https://developer.apple.com/design/human-interface-guidelines/windows).
 If another app takes focus, the case is rejected and retried. Use `--resume` to
 continue an interrupted matrix: only verified captures from the same app binary
 and case definition are reused. Activation is done through LaunchServices, while
