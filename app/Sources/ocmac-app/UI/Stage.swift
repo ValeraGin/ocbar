@@ -214,12 +214,37 @@ struct ScreenshotSettingsView: View {
 struct ScreenshotConnectionView: View {
     @StateObject private var store: StatusStore = {
         let args = CommandLine.arguments
-        let value = args.firstIndex(of: "--state").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        func argument(_ flag: String) -> String? {
+            args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+        }
+        let value = argument("--state")
         let states: [String: Presentation] = ["connected": .connected, "down": .down,
             "paused": .paused, "starting": .starting, "needsLogin": .needsLogin,
             "lost": .lost, "missing": .missing, "foreign": .foreign]
         let presentation = value.flatMap { states[$0] } ?? .down
-        return StatusStore(preview: Fixture.status(presentation))
+        var status = Fixture.status(presentation)
+        if value == "proxy" || value == "proxy-lost" {
+            status = Fixture.proxy(socksUp: value != "proxy-lost")
+        }
+        if let count = argument("--profile-count").flatMap(Int.init), (0...100).contains(count) {
+            status.profiles = (0..<count).map { index in
+                ProfileEntry(name: "p\(index)", title: L("Профиль %@", index + 1),
+                             auth: "", descr: "", url: "vpn.example.com/group-\(index + 1)")
+            }
+            status.profile = status.profiles.first?.name ?? ""
+            status.defaultProfile = status.profile
+        }
+        status.profiles = status.profiles.map { profile in
+            ProfileEntry(name: profile.name, title: argument("--profile-title") ?? profile.title,
+                         auth: profile.auth, descr: profile.descr,
+                         url: argument("--profile-url") ?? profile.url)
+        }
+        if let path = argument("--error-file") {
+            do { status.error = try String(contentsOfFile: path, encoding: .utf8) }
+            catch { fatalError("Cannot read screenshot error fixture: \(error)") }
+        }
+        return StatusStore(preview: status,
+                           busy: args.contains("--disconnecting") ? L("Отключаю…") : nil)
     }()
 
     var body: some View {

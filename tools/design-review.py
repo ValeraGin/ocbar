@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Render native UI review cases with isolated demo profiles, then write an HTML gallery.
+
+Build with app/make-app.sh first. Output defaults to .local/design-review.
+No connection or settings actions are performed; profile files are synthetic.
+"""
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+import html
+import json
+import os
+from pathlib import Path
+import subprocess
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, default=ROOT / '.local/design-review')
+    parser.add_argument('--jobs', type=int, default=3)
+    parser.add_argument('--only', action='append', default=[], help='Render IDs containing this text (repeatable)')
+    args = parser.parse_args()
+    out = args.output.resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    app = ROOT / 'app/.build/ocmac.app/Contents/MacOS/ocmac-app'
+    cases = []
+
+    def add(name, lang, screen, width, height, extra=(), config=None, theme=None):
+        cases.append(dict(id=f'{name}-{lang}', language=lang, screen=screen,
+                          width=width, height=height, extra=list(extra),
+                          config=str(config) if config else None,
+                          theme=theme or ('light' if lang == 'en' else 'dark')))
+
+    for lang in ('ru', 'en'):
+        title = ('Корпоративный VPN — производственная сеть европейского филиала — резервное подключение'
+                 if lang == 'ru' else 'Corporate VPN — European production network — backup connection')
+        address = 'https://vpn-europe-production-gateway.example.com/employees/engineering/backup'
+        error = out / f'error-{lang}.txt'
+        error.write_text(('Не удалось подключиться к серверу. Проверьте подключение к интернету. '
+                          'Проверка сертификата завершилась ошибкой. Подробности доступны в журнале. '
+                          if lang == 'ru' else 'Could not connect to the server. Check your internet connection. '
+                          'Certificate verification failed. See the log for details. ') * 4)
+        for state in ('down', 'connected', 'paused', 'starting', 'needsLogin', 'lost',
+                      'missing', 'foreign', 'proxy', 'proxy-lost'):
+            add(f'connection-{state}', lang, 'connection', 380, 240, ['--state', state])
+        for count in (0, 1, 30):
+            add(f'connection-count-{count}', lang, 'connection', 440, 240,
+                ['--profile-count', str(count)])
+        for width in (380, 1100):
+            add(f'connection-long-{width}', lang, 'connection', width, 300,
+                ['--profile-title', title, '--profile-url', address, '--state', 'needsLogin'])
+            add(f'connection-error-{width}', lang, 'connection', width, 300,
+                ['--error-file', str(error)])
+        add('connection-disconnecting', lang, 'connection', 440, 240,
+            ['--state', 'connected', '--disconnecting'])
+        add('connection-long-active', lang, 'connection', 440, 240,
+            ['--profile-title', title, '--profile-url', address, '--state', 'connected'])
+        for tab in range(4):
+            for width in (580, 1100):
+                add(f'settings-tab-{tab}-{width}', lang, 'settings', width, 640,
+                    ['--tab', str(tab)])
+        for segment in range(3):
+            add(f'advanced-{segment}', lang, 'settings', 620, 700,
+                ['--segment', str(segment)])
+            add(f'advanced-full-{segment}', lang, 'settings', 620, 1500,
+                ['--segment', str(segment)])
+        for kind in ('empty', 'long', 'invalid', 'many', 'many-errors', 'password', 'proxy'):
+            config = out / f'profiles-{kind}-{lang}'
+            (config / 'profiles').mkdir(parents=True, exist_ok=True)
+            if kind != 'empty':
+                for index in range(30 if kind == 'many' else 1):
+                    name = title if kind == 'long' else f'VPN {index + 1}'
+                    url = address if kind == 'long' else ('not a URL' if kind == 'invalid' else 'https://vpn.example.com')
+                    body = f'[Connection]\nName = {name}\nUrl = {url}\nUser = engineer.long.name@example.com\n'
+                    if kind == 'password':
+                        body += 'Auth = password\n[Auth]\nPassword = ask\n'
+                    if kind == 'proxy':
+                        body += 'Mode = proxy\n[Proxy]\nPort = 11080\nSystemProxy = off\n'
+                    if kind == 'invalid':
+                        body += '[Routes]\ninvalid-network\n[DNS]\nexample.com = invalid-address\n'
+                    if kind == 'many-errors':
+                        body += '[Routes]\n' + '\n'.join(f'invalid-network-{n}' for n in range(20)) + '\n'
+                    (config / 'profiles' / f'p{index:02}.ocmac').write_text(body)
+            add(f'profiles-{kind}', lang, 'settings', 580, 640, config=config)
+        # Same language in both themes, avoiding a language/theme confound.
+        add('connection-other-theme', lang, 'connection', 440, 240,
+            ['--state', 'paused'], theme='dark' if lang == 'en' else 'light')
+        add('settings-other-theme', lang, 'settings', 620, 640,
+            theme='dark' if lang == 'en' else 'light')
+
+    def render(case):
+        command = [str(app), '--stage', '--screenshot', case['screen'],
+                   '--window-width', str(case['width']), '--window-height', str(case['height']),
+                   '--' + case['theme'], '--shot', str(out / (case['id'] + '.png')),
+                   '-AppleLanguages', '(' + case['language'] + ')',
+                   '-InterfaceLanguage', case['language'], *case['extra']]
+        env = os.environ.copy()
+        env.pop('OCMAC_CONFIG_DIR', None)
+        if case['config']:
+            env['OCMAC_CONFIG_DIR'] = case['config']
+        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=45)
+        (out / (case['id'] + '.log')).write_text(result.stdout + result.stderr)
+        if result.returncode or not (out / (case['id'] + '.png')).is_file():
+            raise RuntimeError(f"Screenshot failed: {case['id']}; see its log")
+        print(case['id'], flush=True)
+
+    selected = [c for c in cases if not args.only or any(key in c['id'] for key in args.only)]
+    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+        list(pool.map(render, selected))
+    cases = [c for c in cases if (out / (c['id'] + '.png')).is_file()]
+    (out / 'cases.json').write_text(json.dumps(cases, ensure_ascii=False, indent=2))
+    cards = ''.join(f'<article><h2>{html.escape(c["id"])}</h2>'
+                    f'<p>{c["width"]} × {c["height"]} pt · {c["theme"]}</p>'
+                    f'<a href="{c["id"]}.png"><img loading="lazy" src="{c["id"]}.png"></a></article>'
+                    for c in cases)
+    (out / 'index.html').write_text('<!doctype html><meta charset="utf-8">'
+        '<title>OpenConnect — design review</title><style>'
+        'body{font:15px system-ui;background:#eee;margin:24px;color:#222}'
+        'main{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px}'
+        'article{background:white;padding:16px;border-radius:12px}h2{font-size:16px}'
+        'img{width:100%;height:auto}p{color:#555}</style>'
+        f'<h1>OpenConnect — {len(cases)} native UI cases</h1>'
+        '<p>Synthetic profiles and connection states. Click an image for full resolution.</p>'
+        f'<main>{cards}</main>')
+    print(f'{len(cases)} screenshots: {out / "index.html"}')
+
+
+if __name__ == '__main__':
+    main()
