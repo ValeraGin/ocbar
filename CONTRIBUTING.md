@@ -109,6 +109,22 @@ must not depend on the language: use exit codes or `--json`. Strings that are co
 against output of the CLI, or written into files, are not UI text and stay
 unwrapped.
 
+Visual review: build the app, then run `python3 tools/design-review.py`.
+It opens the production SwiftUI window scenes with synthetic data and captures
+them through macOS `screencapture`. Windows take focus one at a time; do not
+switch apps during the run. Screen Recording access must be available. Each PNG
+has a JSON sidecar proving that its window was active, key and main, and recording
+its actual size and appearance. Tall forms are reviewed by scrolling within the
+screen, not by rendering an oversized invisible window. Use `--only <case>` to
+repeat a case; the gallery is saved in `.local/active-design-review/`.
+If another app takes focus, the case is rejected and retried. Use `--resume` to
+continue an interrupted matrix: only verified captures from the same app binary
+and case definition are reused. Activation is done through LaunchServices, while
+the runner (with Screen Recording access) captures the window ID handed out by
+the app; the app checks focus both before and after the capture.
+`--offscreen` retains the old layout-only renderer: its inactive controls and
+artificial background are **not evidence of the app's colors or materials**.
+
 Runtime state lives in small files under `~/Library/Application Support/ocmac`,
 one value each: `desired` (profile that should be up), `autoconnect`,
 `access`, `connecting`, `needs-login`, `link-lost`, `routes.disabled`,

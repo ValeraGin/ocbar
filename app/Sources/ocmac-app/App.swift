@@ -20,7 +20,9 @@ struct OCMacApp: App {
         // Ссылки ocmac:// (уведомления от клиента, проверки) разбирает
         // AppDelegate. Без пустого handlesExternalEvents SwiftUI на каждую
         // ссылку открывал бы окно настроек.
-        Window("OpenConnect for Mac", id: WindowID.connection) { ConnectionView() }
+        Window("OpenConnect for Mac", id: WindowID.connection) {
+            ConnectionView(store: ActiveWindowCapture.enabled ? ConnectionScreenshotFixture.store : nil)
+        }
             .defaultSize(width: 440, height: 240)
             .windowResizability(.contentMinSize)
             .handlesExternalEvents(matching: [])
@@ -202,6 +204,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                           modifiers: HotkeyCode.cmdOption) {
                 StatusStore.shared.togglePause()
             }
+        }
+        if ActiveWindowCapture.enabled {
+            Task { await ActiveWindowCapture.run() }
+            return
         }
         if CommandLine.arguments.contains("--demo-menu") { installDemoMenu() }
         else if CommandLine.arguments.contains("--stage") { openStage() }

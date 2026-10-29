@@ -211,8 +211,9 @@ struct ScreenshotSettingsView: View {
 }
 
 // То же главное окно на вымышленных данных, без сетевых действий.
-struct ScreenshotConnectionView: View {
-    @StateObject private var store: StatusStore = {
+@MainActor
+enum ConnectionScreenshotFixture {
+    static let store: StatusStore = {
         let args = CommandLine.arguments
         func argument(_ flag: String) -> String? {
             args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
@@ -250,6 +251,10 @@ struct ScreenshotConnectionView: View {
         return StatusStore(preview: status,
                            busy: args.contains("--disconnecting") ? L("Отключаю…") : nil)
     }()
+}
+
+struct ScreenshotConnectionView: View {
+    @StateObject private var store = ConnectionScreenshotFixture.store
 
     var body: some View {
         ConnectionView(store: store, demo: true)
