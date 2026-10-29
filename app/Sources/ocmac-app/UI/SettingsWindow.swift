@@ -34,7 +34,8 @@ struct SettingsWindow: View {
             Divider()
             detail.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 580, minHeight: 610)
+        .frame(minWidth: 580, maxWidth: 720, minHeight: 610)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .tint(Palette.control)
         .accentColor(Palette.control)
     }

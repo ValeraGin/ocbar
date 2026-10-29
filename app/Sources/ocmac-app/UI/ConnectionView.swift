@@ -92,7 +92,8 @@ struct ConnectionView: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 380, idealWidth: 420)
+        .frame(minWidth: 380, idealWidth: 420, maxWidth: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             reconcileSelection()
             if !demo { store.refreshHelperState() }
