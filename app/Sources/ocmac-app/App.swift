@@ -244,9 +244,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let screenshot = args.firstIndex(of: "--screenshot").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
         // Меню снимается с запасом по высоте, пустое поле снизу срезается
         // при съёмке: высота зависит от языка, замер SwiftUI её занижает.
+        let contentSize = ScreenshotWindowSize.content(settings: screenshot == "settings")
         let size: NSSize = screenshot == "quick-profile" ? NSSize(width: 668, height: 620)
-            : screenshot == "connection" ? NSSize(width: 488, height: 288)
-            : screenshot == "settings" ? NSSize(width: 668, height: 688)
+            : screenshot == "connection" || screenshot == "settings"
+                ? NSSize(width: contentSize.width + 48, height: contentSize.height + 48)
             : screenshot == "setup" ? NSSize(width: 800, height: 660)
             : screenshot == "icons" ? NSSize(width: 980, height: 360) : NSSize(width: 1500, height: 2400)
         // Кадр README — в окне без рамки: окно с заголовком система подгоняет

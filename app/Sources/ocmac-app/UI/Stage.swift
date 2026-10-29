@@ -179,11 +179,29 @@ struct StageWindowsView: View {
     }
 }
 
+// Размер содержимого для проверки растянутых окон, без изменения обычного UI.
+// --window-width 1000 --window-height 640; рамка кадра добавляет по 24 pt.
+enum ScreenshotWindowSize {
+    static func value(_ flag: String, fallback: CGFloat) -> CGFloat {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count,
+              let value = Double(args[i + 1]), value.isFinite,
+              value >= 200, value <= 4000 else { return fallback }
+        return CGFloat(value)
+    }
+
+    static func content(settings: Bool) -> NSSize {
+        NSSize(width: value("--window-width", fallback: settings ? 620 : 440),
+               height: value("--window-height", fallback: settings ? 640 : 240))
+    }
+}
+
 // Кадр для README: окно настроек в рамке, как в витрине окон.
 struct ScreenshotSettingsView: View {
     var body: some View {
         SettingsWindow()
-            .frame(width: 620, height: 640)
+            .frame(width: ScreenshotWindowSize.content(settings: true).width,
+                   height: ScreenshotWindowSize.content(settings: true).height)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
             .padding(24)
@@ -206,7 +224,8 @@ struct ScreenshotConnectionView: View {
 
     var body: some View {
         ConnectionView(store: store, demo: true)
-            .frame(width: 440, height: 240)
+            .frame(width: ScreenshotWindowSize.content(settings: false).width,
+                   height: ScreenshotWindowSize.content(settings: false).height)
             .background(Color(nsColor: .windowBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.line))
